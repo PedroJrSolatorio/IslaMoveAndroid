@@ -26,15 +26,9 @@ data class User(
     val studentDocument: StudentDocument? = null,
     val dateOfBirth: String? = null, // Format: YYYY-MM-DD
     val gender: String? = null, // Options: "Male", "Female", "Other"
+
     // Discount settings (for passengers)
     val discountPercentage: Int? = null, // null = no discount, 20, 50, etc.
-
-    // Passenger rating fields
-    val passengerRating: Double = 5.0,
-
-    @get:PropertyName("passengerTotalTrips")
-    @field:JvmField
-    val passengerTotalTrips: Int = 0,
 
     // Preferences
     val preferences: UserPreferences = UserPreferences()

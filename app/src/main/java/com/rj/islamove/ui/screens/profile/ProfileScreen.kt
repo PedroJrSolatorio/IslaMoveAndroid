@@ -47,6 +47,7 @@ import com.rj.islamove.data.models.UserType
 import com.rj.islamove.data.models.VerificationStatus
 import com.rj.islamove.ui.theme.IslamovePrimary
 import com.rj.islamove.ui.screens.driver.DriverHomeViewModel
+import kotlin.compareTo
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -380,88 +381,56 @@ fun ProfileScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Rating and trip count (show for both drivers and passengers)
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            when (uiState.user!!.userType) {
-                                UserType.DRIVER -> {
-                                    // Driver ratings from driverData
-                                    val driverData = uiState.user!!.driverData
-                                    if (driverData != null) {
-                                        val rating = driverData.rating.takeIf { it > 0.0 } ?: 0.0
-                                        val totalTrips = driverData.totalTrips.takeIf { it > 0 } ?: 0
+                        // Rating and trip count (show actual data for drivers, generic for passengers)
+                        if (uiState.user!!.userType == UserType.DRIVER && uiState.user!!.driverData != null) {
+                            val driverData = uiState.user!!.driverData!!
+                            val rating = driverData.rating
+                            val totalTrips = driverData.totalTrips
 
-                                        Icon(
-                                            Icons.Default.Star,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
-                                            tint = if (rating > 0.0) Color(0xFFFFA500) else Color.Gray
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = if (rating > 0.0) String.format("%.2f", rating) else "No ratings yet",
-                                            fontSize = 14.sp,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        if (totalTrips > 0) {
-                                            Text(
-                                                text = " • $totalTrips trip${if (totalTrips == 1) "" else "s"}",
-                                                fontSize = 14.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    } else {
-                                        // No driver data found
-                                        Text(
-                                            text = "Driver profile incomplete",
-                                            fontSize = 14.sp,
-                                            color = MaterialTheme.colorScheme.error
-                                        )
-                                    }
-                                }
-
-                                UserType.PASSENGER -> {
-                                    // Passenger ratings from top-level fields (with null safety)
-                                    val rating = uiState.user!!.passengerRating?.takeIf { it > 0.0 } ?: 0.0
-                                    val totalTrips = uiState.user!!.passengerTotalTrips?.takeIf { it > 0 } ?: 0
-
-                                    Icon(
-                                        Icons.Default.Star,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
-                                        tint = if (rating > 0.0) Color(0xFFFFA500) else Color.Gray
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Star,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = Color(0xFFFFA500)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (rating > 0.0) String.format("%.2f", rating) else "No ratings yet",
+                                    fontSize = 14.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                if (totalTrips > 0) {
                                     Text(
-                                        text = if (rating > 0.0) String.format("%.2f", rating) else "No ratings yet",
-                                        fontSize = 14.sp,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    if (totalTrips > 0) {
-                                        Text(
-                                            text = " • $totalTrips trip${if (totalTrips == 1) "" else "s"}",
-                                            fontSize = 14.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-
-                                UserType.ADMIN -> {
-                                    // Admin - show admin badge
-                                    Icon(
-                                        Icons.Default.Person,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "Administrator",
+                                        text = " • ${totalTrips} trip${if (totalTrips == 1) "" else "s"}",
                                         fontSize = 14.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
+                            }
+                        } else {
+                            // For passengers, show generic info or hide rating section
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Person,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = when (uiState.user!!.userType) {
+                                        UserType.PASSENGER -> "Passenger"
+                                        UserType.ADMIN -> "Administrator"
+                                        else -> "User"
+                                    },
+                                    fontSize = 14.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
 
