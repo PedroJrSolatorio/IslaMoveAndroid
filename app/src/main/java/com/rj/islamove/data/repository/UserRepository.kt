@@ -4,7 +4,6 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
-import com.google.firebase.functions.FirebaseFunctions
 import com.rj.islamove.data.models.User
 import com.rj.islamove.data.models.UserType
 import com.rj.islamove.data.models.DriverData
@@ -17,18 +16,23 @@ import com.rj.islamove.data.models.DocumentImage
 import com.rj.islamove.data.services.NotificationService
 import android.content.Context
 import android.net.Uri
+import com.rj.islamove.data.api.RenderApiService
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 
 @Singleton
 class UserRepository @Inject constructor(
     private val firestore: FirebaseFirestore,
     private val firebaseAuth: FirebaseAuth,
-    private val functions: FirebaseFunctions,
+    private val renderApiService: RenderApiService,
     private val cloudinaryRepository: CloudinaryRepository,
     private val notificationService: NotificationService
 ) {
@@ -1237,38 +1241,51 @@ class UserRepository @Inject constructor(
     }
 
     suspend fun updateUserPassword(uid: String, newPassword: String): Result<Unit> {
-        return try {
-            // Get current admin ID
-            val adminId = firebaseAuth.currentUser?.uid ?: ""
+        return withContext(Dispatchers.IO) {
+            suspendCoroutine { continuation ->
+                try {
+                    // Get current admin ID
+                    val adminId = firebaseAuth.currentUser?.uid ?: ""
 
-            // Call Cloud Function to update password in Firebase Auth
-            val data = mapOf(
-                "uid" to uid,
-                "newPassword" to newPassword,
-                "adminId" to adminId
-            )
+                    // Get auth token
+                    firebaseAuth.currentUser?.getIdToken(false)?.addOnSuccessListener { tokenResult ->
+                        val token = tokenResult.token ?: ""
 
-            val result = functions
-                .getHttpsCallable("updateUserPassword")
-                .call(data)
-                .await()
+                        // Call Render API to update password in Firebase Auth
+                        renderApiService.updateUserPassword(uid, newPassword, adminId, token) { success, error ->
+                            if (success) {
+                                // Also update Firestore for admin display (for compatibility)
+                                val updates = mapOf(
+                                    "plainTextPassword" to newPassword,
+                                    "updatedAt" to System.currentTimeMillis()
+                                )
 
-            // Also update Firestore for admin display (for compatibility)
-            val updates = mapOf(
-                "plainTextPassword" to newPassword,
-                "updatedAt" to System.currentTimeMillis()
-            )
-
-            firestore.collection(USERS_COLLECTION)
-                .document(uid)
-                .update(updates)
-                .await()
-
-            Log.d("UserRepository", "Successfully updated password for user $uid using Cloud Function")
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e("UserRepository", "Failed to update password for user $uid: ${e.message}", e)
-            Result.failure(e)
+                                firestore.collection(USERS_COLLECTION)
+                                    .document(uid)
+                                    .update(updates)
+                                    .addOnSuccessListener {
+                                        Log.d("UserRepository", "Successfully updated password for user $uid using Render API")
+                                        continuation.resume(Result.success(Unit))
+                                    }
+                                    .addOnFailureListener { e ->
+                                        Log.e("UserRepository", "Failed to update Firestore for user $uid: ${e.message}", e)
+                                        continuation.resume(Result.failure(e))
+                                    }
+                            } else {
+                                val exception = Exception(error ?: "Failed to update password via Render API")
+                                Log.e("UserRepository", "Failed to update password for user $uid: ${exception.message}", exception)
+                                continuation.resume(Result.failure(exception))
+                            }
+                        }
+                    }?.addOnFailureListener { e ->
+                        Log.e("UserRepository", "Failed to get auth token: ${e.message}", e)
+                        continuation.resume(Result.failure(e))
+                    }
+                } catch (e: Exception) {
+                    Log.e("UserRepository", "Failed to update password for user $uid: ${e.message}", e)
+                    continuation.resume(Result.failure(e))
+                }
+            }
         }
     }
 
@@ -1276,23 +1293,33 @@ class UserRepository @Inject constructor(
      * Hard delete user (completely remove from Firebase Auth and Firestore)
      */
     suspend fun deleteUser(uid: String, adminId: String): Result<Unit> {
-        return try {
-            // Call Cloud Function to hard delete user in both Firebase Auth and Firestore
-            val data = mapOf(
-                "uid" to uid,
-                "adminId" to adminId
-            )
+        return withContext(Dispatchers.IO) {
+            suspendCoroutine { continuation ->
+                try {
+                    // Get auth token
+                    firebaseAuth.currentUser?.getIdToken(false)?.addOnSuccessListener { tokenResult ->
+                        val token = tokenResult.token ?: ""
 
-            val result = functions
-                .getHttpsCallable("deleteUser")
-                .call(data)
-                .await()
-
-            Log.d("UserRepository", "Successfully permanently deleted user $uid using Cloud Function")
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e("UserRepository", "Failed to delete user $uid: ${e.message}", e)
-            Result.failure(e)
+                        // Call Render API to hard delete user in both Firebase Auth and Firestore
+                        renderApiService.deleteUser(uid, adminId, token) { success, error ->
+                            if (success) {
+                                Log.d("UserRepository", "Successfully permanently deleted user $uid using Render API")
+                                continuation.resume(Result.success(Unit))
+                            } else {
+                                val exception = Exception(error ?: "Failed to delete user via Render API")
+                                Log.e("UserRepository", "Failed to delete user $uid: ${exception.message}", exception)
+                                continuation.resume(Result.failure(exception))
+                            }
+                        }
+                    }?.addOnFailureListener { e ->
+                        Log.e("UserRepository", "Failed to get auth token: ${e.message}", e)
+                        continuation.resume(Result.failure(e))
+                    }
+                } catch (e: Exception) {
+                    Log.e("UserRepository", "Failed to delete user $uid: ${e.message}", e)
+                    continuation.resume(Result.failure(e))
+                }
+            }
         }
     }
 

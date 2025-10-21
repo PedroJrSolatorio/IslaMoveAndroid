@@ -15,6 +15,7 @@ import com.rj.islamove.data.repository.MapboxPlacesRepository
 import com.rj.islamove.data.repository.MapboxGeocodingRepository
 import com.rj.islamove.data.repository.SupportCommentRepository
 import com.rj.islamove.data.api.MapboxBoundariesService
+import com.rj.islamove.data.api.RenderApiService
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -22,6 +23,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import okhttp3.OkHttpClient
 import javax.inject.Singleton
+import com.rj.islamove.BuildConfig
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -57,10 +59,16 @@ object FirebaseModule {
         return FirebaseStorage.getInstance()
     }
 
+//    @Provides
+//    @Singleton
+//    fun provideFirebaseFunctions(): FirebaseFunctions {
+//        return FirebaseFunctions.getInstance()
+//    }
+
     @Provides
     @Singleton
-    fun provideFirebaseFunctions(): FirebaseFunctions {
-        return FirebaseFunctions.getInstance()
+    fun provideRenderApiService(client: OkHttpClient): RenderApiService {
+        return RenderApiService(BuildConfig.RENDER_BASE_URL, client)
     }
     
     @Provides

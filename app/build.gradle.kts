@@ -43,6 +43,7 @@ android {
         buildConfigField("String", "CLOUDINARY_CLOUD_NAME", "\"${getLocalProperty("CLOUDINARY_CLOUD_NAME", "")}\"")
         buildConfigField("String", "CLOUDINARY_API_KEY", "\"${getLocalProperty("CLOUDINARY_API_KEY", "")}\"")
         buildConfigField("String", "CLOUDINARY_API_SECRET", "\"${getLocalProperty("CLOUDINARY_API_SECRET", "")}\"")
+        buildConfigField("String", "RENDER_BASE_URL", "\"${getLocalProperty("RENDER_BASE_URL", "")}\"")
     }
 
     signingConfigs {
