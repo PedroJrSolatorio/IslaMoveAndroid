@@ -1,0 +1,42 @@
+{
+  "rules": {
+    "driver_locations": {
+      ".read": "auth != null",
+      "$driverId": {
+        ".write": "auth != null && auth.uid == $driverId"
+      }
+    },
+    "driver_status": {
+      ".read": "auth != null",
+      "$driverId": {
+        ".write": "auth != null && auth.uid == $driverId"
+      }
+    },
+    "driver_requests": {
+      "$driverId": {
+        ".read": "auth != null && auth.uid == $driverId",
+        ".write": "auth != null"
+      }
+    },
+    "driver_responses": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "active_bookings": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "booking_updates": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "booking_assignments": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "passenger_locations": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    }
+  }
+}

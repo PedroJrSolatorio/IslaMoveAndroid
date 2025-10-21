@@ -1,0 +1,372 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>ISLAMOVE</name>
+	<visibility>0</visibility>
+	<gx:CascadingStyle kml:id="__managed_style_5B1EF384773AAC9EFC59">
+		<Style>
+			<IconStyle>
+				<scale>1.2</scale>
+				<Icon>
+					<href>https://earth.google.com/earth/document/icon?color=1976d2&amp;id=2000&amp;scale=4</href>
+				</Icon>
+				<hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>ff2dc0fb</color>
+				<width>4.8</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>40ffffff</color>
+			</PolyStyle>
+			<BalloonStyle>
+				<displayMode>hide</displayMode>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<gx:CascadingStyle kml:id="__managed_style_4B45F3D6EC3AAC9EFC59">
+		<Style>
+			<IconStyle>
+				<Icon>
+					<href>https://earth.google.com/earth/document/icon?color=1976d2&amp;id=2000&amp;scale=4</href>
+				</Icon>
+				<hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>ff2dc0fb</color>
+				<width>3.2</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>40ffffff</color>
+			</PolyStyle>
+			<BalloonStyle>
+				<displayMode>hide</displayMode>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<StyleMap id="__managed_style_3A37DBA7AF3AAC9EFC59">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#__managed_style_4B45F3D6EC3AAC9EFC59</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#__managed_style_5B1EF384773AAC9EFC59</styleUrl>
+		</Pair>
+	</StyleMap>
+	<gx:CascadingStyle kml:id="__managed_style_063BFA24453AAC9B1F9E">
+		<styleUrl>https://earth.google.com/balloon_components/base/1.1.0.0/none_template.kml#main</styleUrl>
+		<Style>
+			<IconStyle>
+				<scale>1.2</scale>
+				<Icon>
+					<href>https://earth.google.com/earth/document/icon?color=1976d2&amp;id=2000&amp;scale=4</href>
+				</Icon>
+				<hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>ff2dc0fb</color>
+				<width>4.8</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>40ffffff</color>
+			</PolyStyle>
+			<BalloonStyle>
+				<displayMode>hide</displayMode>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<gx:CascadingStyle kml:id="__managed_style_1F5E223FF23AAC9B1F9C">
+		<styleUrl>https://earth.google.com/balloon_components/base/1.1.0.0/none_template.kml#main</styleUrl>
+		<Style>
+			<IconStyle>
+				<Icon>
+					<href>https://earth.google.com/earth/document/icon?color=1976d2&amp;id=2000&amp;scale=4</href>
+				</Icon>
+				<hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/>
+			</IconStyle>
+			<LabelStyle>
+			</LabelStyle>
+			<LineStyle>
+				<color>ff2dc0fb</color>
+				<width>3.2</width>
+			</LineStyle>
+			<PolyStyle>
+				<color>40ffffff</color>
+			</PolyStyle>
+			<BalloonStyle>
+				<displayMode>hide</displayMode>
+			</BalloonStyle>
+		</Style>
+	</gx:CascadingStyle>
+	<StyleMap id="__managed_style_084B1F1DF53AAC9B1F9C">
+		<Pair>
+			<key>normal</key>
+			<styleUrl>#__managed_style_1F5E223FF23AAC9B1F9C</styleUrl>
+		</Pair>
+		<Pair>
+			<key>highlight</key>
+			<styleUrl>#__managed_style_063BFA24453AAC9B1F9E</styleUrl>
+		</Pair>
+	</StyleMap>
+	<Placemark id="0A82D1697B3AAC9B1F91">
+		<name>AURELIO</name>
+		<LookAt>
+			<longitude>125.6044721689764</longitude>
+			<latitude>10.00629691536662</latitude>
+			<altitude>45.63922978928321</altitude>
+			<heading>11.2891135304915</heading>
+			<tilt>0</tilt>
+			<gx:fovy>35</gx:fovy>
+			<range>1589.451158398879</range>
+			<altitudeMode>absolute</altitudeMode>
+		</LookAt>
+		<styleUrl>#__managed_style_084B1F1DF53AAC9B1F9C</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						125.6026228645159,10.00729576895235,0 125.5899799595042,10.00873049753719,0 125.5914281813426,10.00584059436703,0 125.5913971471119,10.00434215306372,0 125.6142002451448,10.00274890580053,0 125.6168993134768,10.00734773497958,0 125.6026228645159,10.00729576895235,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+	<Placemark id="00A8CCA9B73AAC9EFC57">
+		<name>MAHAYAHAY</name>
+		<LookAt>
+			<longitude>125.5971485002206</longitude>
+			<latitude>10.00644349737627</latitude>
+			<altitude>41.46554903551208</altitude>
+			<heading>3.735570239715825</heading>
+			<tilt>0</tilt>
+			<gx:fovy>35</gx:fovy>
+			<range>3947.524171073455</range>
+			<altitudeMode>absolute</altitudeMode>
+		</LookAt>
+		<styleUrl>#__managed_style_3A37DBA7AF3AAC9EFC59</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						125.5913977082047,10.00433765993653,0 125.5904058450962,9.998818778730932,0 125.6105735377439,9.998878217649215,0 125.6141998507534,10.00274700737618,0 125.5913977082047,10.00433765993653,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+	<Placemark id="0538EA023C3AACA09AE8">
+		<name>LUNA</name>
+		<LookAt>
+			<longitude>125.5958003019307</longitude>
+			<latitude>10.00162999450928</latitude>
+			<altitude>26.78286883314436</altitude>
+			<heading>3.735570239657047</heading>
+			<tilt>0</tilt>
+			<gx:fovy>35</gx:fovy>
+			<range>7839.102438233094</range>
+			<altitudeMode>absolute</altitudeMode>
+		</LookAt>
+		<styleUrl>#__managed_style_3A37DBA7AF3AAC9EFC59</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						125.5904062245744,9.998815153780864,0 125.5900679836232,9.993900908490563,0 125.5995991481587,9.990602380958203,0 125.6054199598882,9.993105568328739,0 125.61057234217,9.998875133963541,0 125.5904062245744,9.998815153780864,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+	<Placemark id="0103C9D70D3AACA22A88">
+		<name>MATINGBE</name>
+		<LookAt>
+			<longitude>125.5870730362711</longitude>
+			<latitude>10.00636643064211</latitude>
+			<altitude>153.5926387515755</altitude>
+			<heading>3.735570239568588</heading>
+			<tilt>0</tilt>
+			<gx:fovy>35</gx:fovy>
+			<range>9607.071175316814</range>
+			<altitudeMode>absolute</altitudeMode>
+		</LookAt>
+		<styleUrl>#__managed_style_3A37DBA7AF3AAC9EFC59</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						125.5713768481285,10.00037913107052,0 125.5764700486811,9.993350211497338,0 125.5900648031143,9.993900077374025,0 125.5904034909142,9.998815177977377,0 125.5713768481285,10.00037913107052,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+	<Placemark id="097950C5D53AACA4C83C">
+		<name>SAN JOSE (POB)</name>
+		<LookAt>
+			<longitude>125.5797722742121</longitude>
+			<latitude>10.00437892885798</latitude>
+			<altitude>99.64529216802904</altitude>
+			<heading>3.735570239427895</heading>
+			<tilt>0</tilt>
+			<gx:fovy>35</gx:fovy>
+			<range>3774.87108128902</range>
+			<altitudeMode>absolute</altitudeMode>
+		</LookAt>
+		<styleUrl>#__managed_style_3A37DBA7AF3AAC9EFC59</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						125.5781669654779,10.00183807179492,0 125.578880618731,9.999764688298461,0 125.5831120889408,9.999442071016782,0 125.5903893559344,9.998832094600429,0 125.5913927881719,10.00433982404878,0 125.5781669654779,10.00183807179492,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+	<Placemark id="0F445480433AACA6EE19">
+		<name>JACQUEZ</name>
+		<LookAt>
+			<longitude>125.578446604857</longitude>
+			<latitude>10.00210936387516</latitude>
+			<altitude>7.31723540845956</altitude>
+			<heading>3.735570239258499</heading>
+			<tilt>0</tilt>
+			<gx:fovy>35</gx:fovy>
+			<range>5326.376244857674</range>
+			<altitudeMode>absolute</altitudeMode>
+		</LookAt>
+		<styleUrl>#__managed_style_3A37DBA7AF3AAC9EFC59</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						125.573433798336,10.00485778252294,0 125.5756707591237,10.00237524060106,0 125.5781662516026,10.00183946420349,0 125.5913935341434,10.00434213089015,0 125.5914272351192,10.00584031090346,0 125.5899794369327,10.00873055427746,0 125.5869605767298,10.0083027000066,0 125.573433798336,10.00485778252294,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+	<Placemark id="04A5ACFC9F3AACB04413">
+		<name>DON RUBEN</name>
+		<LookAt>
+			<longitude>125.5955072812512</longitude>
+			<latitude>10.01940702937399</latitude>
+			<altitude>103.0458449362728</altitude>
+			<heading>3.73557023882627</heading>
+			<tilt>0</tilt>
+			<gx:fovy>35</gx:fovy>
+			<range>8708.929929086007</range>
+			<altitudeMode>absolute</altitudeMode>
+		</LookAt>
+		<styleUrl>#__managed_style_3A37DBA7AF3AAC9EFC59</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						125.5734962250065,10.03183658179857,0 125.5657766997762,10.01897338535086,0 125.5731395672249,10.01588610000339,0 125.573763793572,10.01457623238114,0 125.576883441137,10.01454288450369,0 125.5819653665864,10.00992545247885,0 125.5869557927849,10.00830535476032,0 125.5865079605079,10.01565855839661,0 125.6165845456529,10.01633054246815,0 125.6235127006451,10.02390718057719,0 125.6101525238816,10.02142300423256,0 125.6001521769799,10.02127959721,0 125.5874407537495,10.02343538373322,0 125.5734962250065,10.03183658179857,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+	<Placemark id="04918C8B723AACB2FD50">
+		<name>STA. CRUZ</name>
+		<LookAt>
+			<longitude>125.5990568606215</longitude>
+			<latitude>10.02008843529102</latitude>
+			<altitude>171.5484407829507</altitude>
+			<heading>0</heading>
+			<tilt>0</tilt>
+			<gx:fovy>35</gx:fovy>
+			<range>1997.760913597012</range>
+			<altitudeMode>absolute</altitudeMode>
+		</LookAt>
+		<styleUrl>#__managed_style_3A37DBA7AF3AAC9EFC59</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						125.6001547867659,10.02128604810581,0 125.6101520556057,10.02142896353291,0 125.6235176258964,10.0239151596875,0 125.6232296269553,10.03620809595071,0 125.6130468158152,10.0343655323358,0 125.6092650336733,10.03316865553245,0 125.6053935788765,10.03378282529559,0 125.5980987931886,10.03185662364937,0 125.5874211880689,10.03228644191807,0 125.5856491748653,10.02453971637412,0 125.5874522213382,10.02344563055514,0 125.6001547867659,10.02128604810581,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+	<Placemark id="02E0781E403AACB5C428">
+		<name>CUARINTA</name>
+		<LookAt>
+			<longitude>125.609594485133</longitude>
+			<latitude>10.04766363917026</latitude>
+			<altitude>32.88353935958231</altitude>
+			<heading>0</heading>
+			<tilt>0</tilt>
+			<gx:fovy>35</gx:fovy>
+			<range>6534.14351794054</range>
+			<altitudeMode>absolute</altitudeMode>
+		</LookAt>
+		<styleUrl>#__managed_style_3A37DBA7AF3AAC9EFC59</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						125.6051962902842,10.04492578168702,0 125.6053937450196,10.03379011141545,0 125.6092624258729,10.03318200159379,0 125.6130417343169,10.03437984730024,0 125.6232328704231,10.03623096851005,0 125.6166258305561,10.05362580026996,0 125.6052093722137,10.05321979735193,0 125.6051962902842,10.04492578168702,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+	<Placemark id="05FF474B8A3AACB7C9D0">
+		<name>WILSON</name>
+		<LookAt>
+			<longitude>125.5926071427558</longitude>
+			<latitude>10.05256621279875</latitude>
+			<altitude>11.75811155656875</altitude>
+			<heading>0</heading>
+			<tilt>0</tilt>
+			<gx:fovy>35</gx:fovy>
+			<range>4696.802928027464</range>
+			<altitudeMode>absolute</altitudeMode>
+		</LookAt>
+		<styleUrl>#__managed_style_3A37DBA7AF3AAC9EFC59</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						125.5886802546179,10.05643938852453,0 125.5719836422801,10.04301908228273,0 125.5874225253,10.03229588981534,0 125.5980988139267,10.03185939663898,0 125.6053892535263,10.03378734028272,0 125.6052033684707,10.05322075963551,0 125.5999784862809,10.05280413942301,0 125.5961606179453,10.05555555685378,0 125.5886802546179,10.05643938852453,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+	<Placemark id="09A213132C3AACB8C99E">
+		<name>POBLACION</name>
+		<LookAt>
+			<longitude>125.5749891516509</longitude>
+			<latitude>10.00999912597421</latitude>
+			<altitude>99.22366334695081</altitude>
+			<heading>0</heading>
+			<tilt>0</tilt>
+			<gx:fovy>35</gx:fovy>
+			<range>4940.788510126295</range>
+			<altitudeMode>absolute</altitudeMode>
+		</LookAt>
+		<styleUrl>#__managed_style_3A37DBA7AF3AAC9EFC59</styleUrl>
+		<Polygon>
+			<outerBoundaryIs>
+				<LinearRing>
+					<coordinates>
+						125.5665442383253,10.01383018628581,0 125.5687754711319,10.0057852788571,0 125.5734248764734,10.00486453502546,0 125.5869467756316,10.00830577962656,0 125.5819560244198,10.00991251247797,0 125.5768821027509,10.01453590733683,0 125.5737554465815,10.01456904415923,0 125.5731284790869,10.0157443949333,0 125.5720696502582,10.01628516342233,0 125.5665442383253,10.01383018628581,0 
+					</coordinates>
+				</LinearRing>
+			</outerBoundaryIs>
+		</Polygon>
+	</Placemark>
+</Document>
+</kml>

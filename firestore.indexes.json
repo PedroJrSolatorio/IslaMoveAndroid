@@ -1,0 +1,129 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "ratings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "toUserId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "ratings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "toUserId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "ratings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "toUserId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "stars",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "pending_ratings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "fromUserId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "expiresAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "ratings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "bookingId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fromUserId",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "driver_reports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "driverId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "driver_reports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "passengerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "ratings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "toUserId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "stars",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
