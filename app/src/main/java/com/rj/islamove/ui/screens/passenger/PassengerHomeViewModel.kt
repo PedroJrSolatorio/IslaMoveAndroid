@@ -44,12 +44,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import android.util.Log
 import android.content.Context
+import kotlinx.coroutines.flow.update
 import javax.inject.Inject
 import kotlin.text.Regex
 
 data class PassengerHomeUiState(
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
+    val successMessage: String? = null,
     val pickupLocation: BookingLocation? = null,
     val destination: BookingLocation? = null,
     val fareEstimate: FareEstimate? = null,
@@ -4561,11 +4563,13 @@ class PassengerHomeViewModel @Inject constructor(
                     val result = driverReportRepository.submitReport(report)
                     if (result.isSuccess) {
                         Log.d("PassengerHomeViewModel", "Driver report submitted successfully")
-                        hideReportDriverModal()
-                        // Optional: Show success message
-                        _uiState.value = _uiState.value.copy(
-                            errorMessage = "Report submitted successfully"
-                        )
+                        _uiState.update { it.copy(
+                            successMessage = "Report submitted successfully"
+                        ) }
+
+                        // Clear message after 3 seconds
+                        delay(3000)
+                        _uiState.update { it.copy(successMessage = null) }
                     } else {
                         Log.e("PassengerHomeViewModel", "Failed to submit driver report", result.exceptionOrNull())
                         _uiState.value = _uiState.value.copy(

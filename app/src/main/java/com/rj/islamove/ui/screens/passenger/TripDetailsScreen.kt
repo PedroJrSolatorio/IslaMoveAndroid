@@ -43,6 +43,17 @@ fun TripDetailsScreen(
     val booking = uiState.selectedTripForDetails
 
     var showReportModal by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Show success message
+    LaunchedEffect(uiState.successMessage) {
+        uiState.successMessage?.let { message ->
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = SnackbarDuration.Short
+            )
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -66,6 +77,19 @@ fun TripDetailsScreen(
                     titleContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
+        },
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState) { data ->
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = if (uiState.successMessage != null) {
+                        Color(0xFF4CAF50)
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    },
+                    contentColor = Color.White
+                )
+            }
         }
     ) { paddingValues ->
         if (booking == null) {

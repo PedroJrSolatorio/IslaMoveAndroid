@@ -62,17 +62,14 @@ import com.rj.islamove.data.models.BookingStatus
 import com.rj.islamove.data.models.Booking
 import com.rj.islamove.data.models.User
 import com.rj.islamove.data.models.RouteInfo
-import com.google.firebase.firestore.GeoPoint
 import com.rj.islamove.ui.components.MapboxRideView
 import com.rj.islamove.ui.components.ReportDriverModal
 import com.mapbox.geojson.Point as MapboxPoint
 import com.rj.islamove.data.models.PlaceDetails as MapboxPlaceDetails
 import com.rj.islamove.ui.components.toMapboxPlaceDetails
-// Removed Google Maps LatLng import - using Mapbox Point instead
 import com.rj.islamove.ui.theme.IslamovePrimary
 import com.rj.islamove.ui.theme.IslamoveSecondary
 import com.rj.islamove.utils.LocationUtils
-import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.*
@@ -3548,9 +3545,6 @@ private fun ProfileContent(
             dismissButton = null
         )
     }
-
-    // Name editing dialog
-    // Name editing dialog removed - users cannot edit their name
 
     // Email view dialog (Read-only)
     if (showEmailDialog) {
