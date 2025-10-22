@@ -297,19 +297,38 @@ class UserRepository @Inject constructor(
                 val user = snapshot?.toObject(User::class.java)
                 android.util.Log.d("UserRepository", "Deserialized User object: uid=${user?.uid}, isActive=${user?.isActive}")
 
-                // Fix for isActive deserialization issue
+                // Fix for deserialization issues
                 val correctedUser = if (user != null && snapshot?.data != null) {
-                    val rawIsActive = snapshot.data?.get("isActive") as? Boolean
+                    val rawData = snapshot.data!!
+                    var updatedUser = user
+
+                    // Fix isActive field
+                    val rawIsActive = rawData["active"] as? Boolean
                     if (rawIsActive != null && rawIsActive != user.isActive) {
                         android.util.Log.d("UserRepository", "Correcting isActive from ${user.isActive} to $rawIsActive")
-                        user.copy(isActive = rawIsActive)
-                    } else {
-                        user
+                        updatedUser = updatedUser.copy(isActive = rawIsActive)
                     }
+
+                    // Fix passengerTotalTrips (Long -> Int conversion)
+                    val rawTotalTrips = rawData["passengerTotalTrips"]
+                    if (rawTotalTrips != null) {
+                        val totalTripsInt = when (rawTotalTrips) {
+                            is Long -> rawTotalTrips.toInt()
+                            is Int -> rawTotalTrips
+                            else -> user.passengerTotalTrips
+                        }
+                        if (totalTripsInt != user.passengerTotalTrips) {
+                            android.util.Log.d("UserRepository", "Correcting passengerTotalTrips from ${user.passengerTotalTrips} to $totalTripsInt")
+                            updatedUser = updatedUser.copy(passengerTotalTrips = totalTripsInt)
+                        }
+                    }
+
+                    updatedUser
                 } else {
                     user
                 }
 
+                android.util.Log.d("UserRepository", "Final corrected user: passengerRating=${correctedUser?.passengerRating}, passengerTotalTrips=${correctedUser?.passengerTotalTrips}")
                 trySend(correctedUser)
             }
 

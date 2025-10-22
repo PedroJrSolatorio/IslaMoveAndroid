@@ -313,240 +313,6 @@ fun PassengerHomeScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun HomeContent(
-    uiState: PassengerHomeUiState,
-    viewModel: PassengerHomeViewModel
-) {
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 120.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-        // Active booking card (if any)
-        uiState.currentBooking?.let { booking ->
-            item {
-                ActiveBookingCard(
-                    booking = booking,
-                    uiState = uiState,
-                    onCancelBooking = {
-                        viewModel.cancelBooking("Cancelled by passenger")
-                    }
-                )
-            }
-        }
-
-
-        // WhereToCard moved to overlay - removed from LazyColumn
-
-            // Location suggestions (if user is typing)
-            if (uiState.locationSuggestions.isNotEmpty()) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surface
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp)
-                        ) {
-                            Text(
-                                text = "Suggested Locations",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
-
-                            uiState.locationSuggestions.take(3).forEach { location ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            viewModel.setDestination(location)
-                                            // Note: POI selection handled in MapsContent suggestions instead
-                                        }
-                                        .padding(vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        Icons.Default.LocationOn,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Text(
-                                        text = location.address,
-                                        fontSize = 14.sp,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    Icon(
-                                        Icons.Default.ArrowForward,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Saved Places
-        if (uiState.savedPlaces.isNotEmpty()) {
-            item {
-                SavedPlacesSection(
-                    places = uiState.savedPlaces,
-                    onPlaceSelected = { place ->
-                        viewModel.setDestination(place)
-                    },
-                    onPlaceRemove = { place ->
-                        Log.d("PassengerHomeScreen", "Removing place: ${place.address}, placeType: '${place.placeType}', Firebase key: '${place.placeId}'")
-                        // Use the original Firebase key stored in placeId, fallback to placeType, then address
-                        when {
-                            !place.placeId.isNullOrEmpty() -> {
-                                // Use the original Firebase key for removal
-                                Log.d("PassengerHomeScreen", "Using placeId '${place.placeId}' for removal")
-                                viewModel.removePlace(place.placeId)
-                            }
-                            !place.placeType.isNullOrEmpty() -> {
-                                // Fallback to placeType
-                                Log.d("PassengerHomeScreen", "Using placeType '${place.placeType}' for removal")
-                                viewModel.removePlace(place.placeType)
-                            }
-                            else -> {
-                                // Final fallback: remove by address
-                                Log.d("PassengerHomeScreen", "Using address '${place.address}' for removal")
-                                viewModel.removePlaceByAddress(place.address)
-                            }
-                        }
-                    }
-                )
-            }
-        } else {
-            item {
-                DefaultSavedPlacesSection(
-                    onAddPlace = { type ->
-                        when (type) {
-                            "Home" -> {
-                                // Start home location selection mode to use GoogleMapsComponent style
-                                viewModel.startHomeLocationSelection()
-                            }
-                            "Work" -> {
-                                // Use current location as work address
-                                uiState.currentUserLocation?.let { location ->
-                                    val workLocation = BookingLocation(
-                                        address = "Work",
-                                        coordinates = GeoPoint(location.latitude(), location.longitude())
-                                    )
-                                    viewModel.saveWorkAddress(workLocation)
-                                } ?: run {
-                                    viewModel.loadCurrentLocation()
-                                }
-                            }
-                            "Favorite" -> {
-                                // Use current location as favorite place
-                                uiState.currentUserLocation?.let { location ->
-                                    val favLocation = BookingLocation(
-                                        address = "Favorite Place",
-                                        coordinates = GeoPoint(location.latitude(), location.longitude())
-                                    )
-                                    viewModel.saveFavoritePlace(favLocation)
-                                } ?: run {
-                                    viewModel.loadCurrentLocation()
-                                }
-                            }
-                        }
-                    }
-                )
-            }
-        }
-
-        // Favorite Trips
-        if (uiState.rideHistory.isNotEmpty()) {
-            item {
-                FavoriteTripsSection(
-                    trips = uiState.rideHistory,
-                    onRebookTrip = { trip ->
-                        viewModel.setDestination(trip.destination)
-                        // Book ride after setting destination
-                        viewModel.createBooking()
-                    }
-                )
-            }
-        }
-
-        // Online drivers count
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = IslamovePrimary.copy(alpha = 0.1f)
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.LocationOn,
-                        contentDescription = null,
-                        tint = IslamovePrimary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = "${uiState.onlineDriverCount} drivers online nearby",
-                        fontSize = 14.sp,
-                        color = IslamovePrimary,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-        }
-        } // End LazyColumn
-
-        // WhereToCard as overlay at the bottom - only show if no active booking
-        if (uiState.currentBooking == null) {
-            WhereToCard(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                currentLocation = uiState.currentUserLocation,
-                onDestinationSearch = { query ->
-                    viewModel.searchLocations(query)
-                },
-                onSearchActiveChange = { /* isSearchActive will be updated by focus change */ },
-                onBookRide = { destination ->
-                    // Set destination from text and book ride
-                    viewModel.setDestinationFromText(destination)
-                    // Wait for fare calculation, then create booking
-                    viewModel.createBooking()
-                },
-                fareEstimate = uiState.fareEstimate?.let {
-                    "₱${kotlin.math.floor(it.totalEstimate).toInt()}"
-                },
-                discountPercentage = uiState.currentUser?.discountPercentage,
-                isLoading = uiState.isLoading,
-                pickupLocation = uiState.pickupLocation,
-                onPickupClick = {
-                    viewModel.startPickupLocationSelection()
-                }
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
 private fun WhereToCard(
     modifier: Modifier = Modifier,
     currentLocation: Point?,
@@ -3148,79 +2914,10 @@ private fun ProfileContent(
     var isUploadingStudentId by remember { mutableStateOf(false) }
     var showStudentIdImagePicker by remember { mutableStateOf(false) }
 
-    // Phone number formatter for Philippine numbers
-    // NOTE: This function is no longer used for saving phone numbers to preserve user input format
-    // It's kept here for potential future use in display formatting
-    fun formatPhilippinePhoneNumber(phone: String): String {
-        val cleaned = phone.replace("[^0-9+]".toRegex(), "")
-        return when {
-            cleaned.startsWith("+63") -> cleaned // Already international format
-            cleaned.startsWith("0") && cleaned.length >= 10 -> "+63${cleaned.substring(1)}" // Convert local to international
-            cleaned.startsWith("63") && !cleaned.startsWith("+") -> "+$cleaned" // Add missing +
-            else -> cleaned // Return as-is if doesn't match patterns
-        }
-    }
     
     // Store camera image URI separately
     var cameraImageUri by remember { mutableStateOf<Uri?>(null) }
     var isUploading by remember { mutableStateOf(false) }
-
-    // Create local copy and update Firestore with image URL
-    fun createInternalStorageCopy(uri: Uri, userId: String) {
-        try {
-            // Create internal storage directory for profile images
-            val profileDir = File(context.filesDir, "profile_images")
-            if (!profileDir.exists()) {
-                profileDir.mkdirs()
-            }
-
-            // Create file with user-specific name
-            val imageFile = File(profileDir, "${userId}_profile.jpg")
-
-            // Copy the selected image to internal storage
-            context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                FileOutputStream(imageFile).use { outputStream ->
-                    inputStream.copyTo(outputStream)
-                }
-            }
-
-            // Save the file path in SharedPreferences
-            val sharedPrefs = context.getSharedPreferences("profile_prefs", Context.MODE_PRIVATE)
-            sharedPrefs.edit()
-                .putString("profile_image_path", imageFile.absolutePath)
-                .apply()
-
-            // Update Firestore with profile image URL for admin visibility
-            val firestore = FirebaseFirestore.getInstance()
-            val userDoc = firestore.collection("users").document(userId)
-
-            // For now, we'll use a placeholder URL that represents the local image
-            // In production, this would be the Cloudinary URL
-            val imageUrl = "file://${imageFile.absolutePath}"
-
-            val updates = mapOf(
-                "profileImageUrl" to imageUrl,
-                "profileImageUpdatedAt" to System.currentTimeMillis(),
-                "updatedAt" to System.currentTimeMillis()
-            )
-
-            userDoc.update(updates)
-                .addOnSuccessListener {
-                    android.util.Log.d("ProfileImage", "Profile image URL saved to Firestore: $imageUrl")
-                    isUploading = false
-                }
-                .addOnFailureListener { e ->
-                    android.util.Log.e("ProfileImage", "Failed to update Firestore with image URL", e)
-                    isUploading = false
-                }
-
-            android.util.Log.d("ProfileImage", "Image saved locally: ${imageFile.absolutePath}")
-
-        } catch (e: Exception) {
-            android.util.Log.e("ProfileImage", "Failed to create internal copy", e)
-            isUploading = false
-        }
-    }
 
     // Upload image to Cloudinary using ViewModel
     fun uploadImageToCloudinary(uri: Uri) {
@@ -3841,45 +3538,6 @@ private fun ProfileContent(
                             fontSize = 16.sp
                         )
                     }
-                    
-                    // Remove photo option
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { 
-                                showImagePicker = false
-                                // Remove saved image
-                                val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-                                if (currentUser != null) {
-                                    val sharedPrefs = context.getSharedPreferences("profile_prefs", Context.MODE_PRIVATE)
-                                    val savedImagePath = sharedPrefs.getString("profile_image_path", null)
-                                    if (savedImagePath != null) {
-                                        val savedFile = File(savedImagePath)
-                                        if (savedFile.exists()) {
-                                            savedFile.delete()
-                                        }
-                                    }
-                                    // Clear SharedPreferences
-                                    sharedPrefs.edit().remove("profile_image_path").apply()
-                                }
-                                profileImageUri = null
-                            }
-                            .padding(vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Text(
-                            text = "Remove photo",
-                            fontSize = 16.sp,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
                 }
             },
             confirmButton = {
@@ -4128,7 +3786,7 @@ private fun ProfileContent(
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = message,
-                            color = if (message.startsWith("Error")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            color = MaterialTheme.colorScheme.error,
                             fontSize = 14.sp
                         )
                     }
@@ -4403,7 +4061,6 @@ private fun ProfileContent(
         )
     }
 }
-
 
 @Composable
 private fun ProfileMenuItem(

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
@@ -47,7 +48,14 @@ import com.rj.islamove.data.models.UserType
 import com.rj.islamove.data.models.VerificationStatus
 import com.rj.islamove.ui.theme.IslamovePrimary
 import com.rj.islamove.ui.screens.driver.DriverHomeViewModel
-import kotlin.compareTo
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.res.painterResource
+import androidx.core.content.FileProvider
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import java.io.File
+import com.rj.islamove.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,7 +69,32 @@ fun ProfileScreen(
     onSignOut: () -> Unit = {},
     viewModel: ProfileViewModel = hiltViewModel()
 ) {
+    // Add diagnostic logging on every recomposition
+    LaunchedEffect(Unit) {
+        android.util.Log.d("ProfileScreen", "🔄 LaunchedEffect(Unit) - Initial composition")
+        viewModel.logCurrentState()
+    }
+
+    DisposableEffect(viewModel) {
+        android.util.Log.d("ProfileScreen", "🔵 ViewModel attached: ${viewModel.hashCode()}")
+        onDispose {
+            android.util.Log.d("ProfileScreen", "🔴 ViewModel detached: ${viewModel.hashCode()}")
+        }
+    }
+
     val uiState by viewModel.uiState.collectAsState()
+
+    // Log state changes
+    LaunchedEffect(uiState.user?.passengerRating, uiState.user?.passengerTotalTrips) {
+        android.util.Log.d("ProfileScreen", "🔄 ========================================")
+        android.util.Log.d("ProfileScreen", "🔄 UI State CHANGED")
+        android.util.Log.d("ProfileScreen", "🔄 Current rating: ${uiState.user?.passengerRating}")
+        android.util.Log.d("ProfileScreen", "🔄 Current trips: ${uiState.user?.passengerTotalTrips}")
+        android.util.Log.d("ProfileScreen", "🔄 User: ${uiState.user?.displayName}")
+        android.util.Log.d("ProfileScreen", "🔄 ========================================")
+    }
+
+    android.util.Log.d("ProfileScreen", "Current UI State - user: ${uiState.user?.displayName}, rating: ${uiState.user?.passengerRating}")
     var showLogoutDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
@@ -81,14 +114,82 @@ fun ProfileScreen(
     var showCurrentPassword by remember { mutableStateOf(false) }
     var showNewPassword by remember { mutableStateOf(false) }
     var showConfirmPassword by remember { mutableStateOf(false) }
+    var isUpdating by remember { mutableStateOf(false) }
+    var updateMessage by remember { mutableStateOf<String?>(null) }
 
-    // Image picker launcher
-    val imagePickerLauncher = rememberLauncherForActivityResult(
+    // Camera and image states
+    var cameraImageUri by remember { mutableStateOf<Uri?>(null) }
+    var isUploading by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+
+    // Upload image to Cloudinary using ViewModel
+    fun uploadImageToCloudinary(uri: Uri) {
+        try {
+            isUploading = true
+            android.util.Log.d("ProfileImage", "Starting Cloudinary upload")
+            viewModel.uploadProfileImage(uri)
+            isUploading = false
+        } catch (e: Exception) {
+            android.util.Log.e("ProfileImage", "Upload failed", e)
+            isUploading = false
+        }
+    }
+
+    fun saveImageLocally(uri: Uri) {
+        val currentUser = FirebaseAuth.getInstance().currentUser
+        if (currentUser == null) {
+            android.util.Log.e("ProfileImage", "User not authenticated")
+            return
+        }
+        uploadImageToCloudinary(uri)
+    }
+
+    // Create temporary file URI for camera
+    fun createImageUri(): Uri {
+        val imageFile = File(context.cacheDir, "profile_image_${System.currentTimeMillis()}.jpg")
+        imageFile.parentFile?.mkdirs()
+        return FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.provider",
+            imageFile
+        )
+    }
+
+    // Camera launcher
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && cameraImageUri != null) {
+            profileImageUri = cameraImageUri
+            android.util.Log.d("ProfileImage", "Camera photo taken successfully: $cameraImageUri")
+            saveImageLocally(cameraImageUri!!)
+        } else {
+            android.util.Log.e("ProfileImage", "Camera photo failed or URI is null")
+        }
+    }
+
+    // Gallery launcher
+    val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        profileImageUri = uri
-        uri?.let {
-            viewModel.updateProfile(context, editingName, "", editingPhone, it)
+    ) { uri ->
+        if (uri != null) {
+            profileImageUri = uri
+            android.util.Log.d("ProfileImage", "Gallery image selected: $uri")
+            saveImageLocally(uri)
+        }
+    }
+
+    // Camera permission launcher
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            val uri = createImageUri()
+            cameraImageUri = uri
+            android.util.Log.d("ProfileImage", "Camera URI created: $uri")
+            cameraLauncher.launch(uri)
+        } else {
+            android.util.Log.e("ProfileImage", "Camera permission denied")
         }
     }
 
@@ -167,6 +268,17 @@ fun ProfileScreen(
         }
 
         uiState.user != null -> {
+            // Auto-close dialogs on successful update
+            LaunchedEffect(uiState.updateSuccess, uiState.updateMessage) {
+                if (uiState.updateSuccess && uiState.updateMessage?.contains("successfully") == true) {
+                    delay(1500) // Show success message for 1.5 seconds
+                    showPhoneDialog = false
+                    showPasswordDialog = false
+                    viewModel.clearUpdateSuccess()
+                    viewModel.clearUpdateMessage()
+                }
+            }
+
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
@@ -184,89 +296,60 @@ fun ProfileScreen(
                     ) {
                         // Profile picture with edit badge (clickable)
                         Box(
-                            modifier = Modifier.clickable { showImagePicker = true }
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(80.dp)
-                                    .background(
-                                        color = if (profileImageUri != null || !uiState.user!!.profileImageUrl.isNullOrEmpty()) Color.Transparent else Color(
-                                            0xFFE8B68C
-                                        ),
-                                        shape = RoundedCornerShape(50)
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (profileImageUri != null) {
-                                    AsyncImage(
-                                        model = ImageRequest.Builder(context)
-                                            .data(profileImageUri)
-                                            .crossfade(true)
-                                            .build(),
-                                        contentDescription = "Profile Picture",
-                                        modifier = Modifier
-                                            .size(80.dp)
-                                            .clip(CircleShape)
-                                            .background(Color.Gray.copy(alpha = 0.1f)),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                } else if (!uiState.user!!.profileImageUrl.isNullOrEmpty()) {
-                                    // Log the URL for debugging
-                                    android.util.Log.d("ProfileScreen", "Loading profile image: ${uiState.user!!.profileImageUrl}")
-
-                                    Box(
-                                        modifier = Modifier
-                                            .size(80.dp)
-                                            .clip(CircleShape)
-                                            .background(Color.Gray.copy(alpha = 0.1f)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        AsyncImage(
-                                            model = ImageRequest.Builder(context)
-                                                .data(uiState.user!!.profileImageUrl)
-                                                .crossfade(true)
-                                                .listener(
-                                                    onError = { _, result ->
-                                                        android.util.Log.e("ProfileScreen", "Error loading profile image: ${result.throwable.message}")
-                                                        android.util.Log.e("ProfileScreen", "URL was: ${uiState.user!!.profileImageUrl}")
-                                                    },
-                                                    onSuccess = { _, _ ->
-                                                        android.util.Log.d("ProfileScreen", "Profile image loaded successfully")
-                                                    }
-                                                )
-                                                .build(),
-                                            contentDescription = "Profile Picture",
-                                            modifier = Modifier.fillMaxSize(),
-                                            contentScale = ContentScale.Crop,
-                                            placeholder = androidx.compose.ui.res.painterResource(com.rj.islamove.R.drawable.ic_launcher_foreground),
-                                            error = androidx.compose.ui.res.painterResource(com.rj.islamove.R.drawable.ic_launcher_foreground)
-                                        )
-                                    }
-                                } else {
-                                    Icon(
-                                        Icons.Default.Person,
-                                        contentDescription = "Profile Picture",
-                                        modifier = Modifier.size(40.dp),
-                                        tint = Color.White
-                                    )
+                            modifier = Modifier.clickable {
+                                // Prevent opening image picker while an upload is in progress
+                                if (!isUploading) {
+                                    showImagePicker = true
                                 }
                             }
-                            // Edit badge
+                        ) {
                             Box(
-                                modifier = Modifier
-                                    .align(Alignment.BottomEnd)
-                                    .size(24.dp)
-                                    .background(
-                                        color = IslamovePrimary,
-                                        shape = RoundedCornerShape(50)
-                                    ),
                                 contentAlignment = Alignment.Center
                             ) {
+                                // The user's image or a placeholder
+                                AsyncImage(
+                                    model = ImageRequest.Builder(LocalContext.current)
+                                        .data(profileImageUri ?: uiState.user!!.profileImageUrl)
+                                        .crossfade(true)
+                                        .build(),
+                                    contentDescription = "Profile Picture",
+                                    modifier = Modifier
+                                        .size(80.dp) // Apply size directly
+                                        .clip(CircleShape), // Apply circular clip directly
+                                    contentScale = ContentScale.Crop,
+                                )
+
+                                // --- UPLOADING INDICATOR OVERLAY ---
+                                // This block adds a loading overlay when isUploading is true.
+                                if (isUploading) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(80.dp) // Match the image size
+                                            .clip(CircleShape) // Match the image shape
+                                            .background(Color.Black.copy(alpha = 0.5f)), // Semi-transparent overlay
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(40.dp),
+                                            color = Color.White,
+                                            strokeWidth = 3.dp
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Edit Badge (conditionally shown)
+                            // Hide the edit icon while uploading to prevent user confusion
+                            if (!isUploading) {
                                 Icon(
-                                    Icons.Default.Edit,
-                                    contentDescription = "Edit Profile",
-                                    modifier = Modifier.size(14.dp),
-                                    tint = Color.White
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "Edit Profile Picture",
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .background(Color.White, CircleShape)
+                                        .padding(4.dp)
+                                        .align(Alignment.BottomEnd),
+                                    tint = IslamovePrimary
                                 )
                             }
                         }
@@ -275,7 +358,7 @@ fun ProfileScreen(
 
                         // User name (read-only)
                         Text(
-                            text = editingName.ifEmpty { "No name set" },
+                            text = uiState.user?.displayName ?: "No name set",
                             fontSize = 22.sp,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurface
@@ -289,22 +372,22 @@ fun ProfileScreen(
                             val (statusText, statusColor, statusIcon) = when (verificationStatus) {
                                 VerificationStatus.APPROVED -> Triple(
                                     "Verified Driver",
-                                    Color(0xFF4CAF50), // Green
+                                    Color(0xFF4CAF50),
                                     Icons.Default.CheckCircle
                                 )
                                 VerificationStatus.PENDING -> Triple(
                                     "⏳ Verification Pending",
-                                    Color(0xFFFFA726), // Orange
+                                    Color(0xFFFFA726),
                                     null
                                 )
                                 VerificationStatus.UNDER_REVIEW -> Triple(
                                     "👀 Under Review",
-                                    Color(0xFF42A5F5), // Blue
+                                    Color(0xFF42A5F5),
                                     null
                                 )
                                 VerificationStatus.REJECTED -> Triple(
                                     "❌ Verification Rejected",
-                                    Color(0xFFEF5350), // Red
+                                    Color(0xFFEF5350),
                                     null
                                 )
                             }
@@ -340,14 +423,14 @@ fun ProfileScreen(
                             }
                         }
 
-                        // Account Status (for passengers and all users)
+                        // Account Status (for passengers)
                         if (uiState.user!!.userType == UserType.PASSENGER) {
                             Spacer(modifier = Modifier.height(6.dp))
 
                             val (statusText, statusColor) = if (uiState.user!!.isActive) {
-                                Pair("Active Account", Color(0xFF4CAF50)) // Green
+                                Pair("Active Account", Color(0xFF4CAF50))
                             } else {
-                                Pair("Account Blocked", Color(0xFFEF5350)) // Red
+                                Pair("Account Blocked", Color(0xFFEF5350))
                             }
 
                             Card(
@@ -381,18 +464,12 @@ fun ProfileScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Rating and trip count - show for BOTH drivers and passengers
+                        // Rating and trip count
                         when (uiState.user!!.userType) {
                             UserType.DRIVER -> {
-                                // Driver rating display
                                 val driverData = uiState.user!!.driverData
                                 if (driverData != null) {
-                                    val rating = driverData.rating
-                                    val totalTrips = driverData.totalTrips
-
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
                                             Icons.Default.Star,
                                             contentDescription = null,
@@ -401,13 +478,13 @@ fun ProfileScreen(
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
-                                            text = if (rating > 0.0) String.format("%.1f", rating) else "No ratings yet",
+                                            text = if (driverData.rating > 0.0) String.format("%.1f", driverData.rating) else "No ratings yet",
                                             fontSize = 14.sp,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
-                                        if (totalTrips > 0) {
+                                        if (driverData.totalTrips > 0) {
                                             Text(
-                                                text = " • $totalTrips trip${if (totalTrips == 1) "" else "s"}",
+                                                text = " • ${driverData.totalTrips} trip${if (driverData.totalTrips == 1) "" else "s"}",
                                                 fontSize = 14.sp,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -417,13 +494,7 @@ fun ProfileScreen(
                             }
 
                             UserType.PASSENGER -> {
-                                // Passenger rating display
-                                val passengerRating = uiState.user!!.passengerRating
-                                val passengerTotalTrips = uiState.user!!.passengerTotalTrips
-
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
                                         Icons.Default.Star,
                                         contentDescription = null,
@@ -432,13 +503,14 @@ fun ProfileScreen(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = if (passengerRating > 0.0) String.format("%.1f", passengerRating) else "No ratings yet",
+                                        text = if (uiState.user!!.passengerRating > 0.0)
+                                            String.format("%.1f", uiState.user!!.passengerRating) else "No ratings yet",
                                         fontSize = 14.sp,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
-                                    if (passengerTotalTrips > 0) {
+                                    if (uiState.user!!.passengerTotalTrips > 0) {
                                         Text(
-                                            text = " • $passengerTotalTrips trip${if (passengerTotalTrips == 1) "" else "s"}",
+                                            text = " • ${uiState.user!!.passengerTotalTrips} trip${if (uiState.user!!.passengerTotalTrips == 1) "" else "s"}",
                                             fontSize = 14.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -447,10 +519,7 @@ fun ProfileScreen(
                             }
 
                             UserType.ADMIN -> {
-                                // Admin - show generic info
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
                                         Icons.Default.Person,
                                         contentDescription = null,
@@ -466,9 +535,6 @@ fun ProfileScreen(
                                 }
                             }
                         }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
@@ -485,14 +551,12 @@ fun ProfileScreen(
                             modifier = Modifier.padding(bottom = 12.dp)
                         )
 
-                        // Email (Read-only for authentication security)
+                        // Email (Read-only)
                         ProfileMenuItem(
                             icon = Icons.Default.Email,
                             title = "Email",
                             subtitle = uiState.user?.email ?: "Not provided",
-                            onClick = {
-                                showEmailDialog = true
-                            }
+                            onClick = { showEmailDialog = true }
                         )
 
                         // Phone Number
@@ -510,7 +574,6 @@ fun ProfileScreen(
                         uiState.userRatingStats?.let { ratingStats ->
                             if (ratingStats.totalRatings > 0) {
                                 Spacer(modifier = Modifier.height(16.dp))
-
                                 ProfileMenuItem(
                                     icon = Icons.Default.Star,
                                     title = "My Reviews",
@@ -540,7 +603,12 @@ fun ProfileScreen(
                             icon = Icons.Default.Lock,
                             title = "Privacy & Security",
                             subtitle = "Password",
-                            onClick = { showPasswordDialog = true }
+                            onClick = {
+                                currentPassword = ""
+                                newPassword = ""
+                                confirmPassword = ""
+                                showPasswordDialog = true
+                            }
                         )
 
                         // Documents section (for drivers only)
@@ -602,7 +670,6 @@ fun ProfileScreen(
                         }
                     }
                 }
-                // THIS IS WHERE THE EXTRA '}' WAS REMOVED
             }
         }
     }
@@ -611,7 +678,13 @@ fun ProfileScreen(
     if (showImagePicker) {
         AlertDialog(
             onDismissRequest = { showImagePicker = false },
-            title = { Text("Change Profile Picture") },
+            title = {
+                Text(
+                    text = "Change Profile Picture",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
             text = {
                 Column {
                     Text("Choose how you'd like to update your profile picture:")
@@ -623,13 +696,37 @@ fun ProfileScreen(
                             .fillMaxWidth()
                             .clickable {
                                 showImagePicker = false
-                                imagePickerLauncher.launch("image/*")
+                                cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
                             }
                             .padding(vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            Icons.Default.AccountBox,
+                            Icons.Default.LocationOn,
+                            contentDescription = null,
+                            tint = IslamovePrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text(
+                            text = "Take a photo",
+                            fontSize = 16.sp
+                        )
+                    }
+
+                    // Gallery option
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                showImagePicker = false
+                                galleryLauncher.launch("image/*")
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Star,
                             contentDescription = null,
                             tint = IslamovePrimary,
                             modifier = Modifier.size(24.dp)
@@ -646,7 +743,8 @@ fun ProfileScreen(
                 TextButton(onClick = { showImagePicker = false }) {
                     Text("Cancel")
                 }
-            }
+            },
+            dismissButton = null
         )
     }
 
@@ -688,26 +786,63 @@ fun ProfileScreen(
     if (showPhoneDialog) {
         AlertDialog(
             onDismissRequest = { showPhoneDialog = false },
-            title = { Text("Edit Phone Number") },
-            text = {
-                OutlinedTextField(
-                    value = editingPhone,
-                    onValueChange = { editingPhone = it },
-                    label = { Text("Phone Number") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+            title = {
+                Text(
+                    text = "Edit Phone Number",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
                 )
             },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = editingPhone,
+                        onValueChange = { editingPhone = it },
+                        label = { Text("Phone Number") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "Enter your phone number in any format",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    // Show update message from ViewModel
+                    uiState.updateMessage?.let { message ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = message,
+                            color = if (message.startsWith("Error")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+            },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
                         if (editingPhone.isNotBlank()) {
-                            viewModel.updateProfile(context, editingName, "", editingPhone, null)
+                            viewModel.updatePhoneNumber(editingPhone)
+                        } else {
+                            updateMessage = "Please enter a phone number"
                         }
-                    }
+                    },
+                    enabled = !uiState.isUpdating
                 ) {
-                    Text("Save")
+                    if (uiState.isUpdating) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White
+                        )
+                    } else {
+                        Text("Update")
+                    }
                 }
             },
             dismissButton = {
@@ -721,7 +856,16 @@ fun ProfileScreen(
     // Password change dialog
     if (showPasswordDialog) {
         AlertDialog(
-            onDismissRequest = { showPasswordDialog = false },
+            onDismissRequest = {
+                showPasswordDialog = false
+                currentPassword = ""
+                newPassword = ""
+                confirmPassword = ""
+                showCurrentPassword = false
+                showNewPassword = false
+                showConfirmPassword = false
+                updateMessage = null
+            },
             title = { Text("Change Password") },
             text = {
                 Column {
@@ -800,32 +944,69 @@ fun ProfileScreen(
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+
+                    // Show validation and update messages
+                    updateMessage?.let { message ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = message,
+                            color = if (message.startsWith("Error") || message.contains("incorrect") || message.contains("do not match"))
+                                MaterialTheme.colorScheme.error
+                            else
+                                MaterialTheme.colorScheme.primary,
+                            fontSize = 14.sp
+                        )
+                    }
                 }
             },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
                         when {
                             currentPassword.isEmpty() -> {
-                                // Show error for current password
+                                updateMessage = "Please enter your current password"
                             }
                             newPassword.isEmpty() -> {
-                                // Show error for new password
+                                updateMessage = "Please enter a new password"
+                            }
+                            confirmPassword.isEmpty() -> {
+                                updateMessage = "Please confirm your new password"
                             }
                             newPassword != confirmPassword -> {
-                                // Show error for password mismatch
+                                updateMessage = "New passwords do not match"
                             }
                             newPassword.length < 6 -> {
-                                // Show error for password length
+                                updateMessage = "Password must be at least 6 characters long"
                             }
                             else -> {
-                                viewModel.updatePassword(currentPassword, newPassword)
-                                showPasswordDialog = false
+                                viewModel.updatePassword(currentPassword, newPassword) { result ->
+                                    updateMessage = result
+                                    if (result == "Password updated successfully") {
+                                        // Clear fields after short delay to show success message
+                                        coroutineScope.launch {
+                                            delay(1500)
+                                            showPasswordDialog = false
+                                            currentPassword = ""
+                                            newPassword = ""
+                                            confirmPassword = ""
+                                            updateMessage = null
+                                        }
+                                    }
+                                }
                             }
                         }
-                    }
+                    },
+                    enabled = !uiState.isUpdating
                 ) {
-                    Text("Change Password")
+                    if (uiState.isUpdating) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White
+                        )
+                    } else {
+                        Text("Update")
+                    }
                 }
             },
             dismissButton = {
@@ -835,6 +1016,10 @@ fun ProfileScreen(
                         currentPassword = ""
                         newPassword = ""
                         confirmPassword = ""
+                        showCurrentPassword = false
+                        showNewPassword = false
+                        showConfirmPassword = false
+                        updateMessage = null
                     }
                 ) {
                     Text("Cancel")

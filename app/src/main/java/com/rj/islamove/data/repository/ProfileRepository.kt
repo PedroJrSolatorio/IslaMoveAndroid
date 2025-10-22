@@ -285,31 +285,59 @@ class ProfileRepository @Inject constructor(
      */
     suspend fun updatePassword(currentPassword: String, newPassword: String): Result<Unit> {
         return try {
-            val user = auth.currentUser ?: return Result.failure(Exception("User not authenticated"))
+            val user = auth.currentUser
+            if (user == null) {
+                return Result.failure(Exception("User not authenticated"))
+            }
 
-            // Re-authenticate user before password change
-            val credential = com.google.firebase.auth.EmailAuthProvider
-                .getCredential(user.email ?: "", currentPassword)
+            val email = user.email
+            if (email == null) {
+                return Result.failure(Exception("User email not found"))
+            }
 
-            user.reauthenticate(credential).await()
+            android.util.Log.d("ProfileRepository", "🔐 Starting password update for user: ${user.uid}")
+            android.util.Log.d("ProfileRepository", "🔐 Email: $email")
 
-            // Update password
-            user.updatePassword(newPassword).await()
+            // STEP 1: Re-authenticate user with current password
+            val credential = com.google.firebase.auth.EmailAuthProvider.getCredential(email, currentPassword)
 
-            Result.success(Unit)
+            try {
+                user.reauthenticate(credential).await()
+                android.util.Log.d("ProfileRepository", "✅ Re-authentication successful")
+            } catch (e: Exception) {
+                android.util.Log.e("ProfileRepository", "❌ Re-authentication failed: ${e.message}", e)
+                return Result.failure(Exception("Current password is incorrect"))
+            }
+
+            // STEP 2: Update password (user is now re-authenticated)
+            try {
+                user.updatePassword(newPassword).await()
+                android.util.Log.d("ProfileRepository", "✅ Password updated successfully")
+
+                // STEP 3: Update in Firestore for admin tracking (optional)
+                try {
+                    firestore.collection("users")
+                        .document(user.uid)
+                        .update(
+                            mapOf(
+                                "plainTextPassword" to newPassword,
+                                "updatedAt" to System.currentTimeMillis()
+                            )
+                        )
+                        .await()
+                    android.util.Log.d("ProfileRepository", "✅ Password updated in Firestore")
+                } catch (e: Exception) {
+                    // Log but don't fail - Firestore update is optional
+                    android.util.Log.w("ProfileRepository", "⚠️ Failed to update password in Firestore: ${e.message}")
+                }
+
+                return Result.success(Unit)
+            } catch (e: Exception) {
+                android.util.Log.e("ProfileRepository", "❌ Password update failed: ${e.message}", e)
+                return Result.failure(Exception("Failed to update password: ${e.message}"))
+            }
         } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    /**
-     * FR-2.2.1: Reset user password via email
-     */
-    suspend fun resetPassword(email: String): Result<Unit> {
-        return try {
-            auth.sendPasswordResetEmail(email).await()
-            Result.success(Unit)
-        } catch (e: Exception) {
+            android.util.Log.e("ProfileRepository", "❌ Unexpected error during password update: ${e.message}", e)
             Result.failure(e)
         }
     }
