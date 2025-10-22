@@ -147,25 +147,6 @@ class ProfileViewModel @Inject constructor(
     }
     
     /**
-     * FR-2.2.3: Update user preferences
-     */
-    fun updatePreferences(preferences: UserPreferences) {
-        val currentUser = auth.currentUser ?: return
-        
-        viewModelScope.launch {
-            profileRepository.updateUserPreferences(currentUser.uid, preferences)
-                .onSuccess {
-                    loadUserProfile() // Reload to get updated preferences
-                }
-                .onFailure { exception ->
-                    _uiState.value = _uiState.value.copy(
-                        errorMessage = exception.message
-                    )
-                }
-        }
-    }
-    
-    /**
      * Clear update success state
      */
     fun clearUpdateSuccess() {

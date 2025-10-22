@@ -1,7 +1,6 @@
 package com.rj.islamove.data.models
 
 import com.google.firebase.firestore.IgnoreExtraProperties
-import com.google.firebase.firestore.PropertyName
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -26,6 +25,8 @@ data class User(
     val studentDocument: StudentDocument? = null,
     val dateOfBirth: String? = null, // Format: YYYY-MM-DD
     val gender: String? = null, // Options: "Male", "Female", "Other"
+    val passengerRating: Double = 0.0,
+    val passengerTotalTrips: Int = 0,
 
     // Discount settings (for passengers)
     val discountPercentage: Int? = null, // null = no discount, 20, 50, etc.

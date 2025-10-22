@@ -381,56 +381,89 @@ fun ProfileScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Rating and trip count (show actual data for drivers, generic for passengers)
-                        if (uiState.user!!.userType == UserType.DRIVER && uiState.user!!.driverData != null) {
-                            val driverData = uiState.user!!.driverData!!
-                            val rating = driverData.rating
-                            val totalTrips = driverData.totalTrips
+                        // Rating and trip count - show for BOTH drivers and passengers
+                        when (uiState.user!!.userType) {
+                            UserType.DRIVER -> {
+                                // Driver rating display
+                                val driverData = uiState.user!!.driverData
+                                if (driverData != null) {
+                                    val rating = driverData.rating
+                                    val totalTrips = driverData.totalTrips
 
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Default.Star,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = Color(0xFFFFA500)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = if (rating > 0.0) String.format("%.2f", rating) else "No ratings yet",
-                                    fontSize = 14.sp,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                if (totalTrips > 0) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Star,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp),
+                                            tint = Color(0xFFFFA500)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = if (rating > 0.0) String.format("%.1f", rating) else "No ratings yet",
+                                            fontSize = 14.sp,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        if (totalTrips > 0) {
+                                            Text(
+                                                text = " • $totalTrips trip${if (totalTrips == 1) "" else "s"}",
+                                                fontSize = 14.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            UserType.PASSENGER -> {
+                                // Passenger rating display
+                                val passengerRating = uiState.user!!.passengerRating
+                                val passengerTotalTrips = uiState.user!!.passengerTotalTrips
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Star,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = Color(0xFFFFA500)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = " • ${totalTrips} trip${if (totalTrips == 1) "" else "s"}",
+                                        text = if (passengerRating > 0.0) String.format("%.1f", passengerRating) else "No ratings yet",
+                                        fontSize = 14.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (passengerTotalTrips > 0) {
+                                        Text(
+                                            text = " • $passengerTotalTrips trip${if (passengerTotalTrips == 1) "" else "s"}",
+                                            fontSize = 14.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+
+                            UserType.ADMIN -> {
+                                // Admin - show generic info
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Person,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Administrator",
                                         fontSize = 14.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                            }
-                        } else {
-                            // For passengers, show generic info or hide rating section
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Default.Person,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = when (uiState.user!!.userType) {
-                                        UserType.PASSENGER -> "Passenger"
-                                        UserType.ADMIN -> "Administrator"
-                                        else -> "User"
-                                    },
-                                    fontSize = 14.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
                             }
                         }
 

@@ -37,6 +37,9 @@ import android.media.MediaPlayer
 import androidx.core.content.ContextCompat
 import javax.inject.Inject
 import com.rj.islamove.R
+import com.rj.islamove.data.repository.DriverRequestStatus
+import com.rj.islamove.data.repository.RequestPhase
+import kotlinx.coroutines.flow.update
 
 data class DateRange(
     val startDate: Long,
@@ -234,7 +237,7 @@ class DriverHomeViewModel @Inject constructor(
     private val sharedPreferences = context.getSharedPreferences("submitted_ratings", android.content.Context.MODE_PRIVATE)
 
     // Track previous request count to detect new ride requests
-    private var previousActiveRequestCount = 0
+    private var previousRequestCount: Int = 0
 
     /**
      * Vibrate device 5 times when there's a new active ride request
@@ -323,7 +326,7 @@ class DriverHomeViewModel @Inject constructor(
         startStaleDriverMonitoring() // Start continuous monitoring for stale drivers
         restoreDriverOnlineStatus() // Restore driver online status from Firebase
         restoreActiveBooking() // Restore any active booking when app restarts
-        observeDriverRequests()
+        observeIncomingRequests()
         // monitorBookingCancellations() // DISABLED: Duplicate observer - observeBookingStatus() already handles cancellations for accepted bookings
         loadDriverProfile()
         loadEarnings()
@@ -804,6 +807,66 @@ class DriverHomeViewModel @Inject constructor(
         }
     }
 
+    private fun observeIncomingRequests() {
+        viewModelScope.launch {
+            val driverId = auth.currentUser?.uid ?: return@launch
+
+            matchingRepository.observeDriverRequests(driverId).collect { requests ->
+                val currentTime = System.currentTimeMillis()
+
+                android.util.Log.d("DriverHomeVM", "Received ${requests.size} requests from repository")
+
+                // Filter and verify each request's booking is still active
+                val validRequests = mutableListOf<DriverRequest>()
+
+                for (request in requests) {
+                    // Verify the request is in INITIAL phase with PENDING status
+                    if (!request.isInInitialPhase(currentTime) ||
+                        request.status != DriverRequestStatus.PENDING) {
+                        android.util.Log.d("DriverHomeVM", "Filtering out non-initial request: ${request.requestId}")
+                        continue
+                    }
+
+                    // Check if the booking associated with this request has been cancelled
+                    if (request.bookingId.isNotBlank()) {
+                        val bookingResult = bookingRepository.getBooking(request.bookingId)
+                        bookingResult.fold(
+                            onSuccess = { booking ->
+                                if (booking?.status == BookingStatus.CANCELLED) {
+                                    android.util.Log.w("DriverHomeVM", "Booking ${request.bookingId} is cancelled - removing request ${request.requestId}")
+                                    // Don't add this request
+                                } else {
+                                    validRequests.add(request)
+                                }
+                            },
+                            onFailure = {
+                                // If we can't verify, include it (better to show than hide)
+                                validRequests.add(request)
+                            }
+                        )
+                    } else {
+                        validRequests.add(request)
+                    }
+                }
+
+                android.util.Log.d("DriverHomeVM", "Filtered to ${validRequests.size} valid INITIAL requests")
+
+                // Check for new requests and trigger sound/vibration
+                if (validRequests.size > previousRequestCount && validRequests.isNotEmpty()) {
+                    val newRequestCount = validRequests.size - previousRequestCount
+                    android.util.Log.d("DriverHomeVM", "🔔 Detected $newRequestCount new ride request(s)")
+                    vibrateForNewRideRequest()
+                    playRideRequestSound()
+                }
+
+                // Update the previous count for next comparison
+                previousRequestCount = validRequests.size
+
+                _uiState.update { it.copy(incomingRequests = validRequests) }
+            }
+        }
+    }
+
     /**
      * Stop location updates - OPTIMIZED VERSION
      */
@@ -1000,25 +1063,6 @@ class DriverHomeViewModel @Inject constructor(
                         )
                     }
                 }
-            }
-        }
-    }
-
-
-
-    /**
-     * Select vehicle category
-     */
-    fun selectVehicleCategory(category: VehicleCategory) {
-        _uiState.value = _uiState.value.copy(selectedVehicleCategory = category)
-
-        // If driver is online, update the status with new vehicle category
-        if (_uiState.value.online) {
-            viewModelScope.launch {
-                driverRepository.updateDriverStatus(
-                    online = true,
-                    vehicleCategory = category
-                )
             }
         }
     }
@@ -1332,17 +1376,14 @@ class DriverHomeViewModel @Inject constructor(
      */
     fun declineRideRequest(request: DriverRequest) {
         viewModelScope.launch {
-            matchingRepository.declineRideRequest(request.requestId, request.driverId)
+            matchingRepository.declineRequest(request.requestId, request.driverId)
                 .onSuccess {
-                    // Remove the request from incoming requests
-                    val updatedRequests = _uiState.value.incomingRequests.filter {
-                        it.requestId != request.requestId
-                    }
-                    _uiState.value = _uiState.value.copy(incomingRequests = updatedRequests)
+                    // Request will be auto-removed by the observer
+                    android.util.Log.d("DriverHomeVM", "Successfully declined request: ${request.requestId}")
                 }
                 .onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
-                        errorMessage = exception.message ?: "Failed to decline request"
+                        errorMessage = "Failed to decline request: ${exception.message}"
                     )
                 }
         }
@@ -1930,261 +1971,6 @@ class DriverHomeViewModel @Inject constructor(
     }
 
     /**
-     * Observe incoming driver requests and categorize them properly
-     */
-    private fun observeDriverRequests() {
-        viewModelScope.launch {
-            val driverId = auth.currentUser?.uid
-            if (driverId == null) {
-                android.util.Log.e("DriverHomeVM", "Cannot observe requests - no authenticated user")
-                _uiState.value = _uiState.value.copy(
-                    errorMessage = "Authentication required. Please log in as a driver."
-                )
-                return@launch
-            }
-
-            android.util.Log.d("DriverHomeVM", "Starting to observe driver requests for: $driverId")
-
-            try {
-                matchingRepository.observeDriverRequests(driverId).collect { allRequests ->
-                    val currentTime = System.currentTimeMillis()
-
-                    android.util.Log.d("DriverHomeVM", "Received ${allRequests.size} total requests from Firebase")
-                    allRequests.forEach { request ->
-                        android.util.Log.d("DriverHomeVM", "Request: ${request.requestId}, Status: ${request.status}, Phase: ${request.getPhase(currentTime)}")
-                        android.util.Log.d("DriverHomeVM", "  Pickup: '${request.pickupLocation.address}' (lat=${request.pickupLocation.latitude}, lng=${request.pickupLocation.longitude})")
-                        android.util.Log.d("DriverHomeVM", "  Destination: '${request.destination.address}' (lat=${request.destination.latitude}, lng=${request.destination.longitude})")
-                        android.util.Log.d("DriverHomeVM", "  Fare: ${request.fareEstimate.totalEstimate}, Distance: ${request.fareEstimate.estimatedDistance}km, Duration: ${request.fareEstimate.estimatedDuration}min")
-                    }
-
-                    // Filter out cancelled requests and requests with cancelled bookings
-                    val validRequests = allRequests.filter { request ->
-                        val requestNotCancelled = request.status != com.rj.islamove.data.repository.DriverRequestStatus.CANCELLED
-                        val bookingNotCancelled = if (request.bookingId != null) {
-                            !isRequestBookingCancelled(request.bookingId)
-                        } else {
-                            true // No booking ID, so can't be cancelled
-                        }
-                        val isValid = requestNotCancelled && bookingNotCancelled
-                        if (!isValid && requestNotCancelled && request.bookingId != null) {
-                            android.util.Log.d("DriverHomeVM", "Filtering out request ${request.requestId} - booking ${request.bookingId} is cancelled")
-                        }
-                        isValid
-                    }
-                    android.util.Log.d("DriverHomeVM", "Filtered out cancelled requests: ${allRequests.size} -> ${validRequests.size}")
-
-                    // ========== BOUNDARY COMPATIBILITY FILTERING ==========
-                    // Server-side matching already handles boundary/route compatibility
-                    // No need for client-side filtering - trust the server's matching logic
-                    android.util.Log.d("DriverHomeVM", "Using server-side matched requests (no client-side filtering)")
-
-                    // Categorize requests by phase
-                    val activeRequests = validRequests.filter { it.isInInitialPhase(currentTime) }
-                    val secondChanceRequests = validRequests.filter { it.isInSecondChance(currentTime) }
-                    val expiredRequests = validRequests.filter { it.isFullyExpired(currentTime) }
-
-                    android.util.Log.d("DriverHomeVM", "Categorized: ${activeRequests.size} active, ${secondChanceRequests.size} second chance, ${expiredRequests.size} expired")
-
-                    // Check for new active ride requests and vibrate/play sound if found
-                    if (activeRequests.size > previousActiveRequestCount && activeRequests.isNotEmpty()) {
-                        val newRequestCount = activeRequests.size - previousActiveRequestCount
-                        android.util.Log.d("DriverHomeVM", "🔔 Detected $newRequestCount new active ride request(s)")
-                        vibrateForNewRideRequest()
-                        playRideRequestSound()
-                    }
-                    previousActiveRequestCount = activeRequests.size
-
-                    _uiState.value = _uiState.value.copy(
-                        incomingRequests = activeRequests,
-                        secondChanceRequests = secondChanceRequests,
-                        recentDeclinedRequests = expiredRequests.takeLast(10) // Show only last 10 in UI, but keep all for earnings
-                    )
-
-                    // Don't automatically recalculate earnings when ride requests appear
-                    // This was causing earnings to reset to 0 since expired requests are typically empty
-                    // Persistent earnings from Firebase should be the primary source
-                    android.util.Log.d("DriverHomeVM", "Preserving existing earnings instead of recalculating from requests")
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("DriverHomeVM", "Error observing driver requests", e)
-                // Don't crash on request observation failure
-            }
-        }
-    }
-
-    /**
-     * REMOVED: Client-side boundary compatibility filtering
-     *
-     * This function has been removed because:
-     * 1. Server-side matching in DriverMatchingRepository already handles route/boundary compatibility
-     * 2. Duplicate filtering was causing issues (allowing rides with null boundaries)
-     * 3. Server should be the single source of truth for which drivers receive which requests
-     *
-     * The server-side matching now includes:
-     * - Same boundary matching
-     * - Route overlap detection using Turf.js concepts (point-to-line distance, bearing)
-     * - More accurate than client-side filtering
-     */
-    // Function removed - see above comment
-
-    /**
-     * Monitor booking cancellations in real-time
-     * This ensures immediate removal of ride requests when passenger cancels
-     */
-    private fun monitorBookingCancellations() {
-        viewModelScope.launch {
-            val driverId = auth.currentUser?.uid ?: return@launch
-
-            android.util.Log.d("DriverHomeVM", "Starting to monitor booking cancellations for driver: $driverId")
-
-            // Get all current requests and monitor their booking status
-            matchingRepository.observeDriverRequests(driverId).collect { allRequests ->
-                val bookingIdsToMonitor = allRequests
-                    .mapNotNull { it.bookingId }
-                    .filter { it.isNotBlank() } // Filter out empty strings
-                    .distinct()
-
-                if (bookingIdsToMonitor.isNotEmpty()) {
-                    android.util.Log.d("DriverHomeVM", "Monitoring ${bookingIdsToMonitor.size} bookings for cancellations: $bookingIdsToMonitor")
-
-                    // Launch a separate coroutine for each booking to monitor cancellations
-                    bookingIdsToMonitor.forEach { bookingId ->
-                        launch {
-                            monitorSingleBookingCancellation(bookingId)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * Monitor a single booking for cancellation status
-     */
-    private suspend fun monitorSingleBookingCancellation(bookingId: String) {
-        try {
-            android.util.Log.d("DriverHomeVM", "🔍 START monitoring booking $bookingId for cancellations")
-            bookingRepository.observeBooking(bookingId).collect { result ->
-                result.fold(
-                    onSuccess = { booking ->
-                        android.util.Log.d("DriverHomeVM", "📊 Booking $bookingId status update: ${booking?.status}")
-                        if (booking?.status == BookingStatus.CANCELLED) {
-                            android.util.Log.e("DriverHomeVM", "🚨 CANCELLATION DETECTED: Booking $bookingId cancelled - removing associated requests immediately")
-
-                            // Remove any requests associated with this cancelled booking from current UI state
-                            val currentState = _uiState.value
-
-                            android.util.Log.d("DriverHomeVM", "📋 BEFORE CANCELLATION STATE:")
-                            android.util.Log.d("DriverHomeVM", "   - currentBooking: ${currentState.currentBooking?.id}")
-                            android.util.Log.d("DriverHomeVM", "   - queuedBookings: ${currentState.queuedBookings.map { it.id }}")
-                            android.util.Log.d("DriverHomeVM", "   - incomingRequests: ${currentState.incomingRequests.size}")
-                            android.util.Log.d("DriverHomeVM", "   - secondChanceRequests: ${currentState.secondChanceRequests.size}")
-
-                            val filteredIncomingRequests = currentState.incomingRequests.filter { it.bookingId != bookingId }
-                            val filteredSecondChanceRequests = currentState.secondChanceRequests.filter { it.bookingId != bookingId }
-                            val filteredRecentDeclinedRequests = currentState.recentDeclinedRequests.filter { it.bookingId != bookingId }
-
-                            // Check if the driver was currently viewing or about to accept this request
-                            val wasActiveRequest = currentState.incomingRequests.any { it.bookingId == bookingId } ||
-                                    currentState.secondChanceRequests.any { it.bookingId == bookingId }
-
-                            // CRITICAL FIX: Check if the cancelled booking is the currentBooking or in queuedBookings
-                            val isCurrentBooking = currentState.currentBooking?.id == bookingId
-                            val isInQueue = currentState.queuedBookings.any { it.id == bookingId }
-
-                            android.util.Log.e("DriverHomeVM", "🔎 CANCELLATION ANALYSIS:")
-                            android.util.Log.e("DriverHomeVM", "   - Cancelled booking ID: $bookingId")
-                            android.util.Log.e("DriverHomeVM", "   - Is current booking? $isCurrentBooking")
-                            android.util.Log.e("DriverHomeVM", "   - Is in queue? $isInQueue")
-                            android.util.Log.e("DriverHomeVM", "   - Was active request? $wasActiveRequest")
-
-                            if (isCurrentBooking || isInQueue) {
-                                // Check who cancelled the booking
-                                val cancelledBy = booking.cancelledBy ?: ""
-                                val wasPassengerCancellation = cancelledBy.equals("passenger", ignoreCase = true)
-
-                                android.util.Log.e("DriverHomeVM", "✅ CONFIRMED: Cancelled booking $bookingId was an ACCEPTED ride (current: $isCurrentBooking, queued: $isInQueue)")
-                                android.util.Log.e("DriverHomeVM", "   - Cancelled by: '$cancelledBy' (isPassenger: $wasPassengerCancellation)")
-
-                                // Filter out the cancelled booking from the queue
-                                val filteredQueue = currentState.queuedBookings.filter { it.id != bookingId }
-                                android.util.Log.d("DriverHomeVM", "   - Filtered queue (after removing cancelled): ${filteredQueue.map { it.id }}")
-
-                                // Determine the new current booking
-                                val newCurrentBooking = if (isCurrentBooking) {
-                                    // Current booking was cancelled, move to next in queue
-                                    val next = filteredQueue.firstOrNull()
-                                    android.util.Log.e("DriverHomeVM", "   - Current was cancelled, promoting next in queue: ${next?.id ?: "NONE"}")
-                                    next
-                                } else {
-                                    // Keep current booking (it wasn't the cancelled one)
-                                    android.util.Log.d("DriverHomeVM", "   - Keeping current booking: ${currentState.currentBooking?.id}")
-                                    currentState.currentBooking
-                                }
-
-                                // Update remaining queue (remove the new current booking from queue if we promoted one)
-                                val newQueue = if (isCurrentBooking && filteredQueue.isNotEmpty()) {
-                                    val updated = filteredQueue.drop(1) // Remove first item since it's now current
-                                    android.util.Log.d("DriverHomeVM", "   - New queue (after promoting): ${updated.map { it.id }}")
-                                    updated
-                                } else {
-                                    android.util.Log.d("DriverHomeVM", "   - Queue unchanged: ${filteredQueue.map { it.id }}")
-                                    filteredQueue
-                                }
-
-                                val hasRemainingRides = newCurrentBooking != null || newQueue.isNotEmpty()
-
-                                android.util.Log.e("DriverHomeVM", "📝 UPDATING STATE:")
-                                android.util.Log.e("DriverHomeVM", "   - NEW currentBooking: ${newCurrentBooking?.id ?: "NULL"}")
-                                android.util.Log.e("DriverHomeVM", "   - NEW queuedBookings: ${newQueue.map { it.id }}")
-                                android.util.Log.e("DriverHomeVM", "   - Total remaining rides: ${(if (newCurrentBooking != null) 1 else 0) + newQueue.size}")
-                                android.util.Log.e("DriverHomeVM", "   - Show passenger dialog: $wasPassengerCancellation")
-
-                                _uiState.value = currentState.copy(
-                                    incomingRequests = filteredIncomingRequests,
-                                    secondChanceRequests = filteredSecondChanceRequests,
-                                    recentDeclinedRequests = filteredRecentDeclinedRequests,
-                                    currentBooking = newCurrentBooking,
-                                    queuedBookings = newQueue,
-                                    showPassengerCancellationDialog = wasPassengerCancellation, // ONLY if passenger cancelled
-                                    errorMessage = if (wasPassengerCancellation) "Passenger cancelled their ride." else null
-                                )
-
-                                android.util.Log.e("DriverHomeVM", "✅ STATE UPDATED - UI should stay in 60/40 view: $hasRemainingRides")
-
-                                // CRITICAL: Stop observing this booking to prevent duplicate processing
-                                android.util.Log.e("DriverHomeVM", "🛑 STOPPING observer for cancelled booking $bookingId to prevent duplicates")
-                                return@collect  // Exit the collect loop to stop observing
-                            } else {
-                                android.util.Log.d("DriverHomeVM", "ℹ️ Cancelled booking $bookingId was NOT an accepted ride, just an incoming request")
-                                // Not an accepted ride, just an incoming request
-                                _uiState.value = currentState.copy(
-                                    incomingRequests = filteredIncomingRequests,
-                                    secondChanceRequests = filteredSecondChanceRequests,
-                                    recentDeclinedRequests = filteredRecentDeclinedRequests,
-                                    showPassengerCancellationDialog = false,
-                                    errorMessage = null
-                                )
-                            }
-
-                            android.util.Log.d("DriverHomeVM", "📊 AFTER CANCELLATION - Remaining: ${filteredIncomingRequests.size} incoming, ${filteredSecondChanceRequests.size} second chance")
-
-                            if (wasActiveRequest) {
-                                android.util.Log.d("DriverHomeVM", "💬 Showing cancellation dialog to driver for active request")
-                            }
-                        }
-                    },
-                    onFailure = { error ->
-                        android.util.Log.w("DriverHomeVM", "❌ Error monitoring booking $bookingId: ${error.message}")
-                    }
-                )
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("DriverHomeVM", "❌ Failed to monitor booking $bookingId for cancellations", e)
-        }
-    }
-
-    /**
      * Load driver profile information and earnings from Firebase
      */
     private fun loadDriverProfile() {
@@ -2260,45 +2046,6 @@ class DriverHomeViewModel @Inject constructor(
         android.util.Log.d("DriverViewModel", "loadEarnings: Using persistent Firebase earnings, not recalculating from requests")
     }
 
-    private fun calculateEarningsFromCompletedRides(completedRides: List<DriverRequest>) {
-        val now = System.currentTimeMillis()
-        val todayStart = getTodayStartTime()
-
-        // Filter completed rides that were actually accepted (completed trips)
-        val acceptedRides = completedRides.filter { ride ->
-            ride.status == com.rj.islamove.data.repository.DriverRequestStatus.ACCEPTED
-        }
-
-        // Filter today's completed trips
-        val todaysTrips = acceptedRides.filter { ride ->
-            ride.secondChanceExpirationTime >= todayStart
-        }
-
-        // Calculate additional earnings from today's completed ride requests
-        val requestEarnings = todaysTrips.sumOf { it.fareEstimate.totalEstimate }
-        val requestTripsCount = todaysTrips.size
-
-        android.util.Log.d("DriverViewModel", "Additional earnings from ${acceptedRides.size} completed rides: Requests=$requestEarnings, RequestTrips=$requestTripsCount")
-
-        // PRESERVE persistent earnings from Firebase - don't overwrite them!
-        // The UI should show persistent + request earnings, not just request earnings
-        val currentState = _uiState.value
-        android.util.Log.d("DriverViewModel", "Current persistent earnings: ${currentState.totalEarnings}, trips: ${currentState.todayTrips}")
-
-        // Only update if we have new trip data to add, otherwise preserve existing state
-        // This prevents earnings from being reset to 0 when ride requests appear
-        if (requestEarnings > 0 || requestTripsCount > 0) {
-            android.util.Log.d("DriverViewModel", "Adding request-based earnings to persistent earnings")
-            _uiState.value = currentState.copy(
-                // Add request earnings to existing persistent earnings (don't replace)
-                totalEarnings = currentState.totalEarnings + requestEarnings,
-                todayTrips = currentState.todayTrips + requestTripsCount
-            )
-        } else {
-            android.util.Log.d("DriverViewModel", "No additional earnings from requests, preserving existing earnings")
-            // Don't modify earnings if no new data - preserves Firebase earnings
-        }
-    }
 
     /**
      * Load service area destinations as landmarks visible to driver
@@ -2356,21 +2103,6 @@ class DriverHomeViewModel @Inject constructor(
         return zoneBoundaryRepository
     }
 
-    /**
-     * Get the ServiceAreaManagementRepository for use in destination lookup
-     */
-    fun getServiceAreaManagementRepository(): ServiceAreaManagementRepository {
-        return serviceAreaManagementRepository
-    }
-
-    /**
-     * Show passenger cancellation dialog notification
-     */
-    fun showPassengerCancellationDialog() {
-        _uiState.value = _uiState.value.copy(
-            showPassengerCancellationDialog = true
-        )
-    }
 
     /**
      * Hide passenger cancellation dialog notification
@@ -2788,84 +2520,6 @@ class DriverHomeViewModel @Inject constructor(
     }
 
     /**
-     * Start turn-by-turn navigation to pickup location
-     */
-    fun startNavigationToPickup() {
-        val currentBooking = _uiState.value.currentBooking ?: return
-        val currentLocation = _uiState.value.currentUserLocation ?: return
-
-        viewModelScope.launch {
-            try {
-                val driverLocation = BookingLocation(
-                    address = "Current Location",
-                    coordinates = GeoPoint(currentLocation.latitude(), currentLocation.longitude())
-                )
-
-                // Force real route for active ride navigation
-                mapboxRepository.getRoute(driverLocation, currentBooking.pickupLocation, forceRealRoute = true)
-                    .onSuccess { route ->
-                        Log.d("DriverHomeViewModel", "ACTIVE RIDE: Started navigation to pickup - Route calculated with ${route.waypoints.size} waypoints, Route ID: ${route.routeId}")
-                        if (route.routeId.startsWith("simple_direct")) {
-                            Log.w("DriverHomeViewModel", "⚠️ WARNING: Navigation to pickup using simple direct route instead of real roads!")
-                        } else {
-                            Log.i("DriverHomeViewModel", "✅ SUCCESS: Navigation to pickup using real Mapbox Directions API")
-                        }
-                        // Navigation will be handled by external navigation apps or internal implementation
-                        startExternalNavigation(currentBooking.pickupLocation)
-                    }
-                    .onFailure { exception ->
-                        _uiState.value = _uiState.value.copy(
-                            errorMessage = "Failed to start navigation: ${exception.message}"
-                        )
-                    }
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    errorMessage = "Navigation error: ${e.message}"
-                )
-            }
-        }
-    }
-
-    /**
-     * Start turn-by-turn navigation to destination
-     */
-    fun startNavigationToDestination() {
-        val currentBooking = _uiState.value.currentBooking ?: return
-        val currentLocation = _uiState.value.currentUserLocation ?: return
-
-        viewModelScope.launch {
-            try {
-                val driverLocation = BookingLocation(
-                    address = "Current Location",
-                    coordinates = GeoPoint(currentLocation.latitude(), currentLocation.longitude())
-                )
-
-                // Force real route for active trip navigation
-                mapboxRepository.getRoute(driverLocation, currentBooking.destination, forceRealRoute = true)
-                    .onSuccess { route ->
-                        Log.d("DriverHomeViewModel", "ACTIVE RIDE: Started navigation to destination - Route calculated with ${route.waypoints.size} waypoints, Route ID: ${route.routeId}")
-                        if (route.routeId.startsWith("simple_direct")) {
-                            Log.w("DriverHomeViewModel", "⚠️ WARNING: Navigation to destination using simple direct route instead of real roads!")
-                        } else {
-                            Log.i("DriverHomeViewModel", "✅ SUCCESS: Navigation to destination using real Mapbox Directions API")
-                        }
-                        // Navigation will be handled by external navigation apps or internal implementation
-                        startExternalNavigation(currentBooking.destination)
-                    }
-                    .onFailure { exception ->
-                        _uiState.value = _uiState.value.copy(
-                            errorMessage = "Failed to start navigation: ${exception.message}"
-                        )
-                    }
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    errorMessage = "Navigation error: ${e.message}"
-                )
-            }
-        }
-    }
-
-    /**
      * Start external navigation app (Google Maps, Waze, etc.)
      */
     private fun startExternalNavigation(destination: BookingLocation) {
@@ -3006,69 +2660,6 @@ class DriverHomeViewModel @Inject constructor(
     }
 
     /**
-     * Recalculate route for active booking as driver location updates
-     */
-    private suspend fun recalculateRouteForActiveBooking(booking: Booking, currentLocation: Point) {
-        try {
-            // Throttle route recalculation to avoid excessive API calls
-            val currentTime = System.currentTimeMillis()
-            val timeSinceLastRecalc = currentTime - lastRouteRecalculationTime
-
-            // Calculate distance moved since last recalculation
-            val distanceMoved = lastRouteRecalculationLocation?.let { lastLoc ->
-                calculateDistance(
-                    lastLoc.latitude(), lastLoc.longitude(),
-                    currentLocation.latitude(), currentLocation.longitude()
-                )
-            } ?: Double.MAX_VALUE // First time, always recalculate
-
-            // Only recalculate if moved significant distance OR enough time passed
-            if (distanceMoved < ROUTE_RECALC_DISTANCE_THRESHOLD &&
-                timeSinceLastRecalc < ROUTE_RECALC_TIME_THRESHOLD) {
-                return // Skip recalculation
-            }
-
-            // Determine destination based on booking status
-            val destination = when (booking.status) {
-                BookingStatus.ACCEPTED -> {
-                    // Driver is heading to pickup location
-                    booking.pickupLocation
-                }
-                BookingStatus.IN_PROGRESS -> {
-                    // Driver is heading to destination with passenger
-                    booking.destination
-                }
-                else -> {
-                    // No route needed for other statuses
-                    return
-                }
-            }
-
-            // Recalculate route from current location to destination
-            val driverLocation = BookingLocation(
-                address = "Current Location",
-                coordinates = com.google.firebase.firestore.GeoPoint(
-                    currentLocation.latitude(),
-                    currentLocation.longitude()
-                )
-            )
-
-            mapboxRepository.getRoute(driverLocation, destination, forceRealRoute = true)
-                .onSuccess { route ->
-                    _uiState.value = _uiState.value.copy(routeInfo = route)
-                    lastRouteRecalculationLocation = currentLocation
-                    lastRouteRecalculationTime = currentTime
-                    android.util.Log.d("DriverHomeVM", "Route recalculated: ${route.totalDistance}km, ${route.estimatedDuration}min (moved ${distanceMoved.toInt()}m)")
-                }
-                .onFailure { exception ->
-                    android.util.Log.w("DriverHomeVM", "Failed to recalculate route: ${exception.message}")
-                }
-        } catch (e: Exception) {
-            android.util.Log.e("DriverHomeVM", "Error recalculating route", e)
-        }
-    }
-
-    /**
      * Calculate distance between two coordinates in meters using Haversine formula
      */
     private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
@@ -3080,62 +2671,6 @@ class DriverHomeViewModel @Inject constructor(
                 Math.sin(dLon / 2) * Math.sin(dLon / 2)
         val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
         return earthRadius * c
-    }
-
-    /**
-     * Get common cancellation reasons for driver UI
-     */
-    fun getCommonCancellationReasons(): List<String> {
-        return listOf(
-            "Vehicle breakdown",
-            "Emergency situation",
-            "Unable to find pickup location",
-            "Passenger not responding",
-            "Traffic/road conditions",
-            "Personal emergency",
-            "Other"
-        )
-    }
-
-    /**
-     * Comprehensively restore driver to normal active state after trip cancellation
-     */
-    private fun restoreDriverToActiveState() {
-        viewModelScope.launch {
-            try {
-                // Update UI state to show driver is fully online and available
-                _uiState.value = _uiState.value.copy(
-                    online = true,
-                    isLoading = false,
-                    errorMessage = null,
-                    // Ensure all trip-related flags are cleared
-                    showNavigationToPassenger = false,
-                    routeInfo = null,
-                    passengerLocation = null
-                    // Keep: currentUser, driverProfile, currentUserLocation, hasLocationPermissions
-                )
-
-                // Restart location updates to ensure maps and location services work properly
-                startLocationUpdates()
-
-                // Refresh driver profile and earnings in case they were affected
-                val refreshJobs = listOf(
-                    async { loadDriverProfile() },
-                    async { loadEarnings() }
-                )
-
-                // Wait for refresh to complete
-                refreshJobs.forEach { it.await() }
-
-                android.util.Log.d("DriverViewModel", "Driver state fully restored to active/online")
-
-            } catch (e: Exception) {
-                android.util.Log.e("DriverViewModel", "Error during driver state restoration", e)
-                _uiState.value = _uiState.value.copy(
-                    errorMessage = "Failed to fully restore driver state: ${e.message}"
-                )
-            }
-        }
     }
 
     /**
@@ -3155,22 +2690,6 @@ class DriverHomeViewModel @Inject constructor(
             Log.d("DriverHomeViewModel", "Loaded ${ratedBookings.size} already-rated bookings from SharedPreferences")
         } catch (e: Exception) {
             Log.e("DriverHomeViewModel", "Error loading rated bookings", e)
-        }
-    }
-
-    /**
-     * Mark a booking as rated by the driver and save to SharedPreferences
-     */
-    fun markBookingAsRated(bookingId: String) {
-        try {
-            ratedBookings.add(bookingId)
-            val editor = sharedPreferences.edit()
-            editor.putBoolean("driver_rated_$bookingId", true)
-            editor.apply()
-
-            Log.d("DriverHomeViewModel", "Marked booking $bookingId as rated by driver")
-        } catch (e: Exception) {
-            Log.e("DriverHomeViewModel", "Error saving driver rated booking", e)
         }
     }
 
@@ -3472,111 +2991,6 @@ class DriverHomeViewModel @Inject constructor(
      */
     fun calculateEarningsForDateRange(trips: List<Booking>): Double {
         return trips.sumOf { it.fareEstimate.totalEstimate }
-    }
-
-    /**
-     * Debug function to check what bookings exist in the database
-     */
-    suspend fun debugCheckAllBookings(): Result<List<Booking>> {
-        return try {
-            val currentUser = auth.currentUser ?: throw Exception("User not authenticated")
-
-            android.util.Log.d("DriverHomeVM", "=== DEBUG: CHECKING ALL BOOKINGS ===")
-            android.util.Log.d("DriverHomeVM", "Current user: ${currentUser.uid}")
-            android.util.Log.d("DriverHomeVM", "Current user email: ${currentUser.email}")
-
-            // Get all bookings for this driver (any status)
-            val allBookingsSnapshot = firestore.collection("bookings")
-                .whereEqualTo("driverId", currentUser.uid)
-                .get()
-                .await()
-
-            android.util.Log.d("DriverHomeVM", "Found ${allBookingsSnapshot.size()} total bookings for this driver")
-
-            val allBookings = allBookingsSnapshot.documents.mapNotNull { doc ->
-                try {
-                    val booking = doc.toObject(Booking::class.java)?.copy(id = doc.id)
-                    android.util.Log.d("DriverHomeVM", "Booking: ${booking?.id}")
-                    android.util.Log.d("DriverHomeVM", "  Status: ${booking?.status}")
-                    android.util.Log.d("DriverHomeVM", "  Driver: ${booking?.driverId}")
-                    android.util.Log.d("DriverHomeVM", "  Passenger: ${booking?.passengerId}")
-                    android.util.Log.d("DriverHomeVM", "  CompletionTime: ${booking?.completionTime}")
-                    android.util.Log.d("DriverHomeVM", "  RequestTime: ${booking?.requestTime}")
-                    android.util.Log.d("DriverHomeVM", "  From: ${booking?.pickupLocation?.address}")
-                    android.util.Log.d("DriverHomeVM", "  To: ${booking?.destination?.address}")
-                    booking
-                } catch (e: Exception) {
-                    android.util.Log.e("DriverHomeVM", "Error parsing booking doc ${doc.id}", e)
-                    null
-                }
-            }
-
-            // Check status distribution
-            val statusCounts = allBookings.groupBy { it.status }.mapValues { it.value.size }
-            android.util.Log.d("DriverHomeVM", "Status distribution: $statusCounts")
-
-            // Check for completed bookings specifically
-            val completedBookings = allBookings.filter { it.status == BookingStatus.COMPLETED }
-            android.util.Log.d("DriverHomeVM", "Completed bookings: ${completedBookings.size}")
-
-            completedBookings.forEach { booking ->
-                android.util.Log.d("DriverHomeVM", "COMPLETED: ${booking.id} - ${booking.destination.address} - fare: ${booking.fareEstimate.totalEstimate}")
-            }
-
-            android.util.Log.d("DriverHomeVM", "=== END DEBUG ===")
-            Result.success(allBookings)
-        } catch (e: Exception) {
-            android.util.Log.e("DriverHomeVM", "Error in debug check", e)
-            Result.failure(e)
-        }
-    }
-
-    /**
-     * Load passenger rating statistics for the current booking
-     */
-    fun loadPassengerRatingStats(passengerId: String) {
-        viewModelScope.launch {
-            try {
-                ratingRepository.getUserRatingStats(passengerId)
-                    .onSuccess { ratingStats ->
-                        _uiState.value = _uiState.value.copy(
-                            passengerRatingStats = ratingStats
-                        )
-                        android.util.Log.d("DriverHomeVM", "Loaded passenger rating stats: ${ratingStats.overallRating} stars, ${ratingStats.totalRatings} reviews")
-                    }
-                    .onFailure { exception ->
-                        android.util.Log.w("DriverHomeVM", "Failed to load passenger rating stats", exception)
-                        // Don't update UI state with error for rating stats as it's not critical
-                    }
-            } catch (e: Exception) {
-                android.util.Log.w("DriverHomeVM", "Error loading passenger rating stats", e)
-            }
-        }
-    }
-
-    // Trip details functionality
-    fun showTripDetailsDialog(booking: Booking) {
-        _uiState.value = _uiState.value.copy(
-            showTripDetailsDialog = true,
-            selectedTripForDetails = booking,
-            selectedTripPassenger = null
-        )
-        // Load passenger information if booking has a passenger
-        booking.passengerId?.let { passengerId ->
-            loadPassengerForTripDetails(passengerId)
-        }
-    }
-
-    fun hideTripDetailsDialog() {
-        _uiState.value = _uiState.value.copy(
-            showTripDetailsDialog = false,
-            selectedTripForDetails = null,
-            selectedTripPassenger = null
-        )
-    }
-
-    fun loadTripPassenger(passengerId: String) {
-        loadPassengerForTripDetails(passengerId)
     }
 
     fun loadBookingById(bookingId: String) {

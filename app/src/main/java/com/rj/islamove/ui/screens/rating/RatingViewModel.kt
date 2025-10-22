@@ -251,27 +251,6 @@ class RatingViewModel @Inject constructor(
         }
     }
 
-    fun updateCategoryRating(category: String, rating: Int) {
-        if (rating !in 1..5) return
-
-        val currentCategories = _uiState.value.categoryRatings
-        val updatedCategories = when (category) {
-            "drivingSkill" -> currentCategories.copy(drivingSkill = rating)
-            "vehicleCondition" -> currentCategories.copy(vehicleCondition = rating)
-            "punctuality" -> currentCategories.copy(punctuality = rating)
-            "friendliness" -> currentCategories.copy(friendliness = rating)
-            "routeKnowledge" -> currentCategories.copy(routeKnowledge = rating)
-            "politeness" -> currentCategories.copy(politeness = rating)
-            "cleanliness" -> currentCategories.copy(cleanliness = rating)
-            "communication" -> currentCategories.copy(communication = rating)
-            "respectfulness" -> currentCategories.copy(respectfulness = rating)
-            "onTime" -> currentCategories.copy(onTime = rating)
-            else -> currentCategories
-        }
-
-        _uiState.value = _uiState.value.copy(categoryRatings = updatedCategories)
-    }
-
     fun updateReview(review: String) {
         // Limit review to 500 characters
         val limitedReview = if (review.length > 500) review.take(500) else review
@@ -396,43 +375,5 @@ class RatingViewModel @Inject constructor(
                 Log.e(TAG, "Failed to update error state", e2)
             }
         }
-    }
-
-    // Helper function to get rating description
-    fun getRatingDescription(rating: Int): String {
-        return when (rating) {
-            5 -> "Excellent"
-            4 -> "Good"
-            3 -> "Average"
-            2 -> "Below Average"
-            1 -> "Poor"
-            else -> ""
-        }
-    }
-
-    // Helper function to check if all required fields are filled
-    fun isRatingComplete(): Boolean {
-        return _uiState.value.overallRating > 0
-    }
-
-    // Helper function to get completion percentage
-    fun getCompletionPercentage(): Float {
-        val state = _uiState.value
-        var completed = 0
-        var total = 2 // Overall rating + at least one category rating
-
-        // Overall rating
-        if (state.overallRating > 0) completed++
-
-        // Category ratings (at least one)
-        val hasAnyCategoryRating = with(state.categoryRatings) {
-            listOfNotNull(
-                drivingSkill, vehicleCondition, punctuality, friendliness, routeKnowledge,
-                politeness, cleanliness, communication, respectfulness, onTime
-            ).isNotEmpty()
-        }
-        if (hasAnyCategoryRating) completed++
-
-        return completed.toFloat() / total
     }
 }

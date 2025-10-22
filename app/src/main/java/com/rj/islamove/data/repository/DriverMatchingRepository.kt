@@ -13,6 +13,7 @@ import com.google.firebase.firestore.GeoPoint
 import com.google.firebase.messaging.FirebaseMessaging
 import com.rj.islamove.R
 import com.rj.islamove.data.models.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -20,6 +21,7 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -32,9 +34,6 @@ data class DatabaseLocation(
     val placeName: String? = null,
     val placeType: String? = null
 ) {
-    // Convert to GeoPoint for Firestore compatibility
-    fun toGeoPoint() = GeoPoint(latitude, longitude)
-    
     // Convert to BookingLocation
     fun toBookingLocation() = BookingLocation(
         address = address,
@@ -739,7 +738,7 @@ class DriverMatchingRepository @Inject constructor(
             override fun onDataChange(snapshot: DataSnapshot) {
                 val requests = mutableListOf<DriverRequest>()
                 val currentTime = System.currentTimeMillis()
-                
+
                 snapshot.children.forEach { requestSnapshot ->
                     val request = requestSnapshot.getValue(DriverRequest::class.java)
                     if (request != null) {
@@ -748,6 +747,18 @@ class DriverMatchingRepository @Inject constructor(
                             // Auto-cleanup cancelled requests immediately
                             requestSnapshot.ref.removeValue()
                             android.util.Log.d("DriverMatching", "Auto-removed cancelled request ${request.requestId}")
+                            return@forEach
+                        }
+
+                        // Skip SECOND_CHANCE status requests - we only want INITIAL phase
+                        if (request.status == DriverRequestStatus.SECOND_CHANCE) {
+                            android.util.Log.d("DriverMatching", "Filtering out SECOND_CHANCE request ${request.requestId}")
+                            return@forEach
+                        }
+
+                        // Skip EXPIRED status requests
+                        if (request.status == DriverRequestStatus.EXPIRED) {
+                            android.util.Log.d("DriverMatching", "Filtering out EXPIRED request ${request.requestId}")
                             return@forEach
                         }
 
@@ -773,38 +784,59 @@ class DriverMatchingRepository @Inject constructor(
                             // Skip old requests to prevent UI clutter
                             return@forEach
                         }
-                        when {
-                            // Active requests (first 30 seconds)
-                            request.isInInitialPhase(currentTime) -> {
-                                requests.add(request)
-                            }
-                            // Second chance requests (30 seconds to 3.5 minutes)
-                            request.isInSecondChance(currentTime) -> {
-                                requests.add(request)
-                            }
-                            // Keep all expired requests for earnings history - no auto-cleanup
-                            request.isFullyExpired(currentTime) -> {
-                                requests.add(request)
-                            }
+
+                        // ONLY show INITIAL phase requests (first 30 seconds) with PENDING status
+                        if (request.isInInitialPhase(currentTime) &&
+                            request.status == DriverRequestStatus.PENDING) {
+
+                            // ADDITIONAL CHECK: Verify the booking is still active (not cancelled by passenger)
+                            // This check will be done in the ViewModel layer
+                            requests.add(request)
+                            android.util.Log.d("DriverMatching", "Including INITIAL request: ${request.requestId}")
+                        } else {
+                            android.util.Log.d("DriverMatching", "Filtering out request: ${request.requestId}, phase: ${request.getPhase(currentTime)}, status: ${request.status}")
                         }
                     }
                 }
                 trySend(requests)
             }
-            
+
             override fun onCancelled(error: DatabaseError) {
                 android.util.Log.e("DriverMatching", "Error observing driver requests", error.toException())
             }
         }
-        
+
         val ref = database.reference
             .child(DRIVER_REQUESTS_PATH)
             .child(driverId)
-        
+
         ref.addValueEventListener(listener)
-        
+
         awaitClose {
             ref.removeEventListener(listener)
+        }
+    }
+
+    suspend fun declineRequest(requestId: String, driverId: String): Result<Unit> = withContext(
+        Dispatchers.IO) {
+        try {
+            val requestRef = database.reference
+                .child(DRIVER_REQUESTS_PATH)
+                .child(driverId)
+                .child(requestId)
+
+            // Update status to DECLINED
+            requestRef.child("status").setValue(DriverRequestStatus.DECLINED.name).await()
+
+            // Auto-remove declined requests after 5 seconds (cleanup)
+            delay(5000)
+            requestRef.removeValue().await()
+
+            android.util.Log.d("DriverMatching", "Request $requestId declined and removed")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            android.util.Log.e("DriverMatching", "Failed to decline request", e)
+            Result.failure(e)
         }
     }
     
@@ -860,36 +892,6 @@ class DriverMatchingRepository @Inject constructor(
             
         } catch (e: Exception) {
             android.util.Log.e("DriverMatching", "Error sending notification to driver $driverId", e)
-        }
-    }
-    
-    /**
-     * Simulate local notification for development
-     * In production, this would be handled by Firebase Cloud Functions
-     */
-    private fun simulateLocalNotification(driverId: String, data: Map<String, String>) {
-        // Log the notification details
-        println("=== RIDE REQUEST NOTIFICATION ===")
-        println("Driver ID: $driverId")
-        println("Title: ${data["title"]}")
-        println("Body: ${data["body"]}")
-        println("Pickup: ${data["pickup_address"]}")
-        println("Destination: ${data["destination_address"]}")
-        println("Fare: ₱${data["fare_estimate"]}")
-        println("Booking ID: ${data["booking_id"]}")
-        println("=================================")
-        
-        // For development, show actual notification if the current user is a driver
-        // This simulates what would happen in a real multi-device environment
-        try {
-            val currentUserId = auth.currentUser?.uid
-            if (currentUserId != null) {
-                // In a real app, you'd check if current user is the target driver
-                // For demo, we'll show notification for any driver request
-                showLocalRideRequestNotification(data)
-            }
-        } catch (e: Exception) {
-            println("Error showing local notification: ${e.message}")
         }
     }
     
@@ -1390,35 +1392,6 @@ class DriverMatchingRepository @Inject constructor(
     }
     
     /**
-     * Transition driver requests to Second Chance phase
-     */
-    private suspend fun transitionToSecondChance(bookingId: String, driverIds: List<String>) {
-        driverIds.forEach { driverId ->
-            try {
-                database.reference
-                    .child(DRIVER_REQUESTS_PATH)
-                    .child(driverId)
-                    .orderByChild("bookingId")
-                    .equalTo(bookingId)
-                    .get()
-                    .addOnSuccessListener { snapshot ->
-                        snapshot.children.forEach { requestSnapshot ->
-                            val request = requestSnapshot.getValue(DriverRequest::class.java)
-                            if (request?.status == DriverRequestStatus.PENDING) {
-                                // Update status to SECOND_CHANCE instead of EXPIRED
-                                requestSnapshot.ref.child("status")
-                                    .setValue(DriverRequestStatus.SECOND_CHANCE.name)
-                                android.util.Log.d("DriverMatching", "Transitioned request ${request.requestId} to Second Chance for driver $driverId")
-                            }
-                        }
-                    }
-            } catch (e: Exception) {
-                android.util.Log.w("DriverMatching", "Failed to transition request to Second Chance for driver $driverId", e)
-            }
-        }
-    }
-    
-    /**
      * Mark driver requests as fully expired (after Second Chance period)
      */
     private suspend fun fullyExpireDriverRequests(bookingId: String, driverIds: List<String>) {
@@ -1445,13 +1418,6 @@ class DriverMatchingRepository @Inject constructor(
                 android.util.Log.w("DriverMatching", "Failed to fully expire request for driver $driverId", e)
             }
         }
-    }
-    
-    /**
-     * Mark driver requests as expired (legacy function - kept for compatibility)
-     */
-    private suspend fun expireDriverRequests(bookingId: String, driverIds: List<String>) {
-        fullyExpireDriverRequests(bookingId, driverIds)
     }
     
     /**
@@ -1911,338 +1877,6 @@ class DriverMatchingRepository @Inject constructor(
     }
 
     /**
-     * Enhanced point-to-line distance (Turf.js concept) with better accuracy
-     * Uses cross-track and along-track calculations for more precise results
-     */
-    private fun pointToLineDistanceEnhanced(
-        pointLat: Double, pointLng: Double,
-        lineStartLat: Double, lineStartLng: Double,
-        lineEndLat: Double, lineEndLng: Double
-    ): Double {
-        val lineDistance = calculateDistance(lineStartLat, lineStartLng, lineEndLat, lineEndLng)
-
-        // If line is very short, treat as a point
-        if (lineDistance < 10.0) {
-            return calculateDistance(lineStartLat, lineStartLng, pointLat, pointLng)
-        }
-
-        val crossTrack = crossTrackDistance(pointLat, pointLng, lineStartLat, lineStartLng, lineEndLat, lineEndLng)
-        val alongTrack = alongTrackDistance(pointLat, pointLng, lineStartLat, lineStartLng, lineEndLat, lineEndLng)
-
-        return when {
-            alongTrack < 0 -> calculateDistance(lineStartLat, lineStartLng, pointLat, pointLng)
-            alongTrack > lineDistance -> calculateDistance(lineEndLat, lineEndLng, pointLat, pointLng)
-            else -> crossTrack
-        }
-    }
-
-    /**
-     * Check if a point is close to a route (line segment) - Enhanced with Turf.js concepts
-     *
-     * @param maxDistance Maximum acceptable distance in meters
-     */
-    private fun isPointCloseToRoute(
-        pointLat: Double, pointLng: Double,
-        routeStartLat: Double, routeStartLng: Double,
-        routeEndLat: Double, routeEndLng: Double,
-        maxDistance: Double = 1000.0 // 1km default
-    ): Boolean {
-        val distance = pointToLineDistanceEnhanced(pointLat, pointLng, routeStartLat, routeStartLng, routeEndLat, routeEndLng)
-        return distance <= maxDistance
-    }
-
-    /**
-     * Turf.js-inspired route efficiency calculator
-     * Calculates if two destinations can be efficiently served on the same route
-     */
-    private fun calculateRouteEfficiency(
-        existingPickupLat: Double, existingPickupLng: Double,
-        existingDestLat: Double, existingDestLng: Double,
-        newPickupLat: Double, newPickupLng: Double,
-        newDestLat: Double, newDestLng: Double
-    ): Double {
-        // Calculate the most efficient order for serving both destinations
-        // Option 1: existing -> new
-        val distanceExistingToNew = calculateDistance(existingDestLat, existingDestLng, newDestLat, newDestLng)
-        val combinedRoute1 = calculateDistance(existingPickupLat, existingPickupLng, existingDestLat, existingDestLng) +
-                           distanceExistingToNew
-
-        // Option 2: new -> existing
-        val distanceNewToExisting = calculateDistance(newDestLat, newDestLng, existingDestLat, existingDestLng)
-        val combinedRoute2 = calculateDistance(newPickupLat, newPickupLng, newDestLat, newDestLng) +
-                           distanceNewToExisting
-
-        // Choose the more efficient combined route
-        val optimalCombinedRoute = kotlin.math.min(combinedRoute1, combinedRoute2)
-
-        // Calculate separate trips (worst case scenario)
-        val separateTrips = calculateDistance(existingPickupLat, existingPickupLng, existingDestLat, existingDestLng) +
-                           calculateDistance(existingDestLat, existingDestLng, newPickupLat, newPickupLng) +
-                           calculateDistance(newPickupLat, newPickupLng, newDestLat, newDestLng)
-
-        // Return efficiency ratio (lower is better)
-        return optimalCombinedRoute / separateTrips
-    }
-
-    /**
-     * Compass sector enum for better direction matching
-     */
-    private enum class CompassSector {
-        N,    // North: 337.5° - 22.5°
-        NE,   // Northeast: 22.5° - 67.5°
-        E,    // East: 67.5° - 112.5°
-        SE,   // Southeast: 112.5° - 157.5°
-        S,    // South: 157.5° - 202.5°
-        SW,   // Southwest: 202.5° - 247.5°
-        W,    // West: 247.5° - 292.5°
-        NW    // Northwest: 292.5° - 337.5°
-    }
-
-    /**
-     * Get compass sector for a bearing
-     */
-    private fun getCompassSector(bearing: Double): CompassSector {
-        val normalizedBearing = (bearing + 360) % 360
-        return when {
-            normalizedBearing >= 337.5 || normalizedBearing < 22.5 -> CompassSector.N
-            normalizedBearing >= 22.5 && normalizedBearing < 67.5 -> CompassSector.NE
-            normalizedBearing >= 67.5 && normalizedBearing < 112.5 -> CompassSector.E
-            normalizedBearing >= 112.5 && normalizedBearing < 157.5 -> CompassSector.SE
-            normalizedBearing >= 157.5 && normalizedBearing < 202.5 -> CompassSector.S
-            normalizedBearing >= 202.5 && normalizedBearing < 247.5 -> CompassSector.SW
-            normalizedBearing >= 247.5 && normalizedBearing < 292.5 -> CompassSector.W
-            else -> CompassSector.NW
-        }
-    }
-
-    /**
-     * Get directional groups for a compass sector
-     * Each sector belongs to 1-2 groups (e.g., NW belongs to both Northern and Western groups)
-     */
-    private fun getDirectionalGroups(sector: CompassSector): Set<String> {
-        return when (sector) {
-            CompassSector.N -> setOf("NORTH")
-            CompassSector.NE -> setOf("NORTH", "EAST")
-            CompassSector.E -> setOf("EAST")
-            CompassSector.SE -> setOf("SOUTH", "EAST")
-            CompassSector.S -> setOf("SOUTH")
-            CompassSector.SW -> setOf("SOUTH", "WEST")
-            CompassSector.W -> setOf("WEST")
-            CompassSector.NW -> setOf("NORTH", "WEST")
-        }
-    }
-
-    /**
-     * Check if compass sectors are cardinal (N, E, S, W) vs diagonal (NE, SE, SW, NW)
-     */
-    private fun isCardinalSector(sector: CompassSector): Boolean {
-        return sector in listOf(CompassSector.N, CompassSector.E, CompassSector.S, CompassSector.W)
-    }
-
-    /**
-     * Check if two compass sectors are adjacent (next to each other on the compass)
-     * Adjacent sectors are generally going in similar directions even if they don't share groups
-     */
-    private fun areAdjacentSectors(sector1: CompassSector, sector2: CompassSector): Boolean {
-        return when (sector1) {
-            CompassSector.N -> sector2 in listOf(CompassSector.NE, CompassSector.NW)
-            CompassSector.NE -> sector2 in listOf(CompassSector.N, CompassSector.E)
-            CompassSector.E -> sector2 in listOf(CompassSector.NE, CompassSector.SE)
-            CompassSector.SE -> sector2 in listOf(CompassSector.E, CompassSector.S)
-            CompassSector.S -> sector2 in listOf(CompassSector.SE, CompassSector.SW)
-            CompassSector.SW -> sector2 in listOf(CompassSector.S, CompassSector.W)
-            CompassSector.W -> sector2 in listOf(CompassSector.SW, CompassSector.NW)
-            CompassSector.NW -> sector2 in listOf(CompassSector.W, CompassSector.N)
-        }
-    }
-
-    /**
-     * Check if two compass sectors are compatible
-     * Stricter rules to prevent false positives:
-     * 1. Same sector → Always compatible
-     * 2. Both diagonal sectors (NE, NW, SE, SW) → Must share a directional group
-     * 3. One diagonal + one cardinal → Only compatible if the cardinal is one of the diagonal's groups AND within 45°
-     * 4. Both cardinal → Must be the same (N≠E, E≠S, etc.)
-     */
-    private fun areSectorsCompatible(sector1: CompassSector, sector2: CompassSector, bearing1: Double, bearing2: Double): Boolean {
-        if (sector1 == sector2) return true
-
-        val isCardinal1 = isCardinalSector(sector1)
-        val isCardinal2 = isCardinalSector(sector2)
-
-        // Get directional groups
-        val groups1 = getDirectionalGroups(sector1)
-        val groups2 = getDirectionalGroups(sector2)
-        val sharedGroups = groups1.intersect(groups2)
-
-        // Calculate angular difference
-        var diff = kotlin.math.abs(bearing1 - bearing2)
-        if (diff > 180) {
-            diff = 360 - diff
-        }
-
-        // NEW RULE: Adjacent sectors are always compatible if within reasonable angle
-        // This handles cases where sectors don't share groups but are geographically adjacent
-        // Stricter threshold (45° instead of 75°) to prevent mismatched directions
-        if (areAdjacentSectors(sector1, sector2) && diff <= 45.0) {
-            return true
-        }
-
-        // Rule: Both cardinal sectors must be the same (already handled above)
-        if (isCardinal1 && isCardinal2) {
-            return false // Different cardinal directions are never compatible
-        }
-
-        // Rule: Both diagonal sectors → Must share a group, be within 135°, AND not have opposite components
-        // This allows NW (NORTH+WEST) and NE (NORTH+EAST) = both have NORTH
-        // But rejects NW (NORTH+WEST) and SW (SOUTH+WEST) = share WEST but NORTH vs SOUTH are opposite
-        if (!isCardinal1 && !isCardinal2) {
-            if (sharedGroups.isEmpty() || diff > 135.0) {
-                return false
-            }
-
-            // Additional check: Reject if one has NORTH and the other has SOUTH (vertically opposite)
-            val hasNorth1 = groups1.contains("NORTH")
-            val hasSouth1 = groups1.contains("SOUTH")
-            val hasNorth2 = groups2.contains("NORTH")
-            val hasSouth2 = groups2.contains("SOUTH")
-
-            if ((hasNorth1 && hasSouth2) || (hasSouth1 && hasNorth2)) {
-                return false // Vertically opposite directions are incompatible
-            }
-
-            return true
-        }
-
-        // Rule: One cardinal + one diagonal → Must share a directional group and be reasonable
-        // The diagonal must "lean toward" the cardinal direction
-        // For example: W (257°) and SW (217°) share WEST group with 40° difference → ACCEPT
-        // This allows more reasonable compatibility while preventing truly opposite directions
-        if (sharedGroups.isEmpty()) {
-            return false
-        }
-
-        // For cardinal + diagonal: must be within 45° (stricter threshold)
-        // This ensures the diagonal actually leans toward the cardinal direction
-        // Prevents matching NW (298°) with W (261°) which are 37° apart but different primary directions
-        return diff <= 45.0
-    }
-
-    /**
-     * Check if two bearings are in compatible directions
-     * Returns true if the bearings share a directional group and are within 90° of each other
-     */
-    private fun areDirectionsCompatible(bearing1: Double, bearing2: Double): Boolean {
-        val sector1 = getCompassSector(bearing1)
-        val sector2 = getCompassSector(bearing2)
-        return areSectorsCompatible(sector1, sector2, bearing1, bearing2)
-    }
-
-    /**
-     * Check if adding a new destination creates an efficient route
-     * This considers the actual path the driver would need to take
-     */
-    private fun isRouteEfficient(
-        driverLat: Double,
-        driverLng: Double,
-        newPickupCoords: Pair<Double, Double>,
-        newDestinationCoords: Pair<Double, Double>,
-        activeBookings: List<Booking>
-    ): Boolean {
-        if (activeBookings.isEmpty()) return true
-
-        for (booking in activeBookings) {
-            val existingDestLat = booking.destination.coordinates.latitude
-            val existingDestLng = booking.destination.coordinates.longitude
-
-            // Calculate bearings from driver's CURRENT location
-            val bearingToExisting = calculateBearing(driverLat, driverLng, existingDestLat, existingDestLng)
-            val bearingToNew = calculateBearing(driverLat, driverLng, newDestinationCoords.first, newDestinationCoords.second)
-
-            android.util.Log.d("DestinationFiltering", "   - Bearing to existing '${booking.destination.address}': ${String.format("%.1f", bearingToExisting)}°")
-            android.util.Log.d("DestinationFiltering", "   - Bearing to new destination: ${String.format("%.1f", bearingToNew)}°")
-
-            // Calculate angle difference, handling wrap-around properly
-            var diff = kotlin.math.abs(bearingToExisting - bearingToNew)
-            if (diff > 180) {
-                diff = 360 - diff
-            }
-
-            // Special handling for directions that are both pointing generally north/south/east/west
-            // For example: 350° (slightly west of north) and 10° (slightly east of north) should be 20° apart, not 340°
-            val existingGeneral = getGeneralDirection(bearingToExisting)
-            val newGeneral = getGeneralDirection(bearingToNew)
-
-            android.util.Log.d("DestinationFiltering", "   - General directions: existing='$existingGeneral', new='$newGeneral'")
-
-            // If both directions are generally the same (NORTH, SOUTH, EAST, or WEST),
-            // and the angle difference is large, they're likely on opposite sides
-            if (existingGeneral == newGeneral && diff > 60) {
-                // They're pointing generally the same way but on opposite sides
-                // Calculate the angle across the 0°/360° boundary
-                val crossBoundaryDiff = 360 - diff
-
-                // For directions generally north, if one is ~300° and other is ~60°,
-                // the actual difference should be much smaller
-                val adjustedDiff = if (existingGeneral == "NORTH" || existingGeneral == "SOUTH") {
-                    // For north/south, check if they're on opposite sides of the cardinal direction
-                    val existingOffset = kotlin.math.abs((bearingToExisting % 90) - 45)
-                    val newOffset = kotlin.math.abs((bearingToNew % 90) - 45)
-                    existingOffset + newOffset
-                } else {
-                    // For east/west, use cross-boundary difference
-                    crossBoundaryDiff
-                }
-
-                if (adjustedDiff < diff) {
-                    android.util.Log.d("DestinationFiltering", "   - Adjusting angle difference from ${String.format("%.1f", diff)}° to ${String.format("%.1f", adjustedDiff)}° (same general direction)")
-                    diff = adjustedDiff
-                }
-            }
-
-            android.util.Log.d("DestinationFiltering", "   - Direction similarity check: ${String.format("%.1f", diff)}° apart")
-
-            // Calculate total route distance if this destination is added
-            val currentRouteToExisting = calculateDistance(driverLat, driverLng, existingDestLat, existingDestLng)
-            val routeViaNewDestination = calculateDistance(driverLat, driverLng, newPickupCoords.first, newPickupCoords.second) +
-                                         calculateDistance(newPickupCoords.first, newPickupCoords.second, newDestinationCoords.first, newDestinationCoords.second) +
-                                         calculateDistance(newDestinationCoords.first, newDestinationCoords.second, existingDestLat, existingDestLng)
-
-            // Calculate detour percentage
-            val detourPercentage = ((routeViaNewDestination - currentRouteToExisting) / currentRouteToExisting) * 100
-
-            android.util.Log.d("DestinationFiltering", "   - Current route to '${booking.destination.address}': ${String.format("%.0f", currentRouteToExisting)}m")
-            android.util.Log.d("DestinationFiltering", "   - Route via new pickup and destination: ${String.format("%.0f", routeViaNewDestination)}m")
-            android.util.Log.d("DestinationFiltering", "   - Detour: ${String.format("%.1f", detourPercentage)}%")
-
-            // Allow if detour is reasonable (less than 50% longer) OR directions are very similar
-            val isReasonableDetour = detourPercentage < 50.0
-            val areDirectionsSimilar = diff < 45.0 // Increased threshold for direction similarity
-
-            if (!isReasonableDetour && !areDirectionsSimilar) {
-                android.util.Log.d("DestinationFiltering", "   - Route not efficient: ${String.format("%.1f", detourPercentage)}% detour and ${String.format("%.1f", diff)}° apart")
-                return false
-            }
-        }
-
-        return true
-    }
-
-    /**
-     * Get the general cardinal direction (NORTH, SOUTH, EAST, WEST) from a bearing
-     */
-    private fun getGeneralDirection(bearing: Double): String {
-        val normalizedBearing = (bearing + 360) % 360
-        return when {
-            normalizedBearing in 315.0..360.0 || normalizedBearing in 0.0..45.0 -> "NORTH"
-            normalizedBearing in 45.0..135.0 -> "EAST"
-            normalizedBearing in 135.0..225.0 -> "SOUTH"
-            normalizedBearing in 225.0..315.0 -> "WEST"
-            else -> "UNKNOWN"
-        }
-    }
-
-    /**
      * Check if a booking currently has an active (non-expired) PENDING request with another driver
      * This prevents sending the same booking to multiple drivers simultaneously
      *
@@ -2655,51 +2289,6 @@ class DriverMatchingRepository @Inject constructor(
             
         } catch (e: Exception) {
             android.util.Log.e("DriverMatching", "Failed to remove booking requests from other drivers", e)
-        }
-    }
-    
-    /**
-     * Cancel all driver requests when passenger cancels booking
-     * This ensures requests immediately disappear from driver UIs
-     */
-    suspend fun cancelBookingRequestsForAllDrivers(bookingId: String): Result<Unit> {
-        return try {
-            android.util.Log.d("DriverMatching", "Cancelling all driver requests for booking: $bookingId")
-            
-            // Get all driver requests for this booking
-            val allDriversSnapshot = database.reference
-                .child(DRIVER_REQUESTS_PATH)
-                .get()
-                .await()
-            
-            var cancelledCount = 0
-            
-            for (driverSnapshot in allDriversSnapshot.children) {
-                val driverId = driverSnapshot.key ?: continue
-                
-                // Check all requests for this driver
-                driverSnapshot.children.forEach { requestSnapshot ->
-                    val request = requestSnapshot.getValue(DriverRequest::class.java)
-                    if (request?.bookingId == bookingId && 
-                        (request.status == DriverRequestStatus.PENDING || 
-                         request.status == DriverRequestStatus.SECOND_CHANCE)) {
-                        
-                        // Mark as cancelled (passenger cancelled)
-                        requestSnapshot.ref.child("status")
-                            .setValue(DriverRequestStatus.CANCELLED.name)
-                        
-                        cancelledCount++
-                        android.util.Log.d("DriverMatching", "Cancelled request ${request.requestId} for driver $driverId (passenger cancelled booking)")
-                    }
-                }
-            }
-            
-            android.util.Log.d("DriverMatching", "Successfully cancelled $cancelledCount driver requests for booking $bookingId")
-            Result.success(Unit)
-            
-        } catch (e: Exception) {
-            android.util.Log.e("DriverMatching", "Failed to cancel booking requests for all drivers", e)
-            Result.failure(e)
         }
     }
 }

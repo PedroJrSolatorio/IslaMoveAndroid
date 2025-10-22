@@ -3,10 +3,7 @@ package com.rj.islamove.data.repository
 import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
-import com.google.firebase.firestore.SetOptions
 import com.rj.islamove.data.models.*
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -156,29 +153,6 @@ class RatingRepository @Inject constructor(
         }
     }
 
-    // Observe user rating stats in real-time
-    fun observeUserRatingStats(userId: String): Flow<UserRatingStats> = flow {
-        try {
-            firestore.collection(USER_RATING_STATS_COLLECTION)
-                .document(userId)
-                .addSnapshotListener { snapshot, error ->
-                    if (error != null) {
-                        Log.e(TAG, "Error observing rating stats", error)
-                        return@addSnapshotListener
-                    }
-
-                    val stats = if (snapshot?.exists() == true) {
-                        snapshot.toObject(UserRatingStats::class.java) ?: UserRatingStats(userId = userId)
-                    } else {
-                        UserRatingStats(userId = userId)
-                    }
-                    // Note: In a real implementation, you'd use callbackFlow for this
-                }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error setting up rating stats observer", e)
-        }
-    }
-
     // Create pending rating when trip completes
     suspend fun createPendingRating(
         bookingId: String,
@@ -225,25 +199,6 @@ class RatingRepository @Inject constructor(
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Error creating pending ratings", e)
-            Result.failure(e)
-        }
-    }
-
-    // Get pending ratings for a user
-    suspend fun getPendingRatings(userId: String): Result<List<Map<String, Any>>> {
-        return try {
-            val querySnapshot = firestore.collection(PENDING_RATINGS_COLLECTION)
-                .whereEqualTo("fromUserId", userId)
-                .whereEqualTo("status", RatingStatus.PENDING.name)
-                .whereGreaterThan("expiresAt", System.currentTimeMillis())
-                .orderBy("expiresAt", Query.Direction.ASCENDING)
-                .get()
-                .await()
-
-            val pendingRatings = querySnapshot.documents.map { it.data ?: emptyMap() }
-            Result.success(pendingRatings)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error getting pending ratings", e)
             Result.failure(e)
         }
     }
@@ -412,40 +367,45 @@ class RatingRepository @Inject constructor(
 
             when (userType) {
                 UserType.DRIVER -> {
-                    // Get existing driverData
-                    val existingDriverData = userDocRef.get().await().toObject(User::class.java)?.driverData
+                    // Get current driverData to preserve all fields
+                    val currentDriverData = userDoc.get("driverData") as? Map<*, *>
 
-                    if (existingDriverData == null) {
-                        Log.e(TAG, "Driver data not found for user: $userId")
+                    Log.d(TAG, "Current driverData before update: $currentDriverData")
+                    Log.d(TAG, "Attempting to update DRIVER rating to: $newRating, totalTrips: $totalTrips")
+
+                    if (currentDriverData == null) {
+                        Log.e(TAG, "driverData is null, cannot update")
                         return
                     }
 
-                    // Update the entire driverData object with new rating and totalTrips
-                    val updatedDriverData = existingDriverData.copy(
-                        rating = newRating,
-                        totalTrips = totalTrips
-                    )
+                    // Create updated driverData map
+                    val updatedDriverData = currentDriverData.toMutableMap().apply {
+                        this["rating"] = newRating
+                        this["totalTrips"] = totalTrips
+                    }
 
-                    // Update with the complete driverData object
                     val updates = mapOf(
                         "driverData" to updatedDriverData,
                         "updatedAt" to System.currentTimeMillis()
                     )
 
+                    Log.d(TAG, "Update payload: $updates")
+
                     userDocRef.update(updates).await()
-                    Log.d(TAG, "Updated DRIVER rating in user document: $userId -> $newRating ($totalTrips trips)")
+                    Log.d(TAG, "✓ Updated DRIVER rating: $userId -> rating=$newRating, totalTrips=$totalTrips")
                 }
 
                 UserType.PASSENGER -> {
-                    // For passengers, update the top-level fields directly
+                    // For passengers, update the top-level fields using update() instead of set()
                     val updates = mapOf(
                         "passengerRating" to newRating,
                         "passengerTotalTrips" to totalTrips,
                         "updatedAt" to System.currentTimeMillis()
                     )
 
-                    userDocRef.set(updates, SetOptions.merge()).await()
-                    Log.d(TAG, "Updated PASSENGER rating in user document: $userId -> $newRating ($totalTrips trips)")
+                    // Use update() instead of set() for consistency and to match security rules
+                    userDocRef.update(updates).await()
+                    Log.d(TAG, "✓ Updated PASSENGER rating: $userId -> rating=$newRating, totalTrips=$totalTrips")
                 }
 
                 else -> {
@@ -453,50 +413,39 @@ class RatingRepository @Inject constructor(
                     return
                 }
             }
+
+            Log.d(TAG, "Successfully updated $userType rating in users collection for $userId")
+
         } catch (e: Exception) {
-            Log.e(TAG, "Error updating $userType rating in user document for $userId", e)
-            // Log the specific error for debugging
+            Log.e(TAG, "❌ Error updating $userType rating in user document for $userId", e)
+
+            // Log detailed error information
             when (e) {
                 is com.google.firebase.firestore.FirebaseFirestoreException -> {
-                    Log.e(TAG, "Firestore error code: ${e.code}, message: ${e.message}")
+                    Log.e(TAG, "Firestore error code: ${e.code}")
+                    Log.e(TAG, "Firestore error message: ${e.message}")
+
+                    // Provide specific guidance based on error code
+                    when (e.code) {
+                        com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED -> {
+                            Log.e(TAG, "PERMISSION DENIED - Check Firestore security rules for users collection")
+                            Log.e(TAG, "User ID: $userId, UserType: $userType")
+                        }
+                        com.google.firebase.firestore.FirebaseFirestoreException.Code.NOT_FOUND -> {
+                            Log.e(TAG, "Document not found - User may have been deleted")
+                        }
+                        else -> {
+                            Log.e(TAG, "Other Firestore error: ${e.code}")
+                        }
+                    }
+                }
+                else -> {
+                    Log.e(TAG, "Non-Firestore error: ${e.javaClass.simpleName} - ${e.message}")
                 }
             }
-        }
-    }
 
-    // Submit driver rating (convenience method for DriverRatingViewModel)
-    suspend fun submitDriverRating(ratingData: Map<String, Any>): Result<String> {
-        return try {
-            val fromUserId = ratingData["fromUserId"] as? String ?: return Result.failure(Exception("Missing fromUserId"))
-            val toUserId = ratingData["toUserId"] as? String ?: return Result.failure(Exception("Missing toUserId"))
-            val bookingId = ratingData["bookingId"] as? String ?: return Result.failure(Exception("Missing bookingId"))
-            val overallRating = (ratingData["overallRating"] as? Number)?.toInt() ?: return Result.failure(Exception("Missing overallRating"))
-            val review = ratingData["review"] as? String ?: ""
-            val isAnonymous = ratingData["isAnonymous"] as? Boolean ?: false
-
-            // Extract categories
-            val categoriesMap = ratingData["categories"] as? Map<String, Any> ?: emptyMap()
-            val categories = RatingCategories(
-                politeness = (categoriesMap["politeness"] as? Number)?.toInt()?.takeIf { it > 0 },
-                cleanliness = (categoriesMap["cleanliness"] as? Number)?.toInt()?.takeIf { it > 0 },
-                communication = (categoriesMap["communication"] as? Number)?.toInt()?.takeIf { it > 0 },
-                respectfulness = (categoriesMap["respectfulness"] as? Number)?.toInt()?.takeIf { it > 0 },
-                onTime = (categoriesMap["onTime"] as? Number)?.toInt()?.takeIf { it > 0 }
-            )
-
-            val ratingSubmission = RatingSubmission(
-                bookingId = bookingId,
-                toUserId = toUserId,
-                stars = overallRating,
-                review = review,
-                categories = categories,
-                isAnonymous = isAnonymous
-            )
-
-            submitRating(fromUserId, ratingSubmission)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error submitting driver rating", e)
-            Result.failure(e)
+            // Re-throw to propagate the error up
+            throw e
         }
     }
 
