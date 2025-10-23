@@ -16,3 +16,5 @@ local.properties
 app/google-services.json
 app/src/main/assets/*.json
 *.keystore
+*.apk
+output-metadata.json
