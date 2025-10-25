@@ -2724,41 +2724,6 @@ class PassengerHomeViewModel @Inject constructor(
     }
 
     /**
-     * Calculate route from driver's current location to pickup
-     */
-    private suspend fun calculateDriverRoute(
-        driverLocation: DriverLocation,
-        pickupLocation: BookingLocation
-    ) {
-        try {
-            val driverBookingLocation = BookingLocation(
-                address = "Driver Location",
-                coordinates = GeoPoint(driverLocation.latitude, driverLocation.longitude)
-            )
-
-            // Force real route for active ride driver tracking
-            mapboxRepository.getRoute(driverBookingLocation, pickupLocation, forceRealRoute = true)
-                .onSuccess { route ->
-                    _uiState.value = _uiState.value.copy(
-                        driverRoute = route,
-                        driverEta = route.estimatedDuration
-                    )
-                    Log.d("PassengerHomeViewModel", "ACTIVE RIDE: Driver route calculated with ${route.waypoints.size} waypoints, Route ID: ${route.routeId}")
-                    if (route.routeId.startsWith("simple_direct")) {
-                        Log.w("PassengerHomeViewModel", "⚠️ WARNING: Driver route is simple direct instead of real roads for active ride!")
-                    } else {
-                        Log.i("PassengerHomeViewModel", "✅ SUCCESS: Driver route using real Mapbox Directions API")
-                    }
-                }
-                .onFailure { exception ->
-                    Log.e("PassengerHomeViewModel", "Failed to calculate driver route for active ride", exception)
-                }
-        } catch (e: Exception) {
-            Log.e("PassengerHomeViewModel", "Error calculating driver route", e)
-        }
-    }
-
-    /**
      * Reset rating screen trigger after navigating to rating
      */
     fun resetRatingTrigger() {
@@ -2774,28 +2739,6 @@ class PassengerHomeViewModel @Inject constructor(
             showDriverNavigation = false,
             assignedDriverLocation = null
         )
-    }
-
-    /**
-     * Submit rating for completed trip
-     */
-    fun submitRating(rating: Float, feedback: String) {
-        val bookingId = _uiState.value.completedBookingId ?: return
-
-        viewModelScope.launch {
-            try {
-                // TODO: Implement rating submission to repository
-                android.util.Log.d(
-                    "PassengerViewModel",
-                    "Rating submitted: $rating stars, feedback: $feedback for booking: $bookingId"
-                )
-
-                // Dismiss rating screen after submission
-                dismissRatingScreen()
-            } catch (e: Exception) {
-                android.util.Log.e("PassengerViewModel", "Error submitting rating", e)
-            }
-        }
     }
 
     /**
@@ -3102,13 +3045,6 @@ class PassengerHomeViewModel @Inject constructor(
     }
 
     /**
-     * Save work address for the current user
-     */
-    fun saveWorkAddress(location: BookingLocation) {
-        savePlace("Work", location)
-    }
-
-    /**
      * Save favorite place for the current user
      */
     fun saveFavoritePlace(location: BookingLocation) {
@@ -3286,40 +3222,6 @@ class PassengerHomeViewModel @Inject constructor(
     }
 
     /**
-     * Navigate to home address if it exists
-     */
-    fun navigateToHome() {
-        val homeAddress = _uiState.value.homeAddress
-        if (homeAddress != null) {
-            // Set current location as pickup and home as destination
-            _uiState.value.currentUserLocation?.let { currentLoc ->
-                val pickupGeoPoint = GeoPoint(currentLoc.latitude(), currentLoc.longitude())
-                val boundaryName = BoundaryFareUtils.determineBoundary(pickupGeoPoint, zoneBoundaryRepository)
-                val pickup = BookingLocation(
-                    address = boundaryName ?: "Lat: ${String.format("%.6f", currentLoc.latitude())}, Lng: ${String.format("%.6f", currentLoc.longitude())}",
-                    coordinates = pickupGeoPoint
-                )
-                setPickupLocation(pickup)
-                setDestination(homeAddress)
-            }
-        }
-    }
-
-    /**
-     * Show dialog to set home address
-     */
-    fun showSetHomeDialog() {
-        _uiState.value = _uiState.value.copy(showSetHomeDialog = true)
-    }
-
-    /**
-     * Hide dialog to set home address
-     */
-    fun hideSetHomeDialog() {
-        _uiState.value = _uiState.value.copy(showSetHomeDialog = false)
-    }
-
-    /**
      * Hide service boundary dialog
      */
     fun hideServiceBoundaryDialog() {
@@ -3327,32 +3229,6 @@ class PassengerHomeViewModel @Inject constructor(
             showServiceBoundaryDialog = false,
             serviceBoundaryMessage = null
         )
-    }
-
-    /**
-     * Set current location as home address
-     */
-    fun setCurrentLocationAsHome() {
-        _uiState.value.currentUserLocation?.let { currentLoc ->
-            viewModelScope.launch {
-                // Try to get a more detailed address using reverse geocoding
-                val locationResult = try {
-                    mapboxRepository.reverseGeocode(
-                        GeoPoint(currentLoc.latitude(), currentLoc.longitude())
-                    ).getOrNull()
-                } catch (e: Exception) {
-                    Log.w("PassengerHomeViewModel", "Failed to reverse geocode location", e)
-                    null
-                }
-
-                val homeAddress = BookingLocation(
-                    address = locationResult?.fullAddress ?: "Current Location",
-                    coordinates = GeoPoint(currentLoc.latitude(), currentLoc.longitude())
-                )
-                saveHomeAddress(homeAddress)
-            }
-        }
-        hideSetHomeDialog()
     }
 
     /**
@@ -4072,14 +3948,6 @@ class PassengerHomeViewModel @Inject constructor(
     }
 
     /**
-     * Check if destination is an admin-set destination and extract fare
-     */
-    private fun getAdminFareForDestination(destination: BookingLocation): Double? {
-        // Check if destination name contains fare pattern (admin destinations)
-        return extractAdminFare(destination.address)
-    }
-
-    /**
      * Create fare estimate from admin-set fare
      */
     private suspend fun createFareEstimateFromAdminFare(adminFare: Double, vehicleCategory: VehicleCategory): FareEstimate {
@@ -4256,50 +4124,6 @@ class PassengerHomeViewModel @Inject constructor(
 
             } catch (e: Exception) {
                 android.util.Log.e("RideHistory", "Failed to load ride history", e)
-            }
-        }
-    }
-
-    /**
-     * Load more ride history for pagination
-     */
-    fun loadMoreRideHistory(): kotlinx.coroutines.Job {
-        return viewModelScope.launch {
-            try {
-                val currentState = _uiState.value
-                if (!currentState.hasMoreRides || currentState.lastRideDocumentId == null) {
-                    return@launch
-                }
-
-                val currentUser = firebaseAuth.currentUser
-                if (currentUser == null) {
-                    android.util.Log.e("RideHistory", "User not authenticated")
-                    return@launch
-                }
-
-                val result = profileRepository.getRideHistory(
-                    uid = currentUser.uid,
-                    limit = 20,
-                    lastDocumentId = currentState.lastRideDocumentId
-                )
-
-                if (result.isSuccess) {
-                    val rideHistoryResult = result.getOrThrow()
-
-                    // Append new rides to existing list
-                    val updatedRides = currentState.rideHistory + rideHistoryResult.rides
-
-                    _uiState.value = _uiState.value.copy(
-                        rideHistory = updatedRides,
-                        hasMoreRides = rideHistoryResult.hasMore,
-                        lastRideDocumentId = rideHistoryResult.lastDocumentId
-                    )
-                } else {
-                    android.util.Log.e("RideHistory", "Failed to load more rides: ${result.exceptionOrNull()}")
-                }
-
-            } catch (e: Exception) {
-                android.util.Log.e("RideHistory", "Failed to load more rides", e)
             }
         }
     }
@@ -4489,42 +4313,6 @@ class PassengerHomeViewModel @Inject constructor(
         Log.d("PassengerHomeViewModel", "Proximity alerts reset for passenger")
     }
 
-    /**
-     * Submit support comment
-     */
-    fun submitSupportComment(message: String, callback: (Boolean, String?) -> Unit) {
-        viewModelScope.launch {
-            try {
-                val currentUser = FirebaseAuth.getInstance().currentUser
-                if (currentUser != null) {
-                    val comment = SupportComment(
-                        userId = currentUser.uid,
-                        userName = currentUser.displayName ?: "Anonymous",
-                        message = message,
-                        timestamp = System.currentTimeMillis()
-                    )
-
-                    val result = supportCommentRepository.submitComment(comment)
-                    result.fold(
-                        onSuccess = { commentId ->
-                            Log.d("PassengerHomeViewModel", "Comment submitted successfully: $commentId")
-                            callback(true, null)
-                        },
-                        onFailure = { exception ->
-                            Log.e("PassengerHomeViewModel", "Failed to submit comment", exception)
-                            callback(false, exception.message)
-                        }
-                    )
-                } else {
-                    callback(false, "User not authenticated")
-                }
-            } catch (e: Exception) {
-                Log.e("PassengerHomeViewModel", "Error submitting comment", e)
-                callback(false, e.message)
-            }
-        }
-    }
-
     // Report driver functionality
     fun showReportDriverModal() {
         _uiState.value = _uiState.value.copy(showReportDriverModal = true)
@@ -4564,6 +4352,7 @@ class PassengerHomeViewModel @Inject constructor(
                     if (result.isSuccess) {
                         Log.d("PassengerHomeViewModel", "Driver report submitted successfully")
                         _uiState.update { it.copy(
+                            showReportDriverModal = false,
                             successMessage = "Report submitted successfully"
                         ) }
 
@@ -4573,48 +4362,25 @@ class PassengerHomeViewModel @Inject constructor(
                     } else {
                         Log.e("PassengerHomeViewModel", "Failed to submit driver report", result.exceptionOrNull())
                         _uiState.value = _uiState.value.copy(
+                            showReportDriverModal = false,
                             errorMessage = "Failed to submit report: ${result.exceptionOrNull()?.message}"
                         )
                     }
                 } else {
                     Log.e("PassengerHomeViewModel", "Cannot submit report: missing user, driver, or booking information")
                     _uiState.value = _uiState.value.copy(
+                        showReportDriverModal = false,
                         errorMessage = "Cannot submit report: missing information"
                     )
                 }
             } catch (e: Exception) {
                 Log.e("PassengerHomeViewModel", "Error submitting driver report", e)
                 _uiState.value = _uiState.value.copy(
+                    showReportDriverModal = false,
                     errorMessage = "Error submitting report: ${e.message}"
                 )
             }
         }
-    }
-
-    // Trip details functionality
-    fun showTripDetailsDialog(booking: Booking) {
-        _uiState.value = _uiState.value.copy(
-            showTripDetailsDialog = true,
-            selectedTripForDetails = booking,
-            selectedTripDriver = null,
-            assignedDriver = null // Clear any previously assigned driver
-        )
-        // Load driver information if booking has a driver
-        booking.driverId?.let { driverId ->
-            loadDriverForTripDetails(driverId)
-        }
-    }
-
-    fun hideTripDetailsDialog() {
-        _uiState.value = _uiState.value.copy(
-            showTripDetailsDialog = false,
-            selectedTripForDetails = null,
-            selectedTripDriver = null
-        )
-    }
-
-    fun loadTripDriver(driverId: String) {
-        loadDriverForTripDetails(driverId)
     }
 
     fun loadBookingById(bookingId: String) {

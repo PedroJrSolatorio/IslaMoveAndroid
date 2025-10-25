@@ -43,7 +43,7 @@ data class DriverData(
     val documentsVerified: Boolean = false,
     val online: Boolean = false,
     val currentLocation: Location? = null,
-    val rating: Double = 0.0,
+    val rating: Double = 5.0,
     val totalTrips: Int = 0,
     val totalEarnings: Double = 0.0,
     val verificationStatus: VerificationStatus = VerificationStatus.PENDING,

@@ -149,6 +149,8 @@ dependencies {
     
     // Date picker
     implementation("io.github.vanpra.compose-material-dialogs:datetime:0.9.0")
+
+    implementation("androidx.compose.foundation:foundation:1.5.4")
     
     // Testing
     testImplementation(libs.junit)

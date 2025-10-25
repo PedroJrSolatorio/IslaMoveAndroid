@@ -49,9 +49,11 @@ import com.rj.islamove.ui.screens.admin.AnalyticsScreen
 import com.rj.islamove.ui.screens.admin.FinancialReportsScreen
 import com.rj.islamove.ui.screens.reviews.ReviewsScreen
 import com.rj.islamove.ui.screens.help.HelpSupportScreen
+import com.rj.islamove.ui.screens.onboarding.OnboardingScreen
 
 sealed class Screen(val route: String) {
     object Splash : Screen("splash")
+    object Onboarding : Screen("onboarding")
     object Login : Screen("login")
     object CreateAccount : Screen("create_account")
     object UserTypeSelection : Screen("user_type_selection")
@@ -124,6 +126,11 @@ fun IslamoveNavigation(
     ) {
         composable(Screen.Splash.route) {
             SplashScreen(
+                onNavigateToOnboarding = {
+                    navController.navigate(Screen.Onboarding.route) {
+                        popUpTo(Screen.Splash.route) { inclusive = true }
+                    }
+                },
                 onNavigateToLogin = {
                     navController.navigate(Screen.Login.route) {
                         popUpTo(Screen.Splash.route) { inclusive = true }
@@ -142,6 +149,16 @@ fun IslamoveNavigation(
                 onNavigateToUserTypeSelection = {
                     navController.navigate(Screen.UserTypeSelection.route) {
                         popUpTo(Screen.Splash.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(Screen.Onboarding.route) {
+            OnboardingScreen(
+                onGetStarted = {
+                    navController.navigate(Screen.Login.route) {
+                        popUpTo(Screen.Onboarding.route) { inclusive = true }
                     }
                 }
             )

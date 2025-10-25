@@ -1928,7 +1928,7 @@ fun MapboxPlaceDetailsCard(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "Estimated Fare",
+                    text = "Fare Amount",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.Gray,
                     fontSize = 14.sp

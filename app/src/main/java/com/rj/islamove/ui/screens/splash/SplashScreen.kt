@@ -13,6 +13,7 @@ import com.rj.islamove.R
 
 @Composable
 fun SplashScreen(
+    onNavigateToOnboarding: () -> Unit,
     onNavigateToLogin: () -> Unit,
     onNavigateToHome: (String) -> Unit,
     onNavigateToUserTypeSelection: () -> Unit,
@@ -24,6 +25,9 @@ fun SplashScreen(
     LaunchedEffect(uiState) {
         if (!uiState.isLoading) {
             when {
+                uiState.needsOnboarding -> {
+                    onNavigateToOnboarding()
+                }
                 !uiState.isUserLoggedIn -> {
                     onNavigateToLogin()
                 }
