@@ -47,6 +47,8 @@ import com.rj.islamove.ui.screens.admin.SystemConfigScreen
 import com.rj.islamove.ui.screens.admin.ServiceAreaManagementScreen
 import com.rj.islamove.ui.screens.admin.AnalyticsScreen
 import com.rj.islamove.ui.screens.admin.FinancialReportsScreen
+import com.rj.islamove.ui.screens.auth.PrivacyPolicyScreen
+import com.rj.islamove.ui.screens.auth.TermsAndConditionsScreen
 import com.rj.islamove.ui.screens.reviews.ReviewsScreen
 import com.rj.islamove.ui.screens.help.HelpSupportScreen
 import com.rj.islamove.ui.screens.onboarding.OnboardingScreen
@@ -113,6 +115,8 @@ sealed class Screen(val route: String) {
     object Reports : Screen("reports")
     object MissedRequests : Screen("missed_requests")
     object Reviews : Screen("reviews")
+    object TermsAndConditions : Screen("terms_and_conditions")
+    object PrivacyPolicy : Screen("privacy_policy")
 }
 
 @Composable
@@ -183,7 +187,8 @@ fun IslamoveNavigation(
                 }
             )
         }
-        
+
+        // Update your existing CreateAccount composable
         composable(Screen.CreateAccount.route) {
             CreateAccountScreen(
                 onNavigateBack = {
@@ -199,7 +204,26 @@ fun IslamoveNavigation(
                     navController.navigate(destination) {
                         popUpTo(Screen.CreateAccount.route) { inclusive = true }
                     }
+                },
+                onNavigateToTerms = {
+                    navController.navigate(Screen.TermsAndConditions.route)
+                },
+                onNavigateToPrivacy = {
+                    navController.navigate(Screen.PrivacyPolicy.route)
                 }
+            )
+        }
+
+// Add new composables for T&C and Privacy Policy
+        composable(Screen.TermsAndConditions.route) {
+            TermsAndConditionsScreen(
+                onNavigateBack = { navController.navigateUp() }
+            )
+        }
+
+        composable(Screen.PrivacyPolicy.route) {
+            PrivacyPolicyScreen(
+                onNavigateBack = { navController.navigateUp() }
             )
         }
         

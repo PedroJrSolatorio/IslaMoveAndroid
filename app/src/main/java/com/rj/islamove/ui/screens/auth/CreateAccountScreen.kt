@@ -10,10 +10,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,6 +26,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
@@ -43,45 +49,60 @@ import java.time.Period
 fun CreateAccountScreen(
     onNavigateBack: () -> Unit,
     onAccountCreated: (String) -> Unit,
+    onNavigateToTerms: () -> Unit,
+    onNavigateToPrivacy: () -> Unit,
     viewModel: LoginViewModel = hiltViewModel()
 ) {
-    var firstName by remember { mutableStateOf("") }
-    var lastName by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var phoneNumber by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var passwordVisible by remember { mutableStateOf(false) }
-    var selectedUserType by remember { mutableStateOf<String?>(null) }
-    var dateOfBirth by remember { mutableStateOf("") }
-    var showDatePicker by remember { mutableStateOf(false) }
-    var selectedGender by remember { mutableStateOf<String?>(null) }
-    var address by remember { mutableStateOf("") }
-    var idDocumentUri by remember { mutableStateOf<Uri?>(null) }
-    var showDocumentPicker by remember { mutableStateOf(false) }
-    var ageError by remember { mutableStateOf<String?>(null) }
+    var firstName by rememberSaveable { mutableStateOf("") }
+    var lastName by rememberSaveable { mutableStateOf("") }
+    var email by rememberSaveable { mutableStateOf("") }
+    var phoneNumber by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+    var passwordVisible by rememberSaveable { mutableStateOf(false) }
+    var selectedUserType by rememberSaveable { mutableStateOf<String?>(null) }
+    var dateOfBirth by rememberSaveable { mutableStateOf("") }
+    var showDatePicker by rememberSaveable { mutableStateOf(false) }
+    var selectedGender by rememberSaveable { mutableStateOf<String?>(null) }
+    var address by rememberSaveable { mutableStateOf("") }
+    var idDocumentUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var showDocumentPicker by rememberSaveable { mutableStateOf(false) }
+    var ageError by rememberSaveable { mutableStateOf<String?>(null) }
+
+    // New state for T&C and Privacy Policy
+    var termsAccepted by rememberSaveable { mutableStateOf(false) }
+    var privacyAccepted by rememberSaveable { mutableStateOf(false) }
 
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
-    
-    val allFieldsFilled = firstName.isNotEmpty() && lastName.isNotEmpty() &&
-                         email.isNotEmpty() && phoneNumber.isNotEmpty() &&
-                         password.isNotEmpty() && password.length >= 6 &&
-                         selectedUserType != null &&
-                         // For all users, require date of birth, gender, and address
-                         dateOfBirth.isNotEmpty() && selectedGender != null && address.isNotEmpty() &&
-                         // For passengers only, also require ID document
-                         (selectedUserType != "PASSENGER" || idDocumentUri != null) &&
-                         // Must be at least 12 years old
-                         ageError == null
-    
-    // Handle navigation based on state
+
+    // Validation logic
+    val allFieldsFilled = remember(
+        firstName, lastName, email, phoneNumber, password,
+        selectedUserType, dateOfBirth, selectedGender, address,
+        idDocumentUri, ageError, termsAccepted, privacyAccepted
+    ) {
+        firstName.isNotEmpty() &&
+                lastName.isNotEmpty() &&
+                email.isNotEmpty() &&
+                phoneNumber.isNotEmpty() &&
+                password.isNotEmpty() &&
+                password.length >= 6 &&
+                selectedUserType != null &&
+                dateOfBirth.isNotEmpty() &&
+                selectedGender != null &&
+                address.isNotEmpty() &&
+                (selectedUserType != "PASSENGER" || idDocumentUri != null) &&
+                ageError == null &&
+                termsAccepted &&
+                privacyAccepted
+    }
+
     LaunchedEffect(uiState.isSuccess) {
         if (uiState.isSuccess && selectedUserType != null) {
             onAccountCreated(selectedUserType!!)
         }
     }
 
-    // Helper function to create temporary file URI for camera
     fun createImageUri(): Uri {
         val imageFile = File(context.cacheDir, "id_document_${System.currentTimeMillis()}.jpg")
         imageFile.parentFile?.mkdirs()
@@ -92,10 +113,8 @@ fun CreateAccountScreen(
         )
     }
 
-    // Store camera image URI
-    var cameraImageUri by remember { mutableStateOf<Uri?>(null) }
+    var cameraImageUri by rememberSaveable { mutableStateOf<Uri?>(null) }
 
-    // Gallery launcher
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
@@ -104,7 +123,6 @@ fun CreateAccountScreen(
         }
     }
 
-    // Camera launcher
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
@@ -113,7 +131,6 @@ fun CreateAccountScreen(
         }
     }
 
-    // Camera permission launcher
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -145,8 +162,7 @@ fun CreateAccountScreen(
         }
 
         Spacer(modifier = Modifier.height(16.dp))
-        
-        // Title
+
         Text(
             text = "Create your account",
             fontSize = 28.sp,
@@ -154,8 +170,7 @@ fun CreateAccountScreen(
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(bottom = 32.dp)
         )
-        
-        // Form fields
+
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -163,15 +178,15 @@ fun CreateAccountScreen(
             // First name field
             OutlinedTextField(
                 value = firstName,
-                onValueChange = { 
+                onValueChange = {
                     firstName = it
                     viewModel.clearError()
                 },
-                placeholder = { 
+                placeholder = {
                     Text(
-                        "First name", 
+                        "First name",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
-                    ) 
+                    )
                 },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
@@ -180,19 +195,19 @@ fun CreateAccountScreen(
                     unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
                 )
             )
-            
+
             // Last name field
             OutlinedTextField(
                 value = lastName,
-                onValueChange = { 
+                onValueChange = {
                     lastName = it
                     viewModel.clearError()
                 },
-                placeholder = { 
+                placeholder = {
                     Text(
-                        "Last name", 
+                        "Last name",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
-                    ) 
+                    )
                 },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
@@ -201,19 +216,19 @@ fun CreateAccountScreen(
                     unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
                 )
             )
-            
+
             // Email field
             OutlinedTextField(
                 value = email,
-                onValueChange = { 
+                onValueChange = {
                     email = it
                     viewModel.clearError()
                 },
-                placeholder = { 
+                placeholder = {
                     Text(
-                        "Email", 
+                        "Email",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
-                    ) 
+                    )
                 },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                 modifier = Modifier.fillMaxWidth(),
@@ -223,19 +238,19 @@ fun CreateAccountScreen(
                     unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
                 )
             )
-            
+
             // Phone number field
             OutlinedTextField(
                 value = phoneNumber,
-                onValueChange = { 
+                onValueChange = {
                     phoneNumber = it
                     viewModel.clearError()
                 },
-                placeholder = { 
+                placeholder = {
                     Text(
-                        "Phone number", 
+                        "Phone number",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
-                    ) 
+                    )
                 },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                 modifier = Modifier.fillMaxWidth(),
@@ -245,7 +260,7 @@ fun CreateAccountScreen(
                     unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
                 )
             )
-            
+
             // Password field
             OutlinedTextField(
                 value = password,
@@ -255,7 +270,7 @@ fun CreateAccountScreen(
                 },
                 placeholder = {
                     Text(
-                        "Password",
+                        "Password (min. 6 characters)",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 },
@@ -278,12 +293,50 @@ fun CreateAccountScreen(
                 }
             )
 
-            // Common fields for all users - Show if any user type is selected
+            // User Type Selection (moved up before common fields)
+            Text(
+                text = "Choose your role",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(top = 8.dp, bottom = 12.dp)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                UserTypeCard(
+                    modifier = Modifier.weight(1f),
+                    title = "Passenger",
+                    icon = Icons.Default.Person,
+                    isSelected = selectedUserType == "PASSENGER",
+                    onClick = {
+                        selectedUserType = "PASSENGER"
+                        viewModel.clearError()
+                    }
+                )
+
+                UserTypeCard(
+                    modifier = Modifier.weight(1f),
+                    title = "Driver",
+                    icon = Icons.Default.Person,
+                    isSelected = selectedUserType == "DRIVER",
+                    onClick = {
+                        selectedUserType = "DRIVER"
+                        viewModel.clearError()
+                    }
+                )
+            }
+
+            // Common fields - Show if any user type is selected
             if (selectedUserType != null) {
-                // Date of Birth field - Clickable to open date picker
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Date of Birth field
                 OutlinedTextField(
                     value = dateOfBirth,
-                    onValueChange = { }, // Read-only field
+                    onValueChange = { },
                     readOnly = true,
                     placeholder = {
                         Text(
@@ -312,7 +365,6 @@ fun CreateAccountScreen(
                     enabled = false
                 )
 
-                // Age error message
                 if (ageError != null) {
                     Text(
                         text = ageError!!,
@@ -335,7 +387,6 @@ fun CreateAccountScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Male
                     FilterChip(
                         selected = selectedGender == "Male",
                         onClick = {
@@ -350,7 +401,6 @@ fun CreateAccountScreen(
                         )
                     )
 
-                    // Female
                     FilterChip(
                         selected = selectedGender == "Female",
                         onClick = {
@@ -365,7 +415,6 @@ fun CreateAccountScreen(
                         )
                     )
 
-                    // Other
                     FilterChip(
                         selected = selectedGender == "Other",
                         onClick = {
@@ -390,12 +439,13 @@ fun CreateAccountScreen(
                     },
                     placeholder = {
                         Text(
-                            "Address",
+                            "Complete Address",
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
+                    minLines = 2,
+                    maxLines = 3,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = IslamovePrimary,
                         unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
@@ -403,15 +453,22 @@ fun CreateAccountScreen(
                 )
             }
 
-            // Valid ID Upload - Only for passengers
+            // Valid ID Upload
             if (selectedUserType == "PASSENGER") {
-                // Valid ID Upload
                 Text(
-                    text = "Valid ID",
+                    text = "Valid ID (Government-issued)",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                    modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
+                )
+
+                Text(
+                    text = "For students or senior citizens, upload your Student ID or Senior Citizen ID to avail discounts (requires admin verification within 24-48 hours)",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                    lineHeight = 16.sp
                 )
 
                 Button(
@@ -432,7 +489,6 @@ fun CreateAccountScreen(
                     )
                 }
 
-                // Show preview if document is selected
                 if (idDocumentUri != null) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Box(
@@ -456,47 +512,153 @@ fun CreateAccountScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // User Type Selection
-            Text(
-                text = "Choose your role",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Passenger card
-                UserTypeCard(
-                    modifier = Modifier.weight(1f),
-                    title = "Passenger",
-                    icon = Icons.Default.Person,
-                    isSelected = selectedUserType == "PASSENGER",
-                    onClick = {
-                        selectedUserType = "PASSENGER"
-                        viewModel.clearError()
-                    }
+            if (selectedUserType == "DRIVER") {
+                Text(
+                    text = "Required Documents",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
                 )
 
-                // Driver card
-                UserTypeCard(
-                    modifier = Modifier.weight(1f),
-                    title = "Driver",
-                    icon = Icons.Default.Person,
-                    isSelected = selectedUserType == "DRIVER",
-                    onClick = {
-                        selectedUserType = "DRIVER"
-                        viewModel.clearError()
-                    }
+                Text(
+                    text = "Driver's License, SJMODA Certification, and OR/CR of bao-bao vehicle (will be requested after registration)",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                    lineHeight = 16.sp
                 )
             }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Terms and Conditions Checkbox
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (termsAccepted)
+                        IslamovePrimary.copy(alpha = 0.1f)
+                    else
+                        MaterialTheme.colorScheme.surface
+                ),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (termsAccepted) IslamovePrimary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { termsAccepted = !termsAccepted }
+                        .padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = termsAccepted,
+                        onCheckedChange = { termsAccepted = it },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = IslamovePrimary
+                        )
+                    )
+
+                    val annotatedText = buildAnnotatedString {
+                        append("I agree to the ")
+                        pushStringAnnotation(tag = "TERMS", annotation = "terms")
+                        withStyle(
+                            style = SpanStyle(
+                                color = IslamovePrimary,
+                                textDecoration = TextDecoration.Underline,
+                                fontWeight = FontWeight.Medium
+                            )
+                        ) {
+                            append("Terms and Conditions")
+                        }
+                        pop()
+                    }
+
+                    ClickableText(
+                        text = annotatedText,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            color = MaterialTheme.colorScheme.onSurface
+                        ),
+                        onClick = { offset ->
+                            annotatedText.getStringAnnotations(
+                                tag = "TERMS",
+                                start = offset,
+                                end = offset
+                            ).firstOrNull()?.let {
+                                onNavigateToTerms()
+                            }
+                        }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Privacy Policy Checkbox
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (privacyAccepted)
+                        IslamovePrimary.copy(alpha = 0.1f)
+                    else
+                        MaterialTheme.colorScheme.surface
+                ),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (privacyAccepted) IslamovePrimary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { privacyAccepted = !privacyAccepted }
+                        .padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = privacyAccepted,
+                        onCheckedChange = { privacyAccepted = it },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = IslamovePrimary
+                        )
+                    )
+
+                    val annotatedText = buildAnnotatedString {
+                        append("I agree to the ")
+                        pushStringAnnotation(tag = "PRIVACY", annotation = "privacy")
+                        withStyle(
+                            style = SpanStyle(
+                                color = IslamovePrimary,
+                                textDecoration = TextDecoration.Underline,
+                                fontWeight = FontWeight.Medium
+                            )
+                        ) {
+                            append("Privacy Policy")
+                        }
+                        pop()
+                    }
+
+                    ClickableText(
+                        text = annotatedText,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            color = MaterialTheme.colorScheme.onSurface
+                        ),
+                        onClick = { offset ->
+                            annotatedText.getStringAnnotations(
+                                tag = "PRIVACY",
+                                start = offset,
+                                end = offset
+                            ).firstOrNull()?.let {
+                                onNavigateToPrivacy()
+                            }
+                        }
+                    )
+                }
+            }
         }
-        
+
         // Error message
         uiState.errorMessage?.let { errorMessage ->
             Spacer(modifier = Modifier.height(16.dp))
@@ -514,14 +676,46 @@ fun CreateAccountScreen(
                 )
             }
         }
-        
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        // Continue button (red like in the image)
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Debug info - Remove this in production
+        if (!allFieldsFilled) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = "Please complete:",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (firstName.isEmpty()) Text("• First name", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (lastName.isEmpty()) Text("• Last name", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (email.isEmpty()) Text("• Email", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (phoneNumber.isEmpty()) Text("• Phone number", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (password.isEmpty() || password.length < 6) Text("• Password (min 6 chars)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (selectedUserType == null) Text("• Select your role", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (dateOfBirth.isEmpty()) Text("• Date of birth", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (selectedGender == null) Text("• Gender", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (address.isEmpty()) Text("• Address", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (selectedUserType == "PASSENGER" && idDocumentUri == null) Text("• Valid ID upload", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (ageError != null) Text("• Must be 12+ years old", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (!termsAccepted) Text("• Accept Terms and Conditions", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (!privacyAccepted) Text("• Accept Privacy Policy", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // Continue button
         Button(
             onClick = {
                 val displayName = "$firstName $lastName"
-                // Set user type based on selection before creating account
                 val userType = when (selectedUserType) {
                     "DRIVER" -> UserType.DRIVER
                     "PASSENGER" -> UserType.PASSENGER
@@ -542,7 +736,7 @@ fun CreateAccountScreen(
             modifier = Modifier.fillMaxWidth(),
             enabled = allFieldsFilled && !uiState.isLoading,
             colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.error, // Red color like in the image
+                containerColor = MaterialTheme.colorScheme.error,
                 disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant
             )
         ) {
@@ -556,24 +750,15 @@ fun CreateAccountScreen(
                 Text("Creating Account...")
             } else {
                 Text(
-                    text = "Continue",
+                    text = "Create Account",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onError
                 )
             }
         }
-        
+
         Spacer(modifier = Modifier.height(24.dp))
-        
-        // Terms and conditions text (like in the image)
-        Text(
-            text = "",
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.fillMaxWidth(),
-            lineHeight = 16.sp
-        )
     }
 
     // Date picker dialog
@@ -590,17 +775,14 @@ fun CreateAccountScreen(
                                 .atZone(ZoneId.systemDefault())
                                 .toLocalDate()
 
-                            // Calculate age
                             val today = LocalDate.now()
                             val age = Period.between(selectedDate, today).years
 
-                            // Check if user is at least 12 years old
                             if (age < 12) {
                                 ageError = "You must be at least 12 years old to register"
                                 dateOfBirth = ""
                             } else {
                                 ageError = null
-                                // Format date as YYYY-MM-DD
                                 val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
                                 dateOfBirth = selectedDate.format(formatter)
                             }
@@ -658,7 +840,6 @@ fun CreateAccountScreen(
                     Text("Choose how you'd like to upload your Valid ID:")
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Camera option
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -682,7 +863,6 @@ fun CreateAccountScreen(
                         )
                     }
 
-                    // Gallery option
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -731,11 +911,11 @@ private fun UserTypeCard(
         modifier = modifier.height(100.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) IslamovePrimary.copy(alpha = 0.1f)
-                           else MaterialTheme.colorScheme.surface
+            else MaterialTheme.colorScheme.surface
         ),
         border = if (isSelected)
-                    androidx.compose.foundation.BorderStroke(2.dp, IslamovePrimary)
-                 else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
+            androidx.compose.foundation.BorderStroke(2.dp, IslamovePrimary)
+        else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(
@@ -750,7 +930,7 @@ private fun UserTypeCard(
                 contentDescription = title,
                 modifier = Modifier.size(32.dp),
                 tint = if (isSelected) IslamovePrimary
-                      else MaterialTheme.colorScheme.onSurfaceVariant
+                else MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -760,7 +940,7 @@ private fun UserTypeCard(
                 fontSize = 14.sp,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                 color = if (isSelected) IslamovePrimary
-                       else MaterialTheme.colorScheme.onSurface
+                else MaterialTheme.colorScheme.onSurface
             )
         }
     }
