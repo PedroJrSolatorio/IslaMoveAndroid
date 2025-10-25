@@ -34,6 +34,7 @@ import android.os.Build.VERSION_CODES
 import android.os.Vibrator
 import android.os.VibrationEffect
 import android.media.MediaPlayer
+import android.util.Log.*
 import androidx.core.content.ContextCompat
 import javax.inject.Inject
 import com.rj.islamove.R
@@ -263,10 +264,10 @@ class DriverHomeViewModel @Inject constructor(
                     val pattern = longArrayOf(200, 200, 200, 200, 200, 200, 200, 200, 200, 200)
                     vibrator.vibrate(pattern, -1)
                 }
-                Log.d("DriverViewModel", "📳 Vibrating device for new ride request")
+                d("DriverViewModel", "📳 Vibrating device for new ride request")
             }
         } catch (e: Exception) {
-            Log.e("DriverViewModel", "❌ Failed to vibrate device", e)
+            e("DriverViewModel", "❌ Failed to vibrate device", e)
         }
     }
 
@@ -275,10 +276,10 @@ class DriverHomeViewModel @Inject constructor(
      */
     private fun playRideRequestSound() {
         try {
-            Log.d("DriverViewModel", "🔊 Playing ride request notification sound 5 times...")
+            d("DriverViewModel", "🔊 Playing ride request notification sound 5 times...")
             playRideRequestSoundRecursive(1, 5)
         } catch (e: Exception) {
-            Log.e("DriverViewModel", "❌ Failed to play ride request sound", e)
+            e("DriverViewModel", "❌ Failed to play ride request sound", e)
         }
     }
 
@@ -287,7 +288,7 @@ class DriverHomeViewModel @Inject constructor(
      */
     private fun playRideRequestSoundRecursive(currentPlay: Int, totalPlays: Int) {
         if (currentPlay > totalPlays) {
-            Log.d("DriverViewModel", "✅ Completed playing ride request sound $totalPlays times")
+            d("DriverViewModel", "✅ Completed playing ride request sound $totalPlays times")
             return
         }
 
@@ -296,7 +297,7 @@ class DriverHomeViewModel @Inject constructor(
             if (mediaPlayer != null) {
                 mediaPlayer.setOnCompletionListener { mp ->
                     mp.release()
-                    Log.d("DriverViewModel", "🔊 Ride request sound #$currentPlay completed and released")
+                    d("DriverViewModel", "🔊 Ride request sound #$currentPlay completed and released")
 
                     // Play the next iteration after a short delay
                     if (currentPlay < totalPlays) {
@@ -306,12 +307,12 @@ class DriverHomeViewModel @Inject constructor(
                     }
                 }
                 mediaPlayer.start()
-                Log.d("DriverViewModel", "🔊 Playing ride request sound #$currentPlay")
+                d("DriverViewModel", "🔊 Playing ride request sound #$currentPlay")
             } else {
-                Log.e("DriverViewModel", "❌ MediaPlayer.create returned null for ride request sound #$currentPlay")
+                e("DriverViewModel", "❌ MediaPlayer.create returned null for ride request sound #$currentPlay")
             }
         } catch (e: Exception) {
-            Log.e("DriverViewModel", "❌ Failed to play ride request sound #$currentPlay", e)
+            e("DriverViewModel", "❌ Failed to play ride request sound #$currentPlay", e)
         }
     }
     private val ratedBookings = mutableSetOf<String>()
@@ -335,6 +336,24 @@ class DriverHomeViewModel @Inject constructor(
         startTimerUpdates()
         loadRatedBookings()
         observeAuthStateChanges()
+
+        // Calculate earnings from bookings as fallback
+        viewModelScope.launch {
+            delay(5000) // Wait 5 seconds for Flow to try first
+            if (_uiState.value.todayEarnings == 0.0 && _uiState.value.weeklyEarnings == 0.0) {
+                android.util.Log.w("DriverViewModel", "⚠️ Weekly/daily earnings still 0 after 5s, using fallback calculation")
+                calculateEarningsFromBookings()
+            }
+        }
+
+        // ADD THIS: Log earnings state periodically for debugging
+        viewModelScope.launch {
+            delay(3000) // Wait 3 seconds after init
+            Log.e("DriverViewModel", "🔍 EARNINGS DEBUG - 3s after init:")
+            Log.e("DriverViewModel", "   Today: ₱${_uiState.value.todayEarnings}")
+            Log.e("DriverViewModel", "   Weekly: ₱${_uiState.value.weeklyEarnings}")
+            Log.e("DriverViewModel", "   Total: ₱${_uiState.value.totalEarnings}")
+        }
     }
 
     private fun loadCurrentUser() {
@@ -366,14 +385,14 @@ class DriverHomeViewModel @Inject constructor(
     private fun cleanupStaleDrivers() {
         viewModelScope.launch {
             try {
-                android.util.Log.d("DriverViewModel", "🧹 Starting cleanup of stale online drivers...")
+                d("DriverViewModel", "🧹 Starting cleanup of stale online drivers...")
                 driverRepository.cleanupStaleOnlineDrivers().onSuccess {
-                    android.util.Log.d("DriverViewModel", "✅ Stale driver cleanup completed")
+                    d("DriverViewModel", "✅ Stale driver cleanup completed")
                 }.onFailure { exception ->
-                    android.util.Log.w("DriverViewModel", "⚠️ Stale driver cleanup failed", exception)
+                    w("DriverViewModel", "⚠️ Stale driver cleanup failed", exception)
                 }
             } catch (e: Exception) {
-                android.util.Log.e("DriverViewModel", "❌ Error during stale driver cleanup", e)
+                e("DriverViewModel", "❌ Error during stale driver cleanup", e)
             }
         }
     }
@@ -387,38 +406,38 @@ class DriverHomeViewModel @Inject constructor(
         stopStaleDriverMonitoring()
 
         staleDriverMonitorJob = viewModelScope.launch {
-            android.util.Log.d("DriverViewModel", "🔄 Starting continuous stale driver monitoring...")
+            d("DriverViewModel", "🔄 Starting continuous stale driver monitoring...")
 
             try {
                 while (true) {
                     // Wait 2 minutes between checks
                     kotlinx.coroutines.delay(120000L) // 2 minutes
 
-                    android.util.Log.d("DriverViewModel", "⏰ Running periodic stale driver cleanup...")
+                    d("DriverViewModel", "⏰ Running periodic stale driver cleanup...")
                     driverRepository.cleanupStaleOnlineDrivers().onSuccess {
-                        android.util.Log.d("DriverViewModel", "✅ Periodic cleanup completed successfully")
+                        d("DriverViewModel", "✅ Periodic cleanup completed successfully")
                     }.onFailure { exception ->
-                        android.util.Log.w("DriverViewModel", "⚠️ Periodic cleanup failed", exception)
+                        w("DriverViewModel", "⚠️ Periodic cleanup failed", exception)
                     }
 
                     // ENHANCEMENT: Also check for pending requests during monitoring
                     if (_uiState.value.online) {
                         auth.currentUser?.uid?.let { driverId ->
-                            android.util.Log.d("DriverViewModel", "🔍 Periodic check for pending requests...")
+                            d("DriverViewModel", "🔍 Periodic check for pending requests...")
                             matchingRepository.processQueuedBookingsForNewDriver(driverId).onSuccess { count ->
                                 if (count > 0) {
-                                    android.util.Log.i("DriverViewModel", "📬 Found and processed $count pending requests during monitoring")
+                                    i("DriverViewModel", "📬 Found and processed $count pending requests during monitoring")
                                 }
                             }.onFailure { exception ->
-                                android.util.Log.w("DriverViewModel", "⚠️ Failed periodic pending request check", exception)
+                                w("DriverViewModel", "⚠️ Failed periodic pending request check", exception)
                             }
                         }
                     }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
-                android.util.Log.d("DriverViewModel", "🛑 Stale driver monitoring cancelled")
+                d("DriverViewModel", "🛑 Stale driver monitoring cancelled")
             } catch (e: Exception) {
-                android.util.Log.e("DriverViewModel", "❌ Error in stale driver monitoring", e)
+                e("DriverViewModel", "❌ Error in stale driver monitoring", e)
             }
         }
     }
@@ -429,7 +448,7 @@ class DriverHomeViewModel @Inject constructor(
     private fun stopStaleDriverMonitoring() {
         staleDriverMonitorJob?.cancel()
         staleDriverMonitorJob = null
-        android.util.Log.d("DriverViewModel", "🛑 Stopped stale driver monitoring")
+        d("DriverViewModel", "🛑 Stopped stale driver monitoring")
     }
 
     /**
@@ -440,12 +459,12 @@ class DriverHomeViewModel @Inject constructor(
         viewModelScope.launch {
             val driverId = auth.currentUser?.uid ?: return@launch
 
-            android.util.Log.d("DriverViewModel", "🔄 Restoring driver online status for: $driverId")
+            d("DriverViewModel", "🔄 Restoring driver online status for: $driverId")
 
             try {
                 // Check the driver's online status in Firebase
                 driverRepository.getDriverOnlineStatus(driverId).onSuccess { isOnline ->
-                    android.util.Log.d("DriverViewModel", "✅ Restored online status: $isOnline")
+                    d("DriverViewModel", "✅ Restored online status: $isOnline")
 
                     _uiState.value = _uiState.value.copy(online = isOnline)
 
@@ -455,20 +474,20 @@ class DriverHomeViewModel @Inject constructor(
 
                         // CRITICAL FIX: Also process pending requests when restoring online status
                         launch {
-                            android.util.Log.w("DriverViewModel", "🔄🔄🔄 RESTORE: Driver $driverId was online - processing pending requests...")
+                            w("DriverViewModel", "🔄🔄🔄 RESTORE: Driver $driverId was online - processing pending requests...")
                             matchingRepository.processQueuedBookingsForNewDriver(driverId).onSuccess { count ->
-                                android.util.Log.w("DriverViewModel", "✅✅✅ RESTORE: Successfully processed $count requests for restored online driver $driverId")
+                                w("DriverViewModel", "✅✅✅ RESTORE: Successfully processed $count requests for restored online driver $driverId")
                             }.onFailure { exception ->
-                                android.util.Log.e("DriverViewModel", "❌❌❌ RESTORE: Failed to process pending requests for driver $driverId", exception)
+                                e("DriverViewModel", "❌❌❌ RESTORE: Failed to process pending requests for driver $driverId", exception)
                             }
                         }
                     }
                 }.onFailure { exception ->
-                    android.util.Log.w("DriverViewModel", "⚠️ Failed to restore online status, defaulting to offline", exception)
+                    w("DriverViewModel", "⚠️ Failed to restore online status, defaulting to offline", exception)
                     _uiState.value = _uiState.value.copy(online = false)
                 }
             } catch (e: Exception) {
-                android.util.Log.e("DriverViewModel", "❌ Error restoring driver online status", e)
+                e("DriverViewModel", "❌ Error restoring driver online status", e)
                 _uiState.value = _uiState.value.copy(online = false)
             }
         }
@@ -481,11 +500,11 @@ class DriverHomeViewModel @Inject constructor(
     private fun restoreActiveBooking() {
         viewModelScope.launch {
             val driverId = auth.currentUser?.uid ?: run {
-                android.util.Log.w("DriverViewModel", "⚠️ Cannot restore bookings - no authenticated user")
+                w("DriverViewModel", "⚠️ Cannot restore bookings - no authenticated user")
                 return@launch
             }
 
-            android.util.Log.d("DriverViewModel", "🔄 Checking for active bookings to restore for driver: $driverId")
+            d("DriverViewModel", "🔄 Checking for active bookings to restore for driver: $driverId")
 
             try {
                 // Query for each status separately to avoid composite index requirement
@@ -520,15 +539,15 @@ class DriverHomeViewModel @Inject constructor(
                     val allBookings = allDocs.mapNotNull { doc ->
                         try {
                             doc.toObject(Booking::class.java)?.also {
-                                android.util.Log.d("DriverViewModel", "📦 Found booking: ${it.id}, status: ${it.status}, passengerId: ${it.passengerId}")
+                                d("DriverViewModel", "📦 Found booking: ${it.id}, status: ${it.status}, passengerId: ${it.passengerId}")
                             }
                         } catch (e: Exception) {
-                            android.util.Log.e("DriverViewModel", "❌ Failed to parse booking ${doc.id}", e)
+                            e("DriverViewModel", "❌ Failed to parse booking ${doc.id}", e)
                             null
                         }
                     }.sortedBy { it.requestTime } // Sort by request time
 
-                    android.util.Log.i("DriverViewModel", "✅ Found ${allBookings.size} active bookings to restore")
+                    i("DriverViewModel", "✅ Found ${allBookings.size} active bookings to restore")
 
                     // Determine which booking is the current one (priority: IN_PROGRESS > DRIVER_ARRIVED > DRIVER_ARRIVING > ACCEPTED)
                     val currentBooking = allBookings.find { it.status == BookingStatus.IN_PROGRESS }
@@ -539,7 +558,7 @@ class DriverHomeViewModel @Inject constructor(
                     // Create queued bookings list (all other accepted bookings)
                     val queuedBookings = allBookings.filter { it != currentBooking }
 
-                    android.util.Log.d("DriverViewModel", "📊 Current booking: ${currentBooking?.id}, Queued: ${queuedBookings.size}")
+                    d("DriverViewModel", "📊 Current booking: ${currentBooking?.id}, Queued: ${queuedBookings.size}")
 
                     // Restore the booking state
                     _uiState.value = _uiState.value.copy(
@@ -552,7 +571,7 @@ class DriverHomeViewModel @Inject constructor(
                     // Start observing all bookings for updates
                     allBookings.forEach { booking ->
                         observeBookingStatus(booking.id)
-                        android.util.Log.d("DriverViewModel", "📝 Restored booking: ${booking.id} with status: ${booking.status}")
+                        d("DriverViewModel", "📝 Restored booking: ${booking.id} with status: ${booking.status}")
                     }
 
                     // Restore passenger location monitoring for current booking if needed
@@ -576,11 +595,11 @@ class DriverHomeViewModel @Inject constructor(
                                             mapboxRepository.getRoute(driverLocation, booking.pickupLocation, forceRealRoute = true)
                                                 .onSuccess { route ->
                                                     _uiState.value = _uiState.value.copy(routeInfo = route)
-                                                    android.util.Log.d("DriverViewModel", "✅ Restored route to pickup: ${route.totalDistance}km")
+                                                    d("DriverViewModel", "✅ Restored route to pickup: ${route.totalDistance}km")
                                                 }
                                         }
                                     } else {
-                                        android.util.Log.d("DriverViewModel", "ℹ️ Driver already arrived, skipping route calculation")
+                                        d("DriverViewModel", "ℹ️ Driver already arrived, skipping route calculation")
                                     }
                                 }
                             }
@@ -592,15 +611,15 @@ class DriverHomeViewModel @Inject constructor(
                         }
                     }
 
-                    android.util.Log.i("DriverViewModel", "✅ Restored booking state - Current: ${currentBooking?.id}, Queued: ${queuedBookings.size} rides")
+                    i("DriverViewModel", "✅ Restored booking state - Current: ${currentBooking?.id}, Queued: ${queuedBookings.size} rides")
 
                 } else {
-                    android.util.Log.d("DriverViewModel", "ℹ️ No active bookings found to restore")
+                    d("DriverViewModel", "ℹ️ No active bookings found to restore")
                 }
 
             } catch (e: Exception) {
-                android.util.Log.e("DriverViewModel", "❌ Failed to restore active bookings for driver $driverId", e)
-                android.util.Log.e("DriverViewModel", "Error details: ${e.message}")
+                e("DriverViewModel", "❌ Failed to restore active bookings for driver $driverId", e)
+                e("DriverViewModel", "Error details: ${e.message}")
                 e.printStackTrace()
             }
         }
@@ -608,31 +627,31 @@ class DriverHomeViewModel @Inject constructor(
 
     override fun onCleared() {
         try {
-            android.util.Log.d("DriverHomeViewModel", "🧹 onCleared() called - starting cleanup")
+            d("DriverHomeViewModel", "🧹 onCleared() called - starting cleanup")
 
             // Remove auth state listener
             authStateListener?.let {
                 auth.removeAuthStateListener(it)
-                android.util.Log.d("DriverHomeViewModel", "✅ Auth state listener removed")
+                d("DriverHomeViewModel", "✅ Auth state listener removed")
             }
 
             // Set driver offline when ViewModel is destroyed (backup to MainActivity.onDestroy)
             val currentUser = auth.currentUser
             if (currentUser != null && _uiState.value.online) {
-                android.util.Log.d("DriverHomeViewModel", "ViewModel cleared - setting driver offline for: ${currentUser.uid}")
+                d("DriverHomeViewModel", "ViewModel cleared - setting driver offline for: ${currentUser.uid}")
 
                 // Use GlobalScope instead of runBlocking to avoid blocking main thread
                 kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                     try {
                         driverRepository.updateDriverStatus(online = false).onSuccess {
-                            android.util.Log.d("DriverHomeViewModel", "✅ Successfully set driver offline on ViewModel clear")
+                            d("DriverHomeViewModel", "✅ Successfully set driver offline on ViewModel clear")
                         }.onFailure { exception ->
-                            android.util.Log.e("DriverHomeViewModel", "❌ Failed to set driver offline on ViewModel clear", exception)
+                            e("DriverHomeViewModel", "❌ Failed to set driver offline on ViewModel clear", exception)
                         }
                     } catch (e: kotlinx.coroutines.CancellationException) {
-                        android.util.Log.w("DriverHomeViewModel", "⚠️ Coroutine cancelled while setting driver offline", e)
+                        w("DriverHomeViewModel", "⚠️ Coroutine cancelled while setting driver offline", e)
                     } catch (e: Exception) {
-                        android.util.Log.e("DriverHomeViewModel", "❌ Error setting driver offline on ViewModel clear", e)
+                        e("DriverHomeViewModel", "❌ Error setting driver offline on ViewModel clear", e)
                     }
                 }
             }
@@ -647,9 +666,9 @@ class DriverHomeViewModel @Inject constructor(
             enhancedDriverLocationService.stopLocationUpdates()
             enhancedDriverLocationService.cleanupDriverLocation()
 
-            android.util.Log.d("DriverHomeViewModel", "✅ Enhanced cleanup completed in onCleared")
+            d("DriverHomeViewModel", "✅ Enhanced cleanup completed in onCleared")
         } catch (e: Exception) {
-            android.util.Log.e("DriverHomeViewModel", "💥 Error in onCleared", e)
+            e("DriverHomeViewModel", "💥 Error in onCleared", e)
         } finally {
             super.onCleared()
         }
@@ -681,7 +700,7 @@ class DriverHomeViewModel @Inject constructor(
                     errorMessage = null // Clear any previous errors
                 )
             } catch (e: Exception) {
-                Log.e("DriverHomeVM", "Error loading current location", e)
+                e("DriverHomeVM", "Error loading current location", e)
                 _uiState.value = _uiState.value.copy(
                     errorMessage = locationUtils.getLocationErrorMessage()
                 )
@@ -701,7 +720,7 @@ class DriverHomeViewModel @Inject constructor(
         stopLocationUpdates() // Stop any existing updates
 
         val isActiveRide = _uiState.value.currentBooking != null
-        android.util.Log.d("DriverHomeVM", "🚀 Starting optimized location updates. Active ride: $isActiveRide")
+        d("DriverHomeVM", "🚀 Starting optimized location updates. Active ride: $isActiveRide")
 
         // Use optimized location manager for throttled updates
         optimizedLocationManager.startLocationUpdates(
@@ -713,7 +732,7 @@ class DriverHomeViewModel @Inject constructor(
                     currentUserLocation = smoothedLocation,
                     errorMessage = null // Clear any previous location errors
                 )
-                android.util.Log.d("DriverHomeVM", "📍 Optimized location updated: ${smoothedLocation.latitude()}, ${smoothedLocation.longitude()}")
+                d("DriverHomeVM", "📍 Optimized location updated: ${smoothedLocation.latitude()}, ${smoothedLocation.longitude()}")
 
                 // Update driver location in route manager for deviation detection
                 optimizedRouteManager.updateDriverLocation(smoothedLocation)
@@ -727,7 +746,7 @@ class DriverHomeViewModel @Inject constructor(
                 checkProximityToPickup(smoothedLocation)
             },
             onError = { exception ->
-                android.util.Log.w("DriverHomeVM", "⚠️ Optimized location error: ${exception.message}")
+                w("DriverHomeVM", "⚠️ Optimized location error: ${exception.message}")
                 // Handle errors with user-friendly messages
                 val userFriendlyMessage = when {
                     exception.message?.contains("GPS signal unavailable") == true ->
@@ -745,10 +764,10 @@ class DriverHomeViewModel @Inject constructor(
         enhancedDriverLocationService.startLocationUpdates(
             onLocationUpdate = { point ->
                 // Firebase updates are handled by the enhanced service
-                android.util.Log.d("DriverHomeVM", "📡 Firebase location updated: ${point.latitude()}, ${point.longitude()}")
+                d("DriverHomeVM", "📡 Firebase location updated: ${point.latitude()}, ${point.longitude()}")
             },
             onError = { exception ->
-                android.util.Log.w("DriverHomeVM", "⚠️ Enhanced location service error: ${exception.message}")
+                w("DriverHomeVM", "⚠️ Enhanced location service error: ${exception.message}")
             },
             isActiveRide = isActiveRide
         )
@@ -779,13 +798,13 @@ class DriverHomeViewModel @Inject constructor(
                                 lastCalculatedDestination != destination
 
             if (needsNewRoute) {
-                android.util.Log.d("DriverHomeVM", "🗺️ Calculating route for NEW destination: ${destination.address}")
+                d("DriverHomeVM", "🗺️ Calculating route for NEW destination: ${destination.address}")
 
                 // Calculate route ONCE (Google Maps approach)
                 viewModelScope.launch {
                     optimizedRouteManager.calculateRouteOnce(origin, destination) { route ->
                         _uiState.value = _uiState.value.copy(routeInfo = route)
-                        android.util.Log.d("DriverHomeVM", "✅ Route calculated: ${route?.totalDistance}m - Route will persist as driver moves")
+                        d("DriverHomeVM", "✅ Route calculated: ${route?.totalDistance}m - Route will persist as driver moves")
 
                         // Mark route as calculated
                         isRouteCalculated = true
@@ -795,14 +814,14 @@ class DriverHomeViewModel @Inject constructor(
                         if (route != null) {
                             optimizedRouteManager.startRouteFollowing(driverLocation) { newRoute ->
                                 _uiState.value = _uiState.value.copy(routeInfo = newRoute)
-                                android.util.Log.w("DriverHomeVM", "🔄 Route recalculated due to major deviation")
+                                w("DriverHomeVM", "🔄 Route recalculated due to major deviation")
                             }
                         }
                     }
                 }
             } else {
                 // Route already calculated - just update driver position, polyline stays visible
-                android.util.Log.d("DriverHomeVM", "📍 Driver location updated - Route polyline persists (no API call)")
+                d("DriverHomeVM", "📍 Driver location updated - Route polyline persists (no API call)")
             }
         }
     }
@@ -814,7 +833,7 @@ class DriverHomeViewModel @Inject constructor(
             matchingRepository.observeDriverRequests(driverId).collect { requests ->
                 val currentTime = System.currentTimeMillis()
 
-                android.util.Log.d("DriverHomeVM", "Received ${requests.size} requests from repository")
+                d("DriverHomeVM", "Received ${requests.size} requests from repository")
 
                 // Filter and verify each request's booking is still active
                 val validRequests = mutableListOf<DriverRequest>()
@@ -823,7 +842,7 @@ class DriverHomeViewModel @Inject constructor(
                     // Verify the request is in INITIAL phase with PENDING status
                     if (!request.isInInitialPhase(currentTime) ||
                         request.status != DriverRequestStatus.PENDING) {
-                        android.util.Log.d("DriverHomeVM", "Filtering out non-initial request: ${request.requestId}")
+                        d("DriverHomeVM", "Filtering out non-initial request: ${request.requestId}")
                         continue
                     }
 
@@ -833,7 +852,7 @@ class DriverHomeViewModel @Inject constructor(
                         bookingResult.fold(
                             onSuccess = { booking ->
                                 if (booking?.status == BookingStatus.CANCELLED) {
-                                    android.util.Log.w("DriverHomeVM", "Booking ${request.bookingId} is cancelled - removing request ${request.requestId}")
+                                    w("DriverHomeVM", "Booking ${request.bookingId} is cancelled - removing request ${request.requestId}")
                                     // Don't add this request
                                 } else {
                                     validRequests.add(request)
@@ -849,12 +868,12 @@ class DriverHomeViewModel @Inject constructor(
                     }
                 }
 
-                android.util.Log.d("DriverHomeVM", "Filtered to ${validRequests.size} valid INITIAL requests")
+                d("DriverHomeVM", "Filtered to ${validRequests.size} valid INITIAL requests")
 
                 // Check for new requests and trigger sound/vibration
                 if (validRequests.size > previousRequestCount && validRequests.isNotEmpty()) {
                     val newRequestCount = validRequests.size - previousRequestCount
-                    android.util.Log.d("DriverHomeVM", "🔔 Detected $newRequestCount new ride request(s)")
+                    d("DriverHomeVM", "🔔 Detected $newRequestCount new ride request(s)")
                     vibrateForNewRideRequest()
                     playRideRequestSound()
                 }
@@ -879,7 +898,7 @@ class DriverHomeViewModel @Inject constructor(
         optimizedRouteManager.stopRouteFollowing()
         enhancedDriverLocationService.stopLocationUpdates()
 
-        android.util.Log.d("DriverHomeVM", "🛑 All optimized location updates stopped")
+        d("DriverHomeVM", "🛑 All optimized location updates stopped")
     }
 
     /**
@@ -945,40 +964,40 @@ class DriverHomeViewModel @Inject constructor(
                                         auth.currentUser?.let { user ->
                                             launch {
                                                 // AUTO-CLEANUP: Remove stuck bookings before processing queued bookings
-                                                android.util.Log.d("DriverViewModel", "🧹 Running auto-cleanup for stuck bookings...")
+                                                d("DriverViewModel", "🧹 Running auto-cleanup for stuck bookings...")
                                                 matchingRepository.cleanupStuckBookings(user.uid).onSuccess { cleanedCount ->
                                                     if (cleanedCount > 0) {
-                                                        android.util.Log.w("DriverViewModel", "✅ Auto-cleanup: Cancelled $cleanedCount stuck booking(s)")
+                                                        w("DriverViewModel", "✅ Auto-cleanup: Cancelled $cleanedCount stuck booking(s)")
                                                     } else {
-                                                        android.util.Log.d("DriverViewModel", "✅ Auto-cleanup: No stuck bookings found")
+                                                        d("DriverViewModel", "✅ Auto-cleanup: No stuck bookings found")
                                                     }
                                                 }.onFailure { exception ->
-                                                    android.util.Log.e("DriverViewModel", "⚠️ Auto-cleanup failed (non-critical): ${exception.message}")
+                                                    e("DriverViewModel", "⚠️ Auto-cleanup failed (non-critical): ${exception.message}")
                                                 }
 
-                                                android.util.Log.w("DriverViewModel", "🚀🚀🚀 CRITICAL: Driver ${user.uid} went online - processing queued bookings...")
+                                                w("DriverViewModel", "🚀🚀🚀 CRITICAL: Driver ${user.uid} went online - processing queued bookings...")
                                                 matchingRepository.processQueuedBookingsForNewDriver(user.uid).onSuccess { count ->
-                                                    android.util.Log.w("DriverViewModel", "✅✅✅ CRITICAL: Successfully processed $count requests for newly online driver ${user.uid}")
+                                                    w("DriverViewModel", "✅✅✅ CRITICAL: Successfully processed $count requests for newly online driver ${user.uid}")
                                                 }.onFailure { exception ->
-                                                    android.util.Log.e("DriverViewModel", "❌❌❌ CRITICAL: Failed to process queued bookings for driver ${user.uid}", exception)
+                                                    e("DriverViewModel", "❌❌❌ CRITICAL: Failed to process queued bookings for driver ${user.uid}", exception)
                                                 }
                                             }
                                         }
                                         val currentLocation = _uiState.value.currentUserLocation
                                         if (currentLocation != null) {
                                             launch {
-                                                android.util.Log.d("DriverViewModel", "📍 Updating initial driver location to Firebase: ${currentLocation.latitude()}, ${currentLocation.longitude()}")
+                                                d("DriverViewModel", "📍 Updating initial driver location to Firebase: ${currentLocation.latitude()}, ${currentLocation.longitude()}")
                                                 driverRepository.updateDriverLocation(
                                                     latitude = currentLocation.latitude(),
                                                     longitude = currentLocation.longitude()
                                                 ).onSuccess {
-                                                    android.util.Log.d("DriverViewModel", "✅ Initial driver location updated in Firebase successfully")
+                                                    d("DriverViewModel", "✅ Initial driver location updated in Firebase successfully")
                                                 }.onFailure { exception ->
-                                                    android.util.Log.w("DriverViewModel", "⚠️ Failed to update initial driver location: ${exception.message}")
+                                                    w("DriverViewModel", "⚠️ Failed to update initial driver location: ${exception.message}")
                                                 }
                                             }
                                         } else {
-                                            android.util.Log.w("DriverViewModel", "⚠️ No current location available when going online")
+                                            w("DriverViewModel", "⚠️ No current location available when going online")
                                         }
                                     }.onFailure { exception ->
                                         _uiState.value = _uiState.value.copy(
@@ -988,7 +1007,7 @@ class DriverHomeViewModel @Inject constructor(
                                         )
                                     }
                                 }.onFailure { exception ->
-                                    android.util.Log.e("DriverViewModel", "Failed to set online status: ${exception.message}")
+                                    e("DriverViewModel", "Failed to set online status: ${exception.message}")
                                     // Check if it's a service boundary error
                                     val errorMsg = exception.message ?: "Failed to start location tracking"
                                     if (errorMsg.contains("You must be within", ignoreCase = true)) {
@@ -1072,18 +1091,18 @@ class DriverHomeViewModel @Inject constructor(
      */
     fun acceptRideRequest(request: DriverRequest) {
         // Debug the request object to see what's in it
-        android.util.Log.d("DriverViewModel", "Accepting ride request:")
-        android.util.Log.d("DriverViewModel", "  requestId: '${request.requestId}'")
-        android.util.Log.d("DriverViewModel", "  bookingId: '${request.bookingId}'")
-        android.util.Log.d("DriverViewModel", "  driverId: '${request.driverId}'")
-        android.util.Log.d("DriverViewModel", "  passengerId: '${request.passengerId}'")
+        d("DriverViewModel", "Accepting ride request:")
+        d("DriverViewModel", "  requestId: '${request.requestId}'")
+        d("DriverViewModel", "  bookingId: '${request.bookingId}'")
+        d("DriverViewModel", "  driverId: '${request.driverId}'")
+        d("DriverViewModel", "  passengerId: '${request.passengerId}'")
 
         // Check if driver already has 5 queued bookings (max limit)
         val totalAcceptedRides = _uiState.value.queuedBookings.size + (if (_uiState.value.currentBooking != null) 1 else 0)
         if (totalAcceptedRides >= 5) {
-            android.util.Log.w("DriverViewModel", "❌ Cannot accept new ride request - driver already has 5 accepted rides")
-            android.util.Log.w("DriverViewModel", "   Current booking: ${_uiState.value.currentBooking?.id}")
-            android.util.Log.w("DriverViewModel", "   Queued bookings: ${_uiState.value.queuedBookings.size}")
+            w("DriverViewModel", "❌ Cannot accept new ride request - driver already has 5 accepted rides")
+            w("DriverViewModel", "   Current booking: ${_uiState.value.currentBooking?.id}")
+            w("DriverViewModel", "   Queued bookings: ${_uiState.value.queuedBookings.size}")
 
             _uiState.value = _uiState.value.copy(
                 errorMessage = "Cannot accept new ride request. You already have 5 rides queued.",
@@ -1101,7 +1120,7 @@ class DriverHomeViewModel @Inject constructor(
                 bookingCheck.fold(
                     onSuccess = { booking ->
                         if (booking?.status == BookingStatus.CANCELLED) {
-                            android.util.Log.w("DriverViewModel", "❌ Cannot accept ride - booking ${request.bookingId} was already cancelled by passenger")
+                            w("DriverViewModel", "❌ Cannot accept ride - booking ${request.bookingId} was already cancelled by passenger")
                             _uiState.value = _uiState.value.copy(
                                 isLoading = false,
                                 showPassengerCancellationDialog = true,
@@ -1113,7 +1132,7 @@ class DriverHomeViewModel @Inject constructor(
                         }
                     },
                     onFailure = {
-                        android.util.Log.w("DriverViewModel", "⚠️ Could not verify booking status, proceeding with acceptance")
+                        w("DriverViewModel", "⚠️ Could not verify booking status, proceeding with acceptance")
                         // Continue with acceptance if we can't check
                     }
                 )
@@ -1148,39 +1167,39 @@ class DriverHomeViewModel @Inject constructor(
                     resetProximityAlerts()
 
                     // Create booking object from request
-                    android.util.Log.d("DriverViewModel", "Processing request - requestId: '${request.requestId}', bookingId: '${request.bookingId}'")
+                    d("DriverViewModel", "Processing request - requestId: '${request.requestId}', bookingId: '${request.bookingId}'")
 
                     val bookingId = if (request.bookingId.isNotBlank()) {
-                        android.util.Log.d("DriverViewModel", "Using bookingId from request: '${request.bookingId}'")
+                        d("DriverViewModel", "Using bookingId from request: '${request.bookingId}'")
                         request.bookingId
                     } else {
                         // Extract booking ID from requestId format: "bookingId_driverId_timestamp"
                         // Handle case where bookingId might start with underscore or be malformed
                         val requestIdParts = request.requestId.split("_")
-                        android.util.Log.d("DriverViewModel", "requestId parts: $requestIdParts")
+                        d("DriverViewModel", "requestId parts: $requestIdParts")
 
                         val extractedId = if (requestIdParts.size >= 3) {
                             // Reconstruct bookingId by taking all parts except the last 2 (driverId and timestamp)
                             val result = requestIdParts.dropLast(2).joinToString("_")
-                            android.util.Log.d("DriverViewModel", "Reconstructed bookingId: '$result'")
+                            d("DriverViewModel", "Reconstructed bookingId: '$result'")
 
                             // Check if result is empty (malformed requestId that started with underscore)
                             if (result.isBlank()) {
-                                android.util.Log.w("DriverViewModel", "Malformed requestId - booking ID is empty, creating fallback")
+                                w("DriverViewModel", "Malformed requestId - booking ID is empty, creating fallback")
                                 "fallback_${request.driverId}_${System.currentTimeMillis()}"
                             } else {
                                 result
                             }
                         } else {
                             // Fallback: use the requestId as-is if format doesn't match expected pattern
-                            android.util.Log.w("DriverViewModel", "Unexpected requestId format, using as-is")
+                            w("DriverViewModel", "Unexpected requestId format, using as-is")
                             request.requestId
                         }
-                        android.util.Log.w("DriverViewModel", "bookingId is empty, extracted from requestId: '$extractedId' (from '${request.requestId}')")
+                        w("DriverViewModel", "bookingId is empty, extracted from requestId: '$extractedId' (from '${request.requestId}')")
                         extractedId
                     }
 
-                    android.util.Log.d("DriverViewModel", "Final bookingId to use: '$bookingId'")
+                    d("DriverViewModel", "Final bookingId to use: '$bookingId'")
 
                     val booking = Booking(
                         id = bookingId,
@@ -1194,14 +1213,14 @@ class DriverHomeViewModel @Inject constructor(
                         specialInstructions = request.specialInstructions
                     )
 
-                    android.util.Log.d("DriverViewModel", "Created booking object with ID: '${booking.id}'")
+                    d("DriverViewModel", "Created booking object with ID: '${booking.id}'")
 
                     // Validation check - ensure the booking object has the correct ID
                     if (booking.id != bookingId) {
-                        android.util.Log.e("DriverViewModel", "CRITICAL: Booking object ID mismatch! Expected: '$bookingId', Got: '${booking.id}'")
+                        e("DriverViewModel", "CRITICAL: Booking object ID mismatch! Expected: '$bookingId', Got: '${booking.id}'")
                     }
                     if (booking.id.isBlank()) {
-                        android.util.Log.e("DriverViewModel", "CRITICAL: Booking object has empty ID after creation!")
+                        e("DriverViewModel", "CRITICAL: Booking object has empty ID after creation!")
                     }
 
                     // Get passenger's live location (not pickup location)
@@ -1214,14 +1233,14 @@ class DriverHomeViewModel @Inject constructor(
 
                         liveLocation ?: run {
                             // Fallback to pickup location if live location not available yet
-                            Log.w("DriverHomeViewModel", "Passenger live location not available yet, using pickup location as fallback")
+                            w("DriverHomeViewModel", "Passenger live location not available yet, using pickup location as fallback")
                             Point.fromLngLat(
                                 booking.pickupLocation.coordinates.longitude,
                                 booking.pickupLocation.coordinates.latitude
                             )
                         }
                     } catch (e: Exception) {
-                        Log.w("DriverHomeViewModel", "Failed to get passenger location, using pickup as fallback", e)
+                        w("DriverHomeViewModel", "Failed to get passenger location, using pickup as fallback", e)
                         Point.fromLngLat(
                             booking.pickupLocation.coordinates.longitude,
                             booking.pickupLocation.coordinates.latitude
@@ -1229,34 +1248,34 @@ class DriverHomeViewModel @Inject constructor(
                     }
 
                     // Add booking to queue or set as current booking
-                    android.util.Log.e("DriverViewModel", "📋 QUEUE LOGIC - Before adding new booking:")
-                    android.util.Log.e("DriverViewModel", "   - Current booking: ${_uiState.value.currentBooking?.id}")
-                    android.util.Log.e("DriverViewModel", "   - Queued bookings: ${_uiState.value.queuedBookings.map { it.id }}")
-                    android.util.Log.e("DriverViewModel", "   - New booking to add: ${booking.id}")
+                    e("DriverViewModel", "📋 QUEUE LOGIC - Before adding new booking:")
+                    e("DriverViewModel", "   - Current booking: ${_uiState.value.currentBooking?.id}")
+                    e("DriverViewModel", "   - Queued bookings: ${_uiState.value.queuedBookings.map { it.id }}")
+                    e("DriverViewModel", "   - New booking to add: ${booking.id}")
 
                     val newQueuedBookings = if (_uiState.value.currentBooking != null) {
                         // Already has a current booking, add to queue
-                        android.util.Log.e("DriverViewModel", "   ✅ Adding ${booking.id} to QUEUE (current exists)")
+                        e("DriverViewModel", "   ✅ Adding ${booking.id} to QUEUE (current exists)")
                         _uiState.value.queuedBookings + booking
                     } else {
                         // No current booking, queue stays the same
-                        android.util.Log.e("DriverViewModel", "   ✅ No current booking, queue unchanged")
+                        e("DriverViewModel", "   ✅ No current booking, queue unchanged")
                         _uiState.value.queuedBookings
                     }
 
                     val newCurrentBooking = if (_uiState.value.currentBooking != null) {
                         // Keep existing current booking
-                        android.util.Log.e("DriverViewModel", "   ✅ Keeping existing current: ${_uiState.value.currentBooking?.id}")
+                        e("DriverViewModel", "   ✅ Keeping existing current: ${_uiState.value.currentBooking?.id}")
                         _uiState.value.currentBooking
                     } else {
                         // Set this as current booking
-                        android.util.Log.e("DriverViewModel", "   ✅ Setting ${booking.id} as CURRENT (no existing current)")
+                        e("DriverViewModel", "   ✅ Setting ${booking.id} as CURRENT (no existing current)")
                         booking
                     }
 
-                    android.util.Log.e("DriverViewModel", "📋 QUEUE LOGIC - After processing:")
-                    android.util.Log.e("DriverViewModel", "   - NEW current booking: ${newCurrentBooking?.id}")
-                    android.util.Log.e("DriverViewModel", "   - NEW queued bookings: ${newQueuedBookings.map { it.id }}")
+                    e("DriverViewModel", "📋 QUEUE LOGIC - After processing:")
+                    e("DriverViewModel", "   - NEW current booking: ${newCurrentBooking?.id}")
+                    e("DriverViewModel", "   - NEW queued bookings: ${newQueuedBookings.map { it.id }}")
 
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
@@ -1292,41 +1311,41 @@ class DriverHomeViewModel @Inject constructor(
                                 mapboxRepository.getRoute(driverLocation, booking.pickupLocation, forceRealRoute = true)
                                     .onSuccess { route ->
                                         _uiState.value = _uiState.value.copy(routeInfo = route)
-                                        Log.d("DriverHomeViewModel", "ACTIVE RIDE: Route to pickup fetched successfully with ${route.waypoints.size} waypoints, distance: ${route.totalDistance}km, Route ID: ${route.routeId}")
+                                        d("DriverHomeViewModel", "ACTIVE RIDE: Route to pickup fetched successfully with ${route.waypoints.size} waypoints, distance: ${route.totalDistance}km, Route ID: ${route.routeId}")
                                         if (route.routeId.startsWith("simple_direct")) {
-                                            Log.w("DriverHomeViewModel", "⚠️ WARNING: Got simple direct route instead of real road routing for active ride!")
+                                            w("DriverHomeViewModel", "⚠️ WARNING: Got simple direct route instead of real road routing for active ride!")
                                         } else {
-                                            Log.i("DriverHomeViewModel", "✅ SUCCESS: Using real Mapbox Directions API for active ride navigation")
+                                            i("DriverHomeViewModel", "✅ SUCCESS: Using real Mapbox Directions API for active ride navigation")
                                         }
                                     }
                                     .onFailure { exception ->
-                                        Log.e("DriverHomeViewModel", "Failed to fetch route to pickup for active ride, trying fallback route", exception)
+                                        e("DriverHomeViewModel", "Failed to fetch route to pickup for active ride, trying fallback route", exception)
                                         // Try fallback route without forcing real route
                                         mapboxRepository.getRoute(driverLocation, booking.pickupLocation, forceRealRoute = false)
                                             .onSuccess { fallbackRoute ->
                                                 _uiState.value = _uiState.value.copy(routeInfo = fallbackRoute)
-                                                Log.w("DriverHomeViewModel", "USING FALLBACK: Route to pickup calculated with fallback method, Route ID: ${fallbackRoute.routeId}")
+                                                w("DriverHomeViewModel", "USING FALLBACK: Route to pickup calculated with fallback method, Route ID: ${fallbackRoute.routeId}")
                                             }
                                             .onFailure { fallbackException ->
-                                                Log.e("DriverHomeViewModel", "Both primary and fallback route calculation failed for active ride", fallbackException)
+                                                e("DriverHomeViewModel", "Both primary and fallback route calculation failed for active ride", fallbackException)
                                                 // Create a simple direct route as last resort
                                                 val directRoute = mapboxRepository.createSimpleDirectRoute(driverLocation, booking.pickupLocation)
                                                 _uiState.value = _uiState.value.copy(routeInfo = directRoute)
-                                                Log.w("DriverHomeViewModel", "USING DIRECT ROUTE: Created simple direct route as last resort")
+                                                w("DriverHomeViewModel", "USING DIRECT ROUTE: Created simple direct route as last resort")
                                             }
                                     }
 
                                 // If fare estimate has 0 distance, calculate actual trip distance (pickup to destination)
                                 if (booking.fareEstimate.estimatedDistance == 0.0) {
-                                    Log.d("DriverHomeViewModel", "Fare estimate has 0 distance, calculating actual trip route")
+                                    d("DriverHomeViewModel", "Fare estimate has 0 distance, calculating actual trip route")
                                     // Force real route for active ride trip distance calculation
                                     mapboxRepository.getRoute(booking.pickupLocation, booking.destination, forceRealRoute = true)
                                         .onSuccess { tripRoute ->
-                                            Log.d("DriverHomeViewModel", "ACTIVE RIDE: Calculated actual trip distance: ${tripRoute.totalDistance}km, duration: ${tripRoute.estimatedDuration}min, Route ID: ${tripRoute.routeId}")
+                                            d("DriverHomeViewModel", "ACTIVE RIDE: Calculated actual trip distance: ${tripRoute.totalDistance}km, duration: ${tripRoute.estimatedDuration}min, Route ID: ${tripRoute.routeId}")
                                             if (tripRoute.routeId.startsWith("simple_direct")) {
-                                                Log.w("DriverHomeViewModel", "⚠️ WARNING: Trip distance calculation used simple direct route instead of real roads!")
+                                                w("DriverHomeViewModel", "⚠️ WARNING: Trip distance calculation used simple direct route instead of real roads!")
                                             } else {
-                                                Log.i("DriverHomeViewModel", "✅ SUCCESS: Trip distance calculated using real Mapbox Directions API")
+                                                i("DriverHomeViewModel", "✅ SUCCESS: Trip distance calculated using real Mapbox Directions API")
                                             }
 
                                             // Update the current booking with correct distance
@@ -1337,10 +1356,10 @@ class DriverHomeViewModel @Inject constructor(
                                             val updatedBooking = booking.copy(fareEstimate = updatedFareEstimate)
 
                                             _uiState.value = _uiState.value.copy(currentBooking = updatedBooking)
-                                            Log.d("DriverHomeViewModel", "Updated booking fare estimate with actual distance: ${tripRoute.totalDistance}km")
+                                            d("DriverHomeViewModel", "Updated booking fare estimate with actual distance: ${tripRoute.totalDistance}km")
                                         }
                                         .onFailure { exception ->
-                                            Log.w("DriverHomeViewModel", "Failed to calculate trip route distance", exception)
+                                            w("DriverHomeViewModel", "Failed to calculate trip route distance", exception)
                                         }
                                 }
                             }
@@ -1379,7 +1398,7 @@ class DriverHomeViewModel @Inject constructor(
             matchingRepository.declineRequest(request.requestId, request.driverId)
                 .onSuccess {
                     // Request will be auto-removed by the observer
-                    android.util.Log.d("DriverHomeVM", "Successfully declined request: ${request.requestId}")
+                    d("DriverHomeVM", "Successfully declined request: ${request.requestId}")
                 }
                 .onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
@@ -1394,14 +1413,14 @@ class DriverHomeViewModel @Inject constructor(
      * Allows driver to navigate to a different accepted booking
      */
     fun switchToRide(bookingId: String) {
-        android.util.Log.d("DriverViewModel", "Switching to ride: $bookingId")
+        d("DriverViewModel", "Switching to ride: $bookingId")
 
         val currentBooking = _uiState.value.currentBooking
         val queuedBookings = _uiState.value.queuedBookings
 
         // Check if already viewing this booking
         if (currentBooking?.id == bookingId) {
-            android.util.Log.d("DriverViewModel", "Already viewing this booking")
+            d("DriverViewModel", "Already viewing this booking")
             return
         }
 
@@ -1409,7 +1428,7 @@ class DriverHomeViewModel @Inject constructor(
         val bookingToActivate = queuedBookings.find { it.id == bookingId }
 
         if (bookingToActivate == null) {
-            android.util.Log.w("DriverViewModel", "Booking $bookingId not found in queue")
+            w("DriverViewModel", "Booking $bookingId not found in queue")
             return
         }
 
@@ -1430,18 +1449,18 @@ class DriverHomeViewModel @Inject constructor(
                 bookingToActivate.pickupLocation.coordinates.latitude
             )
         } catch (e: Exception) {
-            android.util.Log.e("DriverViewModel", "Failed to create passenger location point", e)
+            e("DriverViewModel", "Failed to create passenger location point", e)
             _uiState.value.passengerLocation // Keep existing location if conversion fails
         }
 
-        android.util.Log.d("DriverViewModel", "🎯 MARKER FIX: Updating passenger location for booking $bookingId")
-        android.util.Log.d("DriverViewModel", "   Old passenger location: ${_uiState.value.passengerLocation}")
-        android.util.Log.d("DriverViewModel", "   New passenger location: $newPassengerLocation")
+        d("DriverViewModel", "🎯 MARKER FIX: Updating passenger location for booking $bookingId")
+        d("DriverViewModel", "   Old passenger location: ${_uiState.value.passengerLocation}")
+        d("DriverViewModel", "   New passenger location: $newPassengerLocation")
 
-        android.util.Log.d("DriverViewModel", "🎯 MARKER DEBUG: Before state update:")
-        android.util.Log.d("DriverViewModel", "   - New current booking: ${bookingToActivate.id}")
-        android.util.Log.d("DriverViewModel", "   - Updated queue (${updatedQueue.size} bookings): ${updatedQueue.map { it.id }}")
-        android.util.Log.d("DriverViewModel", "   - Current active booking ID: $bookingId")
+        d("DriverViewModel", "🎯 MARKER DEBUG: Before state update:")
+        d("DriverViewModel", "   - New current booking: ${bookingToActivate.id}")
+        d("DriverViewModel", "   - Updated queue (${updatedQueue.size} bookings): ${updatedQueue.map { it.id }}")
+        d("DriverViewModel", "   - Current active booking ID: $bookingId")
 
         // Update UI state with new active booking
         _uiState.value = _uiState.value.copy(
@@ -1451,12 +1470,12 @@ class DriverHomeViewModel @Inject constructor(
             passengerLocation = newPassengerLocation
         )
 
-        android.util.Log.d("DriverViewModel", "🎯 MARKER DEBUG: After state update:")
-        android.util.Log.d("DriverViewModel", "   - UI state current booking: ${_uiState.value.currentBooking?.id}")
-        android.util.Log.d("DriverViewModel", "   - UI state queued bookings: ${_uiState.value.queuedBookings.map { it.id }}")
-        android.util.Log.d("DriverViewModel", "   - UI state active booking ID: ${_uiState.value.currentActiveBookingId}")
+        d("DriverViewModel", "🎯 MARKER DEBUG: After state update:")
+        d("DriverViewModel", "   - UI state current booking: ${_uiState.value.currentBooking?.id}")
+        d("DriverViewModel", "   - UI state queued bookings: ${_uiState.value.queuedBookings.map { it.id }}")
+        d("DriverViewModel", "   - UI state active booking ID: ${_uiState.value.currentActiveBookingId}")
 
-        android.util.Log.d("DriverViewModel", "Switched to booking: $bookingId, Queue size: ${updatedQueue.size}")
+        d("DriverViewModel", "Switched to booking: $bookingId, Queue size: ${updatedQueue.size}")
 
         // Fetch route and observe passenger for the newly activated booking
         viewModelScope.launch {
@@ -1473,7 +1492,7 @@ class DriverHomeViewModel @Inject constructor(
                         bookingToActivate.destination
                     }
                     else -> {
-                        android.util.Log.w("DriverViewModel", "Unexpected booking status: ${bookingToActivate.status}")
+                        w("DriverViewModel", "Unexpected booking status: ${bookingToActivate.status}")
                         bookingToActivate.pickupLocation
                     }
                 }
@@ -1492,9 +1511,9 @@ class DriverHomeViewModel @Inject constructor(
 
                 routeResult.onSuccess { route ->
                     _uiState.value = _uiState.value.copy(routeInfo = route)
-                    android.util.Log.d("DriverViewModel", "Route fetched for booking $bookingId")
+                    d("DriverViewModel", "Route fetched for booking $bookingId")
                 }.onFailure { error ->
-                    android.util.Log.e("DriverViewModel", "Failed to fetch route: ${error.message}")
+                    e("DriverViewModel", "Failed to fetch route: ${error.message}")
                 }
             }
 
@@ -1513,13 +1532,13 @@ class DriverHomeViewModel @Inject constructor(
         val currentBooking = _uiState.value.currentBooking ?: return
 
         // Enhanced debugging for booking validation
-        android.util.Log.d("DriverViewModel", "Current booking object: id='${currentBooking.id}', status=${currentBooking.status}")
-        android.util.Log.d("DriverViewModel", "Booking ID length: ${currentBooking.id.length}")
-        android.util.Log.d("DriverViewModel", "Booking ID characters: ${currentBooking.id.toCharArray().contentToString()}")
+        d("DriverViewModel", "Current booking object: id='${currentBooking.id}', status=${currentBooking.status}")
+        d("DriverViewModel", "Booking ID length: ${currentBooking.id.length}")
+        d("DriverViewModel", "Booking ID characters: ${currentBooking.id.toCharArray().contentToString()}")
 
         // Validate booking ID
         if (currentBooking.id.isBlank()) {
-            android.util.Log.e("DriverViewModel", "Cannot mark arrival - booking ID is blank")
+            e("DriverViewModel", "Cannot mark arrival - booking ID is blank")
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
                 errorMessage = "Booking ID is empty. Please try accepting a new ride."
@@ -1530,7 +1549,7 @@ class DriverHomeViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
 
-            android.util.Log.d("DriverViewModel", "Marking arrival for booking: ${currentBooking.id}")
+            d("DriverViewModel", "Marking arrival for booking: ${currentBooking.id}")
 
             try {
                 // Update booking status in repository to DRIVER_ARRIVED
@@ -1540,12 +1559,12 @@ class DriverHomeViewModel @Inject constructor(
                             currentBooking = currentBooking.copy(status = BookingStatus.DRIVER_ARRIVED),
                             isLoading = false
                         )
-                        android.util.Log.i("DriverViewModel", "Driver marked as arrived at pickup for booking ${currentBooking.id}")
+                        i("DriverViewModel", "Driver marked as arrived at pickup for booking ${currentBooking.id}")
 
                         // Navigation to destination will be handled manually after passenger enters vehicle
                     }
                     .onFailure { exception ->
-                        android.util.Log.e("DriverViewModel", "Failed to mark arrival for booking ${currentBooking.id}", exception)
+                        e("DriverViewModel", "Failed to mark arrival for booking ${currentBooking.id}", exception)
 
                         val errorMessage = when {
                             exception.message?.contains("invalid document reference") == true ->
@@ -1587,12 +1606,12 @@ class DriverHomeViewModel @Inject constructor(
                             currentBooking = currentBooking.copy(status = BookingStatus.IN_PROGRESS),
                             isLoading = false
                         )
-                        android.util.Log.i("DriverViewModel", "Trip started for booking ${currentBooking.id}")
+                        i("DriverViewModel", "Trip started for booking ${currentBooking.id}")
 
                         // Reset route flag when status changes to IN_PROGRESS (new destination: pickup -> dropoff)
                         isRouteCalculated = false
                         lastCalculatedDestination = null
-                        android.util.Log.d("DriverHomeVM", "🔄 Route flag reset - Status changed to IN_PROGRESS, will calculate route to destination")
+                        d("DriverHomeVM", "🔄 Route flag reset - Status changed to IN_PROGRESS, will calculate route to destination")
 
                         // Fetch route from pickup to destination for navigation
                         fetchRouteForTrip(currentBooking)
@@ -1637,7 +1656,7 @@ class DriverHomeViewModel @Inject constructor(
                 )
 
                 cancellationResult.onSuccess {
-                    android.util.Log.d("DriverViewModel", "Booking cancelled successfully, now sending passenger notification")
+                    d("DriverViewModel", "Booking cancelled successfully, now sending passenger notification")
 
                     // STEP 2: Send notification to passenger about driver cancellation
                     val notificationResult = notificationService.sendRideUpdateToPassenger(
@@ -1650,9 +1669,9 @@ class DriverHomeViewModel @Inject constructor(
                     )
 
                     notificationResult.onSuccess {
-                        android.util.Log.i("DriverViewModel", "✅ Successfully queued passenger notification for trip cancellation")
+                        i("DriverViewModel", "✅ Successfully queued passenger notification for trip cancellation")
                     }.onFailure { exception ->
-                        android.util.Log.e("DriverViewModel", "❌ Failed to queue passenger notification: ${exception.message}", exception)
+                        e("DriverViewModel", "❌ Failed to queue passenger notification: ${exception.message}", exception)
                         // Continue with cancellation even if notification fails
                     }
 
@@ -1672,13 +1691,13 @@ class DriverHomeViewModel @Inject constructor(
                             )
 
                             backupResult.onSuccess {
-                                android.util.Log.i("DriverViewModel", "Backup notification sent successfully")
+                                i("DriverViewModel", "Backup notification sent successfully")
                             }.onFailure { exception ->
-                                android.util.Log.w("DriverViewModel", "Backup notification also failed: ${exception.message}")
+                                w("DriverViewModel", "Backup notification also failed: ${exception.message}")
                             }
                         }
                     } catch (e: Exception) {
-                        android.util.Log.w("DriverViewModel", "Failed to send backup notification", e)
+                        w("DriverViewModel", "Failed to send backup notification", e)
                     }
 
                     // STEP 3: Just set loading to false
@@ -1690,9 +1709,9 @@ class DriverHomeViewModel @Inject constructor(
                     isRouteCalculated = false
                     lastCalculatedDestination = null
                     optimizedRouteManager.clearRoute()
-                    android.util.Log.d("DriverHomeVM", "🗑️ Route calculation flag reset after cancellation")
+                    d("DriverHomeVM", "🗑️ Route calculation flag reset after cancellation")
 
-                    android.util.Log.i("DriverViewModel", "✅ Cancellation initiated for booking ${currentBooking.id}. Queue management handled by observer.")
+                    i("DriverViewModel", "✅ Cancellation initiated for booking ${currentBooking.id}. Queue management handled by observer.")
 
                 }.onFailure { exception ->
                     // Failed to cancel booking
@@ -1700,7 +1719,7 @@ class DriverHomeViewModel @Inject constructor(
                         isLoading = false,
                         errorMessage = "Failed to cancel trip: ${exception.message}"
                     )
-                    android.util.Log.e("DriverViewModel", "Failed to cancel booking ${currentBooking.id}", exception)
+                    e("DriverViewModel", "Failed to cancel booking ${currentBooking.id}", exception)
                 }
 
             } catch (e: Exception) {
@@ -1708,7 +1727,7 @@ class DriverHomeViewModel @Inject constructor(
                     isLoading = false,
                     errorMessage = "Failed to cancel trip: ${e.message}"
                 )
-                android.util.Log.e("DriverViewModel", "Exception during trip cancellation", e)
+                e("DriverViewModel", "Exception during trip cancellation", e)
             }
         }
     }
@@ -1735,7 +1754,7 @@ class DriverHomeViewModel @Inject constructor(
                             currentBooking.fareEstimate.totalEstimate
                         }
 
-                        android.util.Log.d("DriverViewModel", "💰 Fare calculation: Original=₱${currentBooking.fareEstimate.totalEstimate}, Discount=${currentBooking.passengerDiscountPercentage ?: 0}%, Actual=₱$actualFare")
+                        d("DriverViewModel", "💰 Fare calculation: Original=₱${currentBooking.fareEstimate.totalEstimate}, Discount=${currentBooking.passengerDiscountPercentage ?: 0}%, Actual=₱$actualFare")
 
                         // Update User document with total earnings (using discounted amount)
                         userRepository.updateDriverEarnings(
@@ -1743,7 +1762,7 @@ class DriverHomeViewModel @Inject constructor(
                             additionalEarnings = actualFare,
                             incrementTrips = true
                         ).onFailure { e ->
-                            android.util.Log.e("DriverViewModel", "Failed to save earnings to Firebase", e)
+                            e("DriverViewModel", "Failed to save earnings to Firebase", e)
                         }
 
                         // Process payment to update weekly earnings
@@ -1752,9 +1771,9 @@ class DriverHomeViewModel @Inject constructor(
                                 booking = currentBooking,
                                 paymentMethod = com.rj.islamove.data.models.PaymentMethod.CASH
                             )
-                            android.util.Log.d("DriverViewModel", "Payment processed successfully: ₱$actualFare")
+                            d("DriverViewModel", "Payment processed successfully: ₱$actualFare")
                         } catch (e: Exception) {
-                            android.util.Log.e("DriverViewModel", "Failed to process payment for weekly earnings", e)
+                            e("DriverViewModel", "Failed to process payment for weekly earnings", e)
                         }
                     }
 
@@ -1786,27 +1805,27 @@ class DriverHomeViewModel @Inject constructor(
                             val nextBooking = queuedBookingsWithoutCurrent.firstOrNull()
                             val remainingQueue = queuedBookingsWithoutCurrent.drop(1)
 
-                            android.util.Log.d("DriverHomeViewModel", "Queue filtering: original=${_uiState.value.queuedBookings.size}, without current=${queuedBookingsWithoutCurrent.size}, next booking: ${nextBooking?.id}")
+                            d("DriverHomeViewModel", "Queue filtering: original=${_uiState.value.queuedBookings.size}, without current=${queuedBookingsWithoutCurrent.size}, next booking: ${nextBooking?.id}")
 
                             // Show rating screen after each completed ride (regardless of queued rides)
                             val shouldNavigateToRatingNow = shouldTriggerRating
 
                             if (hasAlreadyRated) {
-                                android.util.Log.d("DriverHomeViewModel", "Driver has already rated booking ${currentBooking.id}, skipping rating screen")
+                                d("DriverHomeViewModel", "Driver has already rated booking ${currentBooking.id}, skipping rating screen")
                             }
 
-                            android.util.Log.d("DriverHomeViewModel", "Trip completed, triggering rating navigation: bookingId=${currentBooking.id}, passengerId=${currentBooking.passengerId}")
+                            d("DriverHomeViewModel", "Trip completed, triggering rating navigation: bookingId=${currentBooking.id}, passengerId=${currentBooking.passengerId}")
 
                             // Reset route calculation flag for next booking
                             isRouteCalculated = false
                             lastCalculatedDestination = null
                             optimizedRouteManager.clearRoute()
-                            android.util.Log.d("DriverHomeVM", "🗑️ Route calculation flag reset after ride completion")
+                            d("DriverHomeVM", "🗑️ Route calculation flag reset after ride completion")
 
                             // Set up state for rating navigation or advance to next booking
                             if (shouldNavigateToRatingNow) {
                                 // Ensure queued bookings are preserved (without current booking to prevent duplicates)
-                                android.util.Log.d("DriverHomeViewModel", "Before rating navigation: current queue size = ${_uiState.value.queuedBookings.size}, filtered queue size = ${queuedBookingsWithoutCurrent.size}, will preserve all ${queuedBookingsWithoutCurrent.size} bookings")
+                                d("DriverHomeViewModel", "Before rating navigation: current queue size = ${_uiState.value.queuedBookings.size}, filtered queue size = ${queuedBookingsWithoutCurrent.size}, will preserve all ${queuedBookingsWithoutCurrent.size} bookings")
 
                                 // Trigger rating navigation - don't advance to next booking yet
                                 _uiState.value = _uiState.value.copy(
@@ -1826,7 +1845,7 @@ class DriverHomeViewModel @Inject constructor(
                                     queuedBookings = queuedBookingsWithoutCurrent
                                 )
 
-                                android.util.Log.d("DriverHomeViewModel", "Rating navigation triggered, preserved ${queuedBookingsWithoutCurrent.size} bookings in queue")
+                                d("DriverHomeViewModel", "Rating navigation triggered, preserved ${queuedBookingsWithoutCurrent.size} bookings in queue")
                             } else {
                                 // No rating needed, advance directly to next booking
                                 _uiState.value = _uiState.value.copy(
@@ -1849,7 +1868,7 @@ class DriverHomeViewModel @Inject constructor(
 
                                 // If we have a next booking, set it up for navigation
                                 if (nextBooking != null) {
-                                    android.util.Log.d("DriverHomeViewModel", "Advancing to next queued booking: ${nextBooking.id}")
+                                    d("DriverHomeViewModel", "Advancing to next queued booking: ${nextBooking.id}")
 
                                     // Get passenger location for the next booking
                                     launch {
@@ -1883,10 +1902,10 @@ class DriverHomeViewModel @Inject constructor(
                                         if (cachedRoute != null) {
                                             // Use cached route instantly
                                             _uiState.value = _uiState.value.copy(routeInfo = cachedRoute)
-                                            android.util.Log.d("DriverHomeViewModel", "⚡ Using cached route for next passenger: ${nextBooking.id}")
+                                            d("DriverHomeViewModel", "⚡ Using cached route for next passenger: ${nextBooking.id}")
                                         } else {
                                             // No cached route, calculate it
-                                            android.util.Log.d("DriverHomeViewModel", "No cached route for ${nextBooking.id}, calculating now...")
+                                            d("DriverHomeViewModel", "No cached route for ${nextBooking.id}, calculating now...")
 
                                             val currentLocation = _uiState.value.currentUserLocation
                                             if (currentLocation != null) {
@@ -1898,10 +1917,10 @@ class DriverHomeViewModel @Inject constructor(
                                                 mapboxRepository.getRoute(driverLocation, nextBooking.pickupLocation, forceRealRoute = true)
                                                     .onSuccess { route ->
                                                         _uiState.value = _uiState.value.copy(routeInfo = route)
-                                                        android.util.Log.d("DriverHomeViewModel", "Route calculated for next passenger: ${nextBooking.id}")
+                                                        d("DriverHomeViewModel", "Route calculated for next passenger: ${nextBooking.id}")
                                                     }
                                                     .onFailure { error ->
-                                                        android.util.Log.e("DriverHomeViewModel", "Failed to calculate route for next passenger: ${nextBooking.id} - no straight line fallback", error)
+                                                        e("DriverHomeViewModel", "Failed to calculate route for next passenger: ${nextBooking.id} - no straight line fallback", error)
                                                         // Keep routeInfo as null - better to show no route than a straight line
                                                     }
                                             }
@@ -1925,7 +1944,7 @@ class DriverHomeViewModel @Inject constructor(
                                 }
                             }
 
-                            android.util.Log.d("DriverHomeViewModel", "Trip completed, triggering rating navigation: bookingId=${currentBooking.id}, passengerId=${currentBooking.passengerId}")
+                            d("DriverHomeViewModel", "Trip completed, triggering rating navigation: bookingId=${currentBooking.id}, passengerId=${currentBooking.passengerId}")
 
                         }.onFailure { exception ->
                             _uiState.value = _uiState.value.copy(
@@ -1973,6 +1992,72 @@ class DriverHomeViewModel @Inject constructor(
     /**
      * Load driver profile information and earnings from Firebase
      */
+//    private fun loadDriverProfile() {
+//        viewModelScope.launch {
+//            val driverId = auth.currentUser?.uid
+//            if (driverId == null) {
+//                _uiState.value = _uiState.value.copy(
+//                    errorMessage = "Authentication required. Please log in as a driver."
+//                )
+//                return@launch
+//            }
+//
+//            // Load driver profile
+//            driverRepository.getDriverProfile(driverId)
+//                .onSuccess { profile ->
+//                    _uiState.value = _uiState.value.copy(driverProfile = profile)
+//                }
+//                .onFailure { exception ->
+//                    _uiState.value = _uiState.value.copy(
+//                        errorMessage = "Failed to load profile: ${exception.message}"
+//                    )
+//                }
+//
+//            // Load driver earnings from User document
+//            userRepository.getUserByUid(driverId)
+//                .onSuccess { user ->
+//                    val earnings = user.driverData?.totalEarnings ?: 0.0
+//                    val trips = user.driverData?.totalTrips ?: 0
+//                    android.util.Log.d("DriverViewModel", "Loaded persistent earnings: ₱$earnings, trips: $trips")
+//
+//                    // Also load weekly earnings from PaymentRepository
+//                    viewModelScope.launch {
+//                        try {
+//                            paymentRepository.getDriverEarnings(driverId).collect { driverEarnings ->
+//                                val thisWeek = java.text.SimpleDateFormat("yyyy-'W'ww", java.util.Locale.getDefault()).format(java.util.Date())
+//                                val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+//
+//                                val weeklyEarnings = driverEarnings?.weeklyEarnings?.get(thisWeek) ?: 0.0
+//                                val todayEarnings = driverEarnings?.dailyEarnings?.get(today) ?: 0.0
+//
+//                                _uiState.value = _uiState.value.copy(
+//                                    totalEarnings = earnings,
+//                                    todayEarnings = todayEarnings,
+//                                    weeklyEarnings = weeklyEarnings,
+//                                    todayTrips = trips  // This shows total trips, not just today - can be improved later
+//                                )
+//                                android.util.Log.d("DriverViewModel", "Loaded weekly earnings: ₱$weeklyEarnings")
+//                            }
+//                        } catch (e: Exception) {
+//                            android.util.Log.e("DriverViewModel", "Failed to load weekly earnings", e)
+//                            // Still set the basic earnings even if weekly fails
+//                            _uiState.value = _uiState.value.copy(
+//                                totalEarnings = earnings,
+//                                todayEarnings = 0.0,
+//                                weeklyEarnings = 0.0,
+//                                todayTrips = trips
+//                            )
+//                        }
+//                    }
+//                }
+//                .onFailure { exception ->
+//                    android.util.Log.e("DriverViewModel", "Failed to load driver earnings from Firebase", exception)
+//                }
+//        }
+//    }
+    /**
+     * Load driver profile information and earnings from Firebase
+     */
     private fun loadDriverProfile() {
         viewModelScope.launch {
             val driverId = auth.currentUser?.uid
@@ -1983,57 +2068,163 @@ class DriverHomeViewModel @Inject constructor(
                 return@launch
             }
 
+            android.util.Log.d("DriverViewModel", "📊 loadDriverProfile: Starting for driver $driverId")
+
             // Load driver profile
             driverRepository.getDriverProfile(driverId)
                 .onSuccess { profile ->
                     _uiState.value = _uiState.value.copy(driverProfile = profile)
+                    android.util.Log.d("DriverViewModel", "✅ Driver profile loaded")
                 }
                 .onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         errorMessage = "Failed to load profile: ${exception.message}"
                     )
+                    android.util.Log.e("DriverViewModel", "❌ Failed to load driver profile", exception)
                 }
 
             // Load driver earnings from User document
-            userRepository.getUserByUid(driverId)
-                .onSuccess { user ->
-                    val earnings = user.driverData?.totalEarnings ?: 0.0
-                    val trips = user.driverData?.totalTrips ?: 0
-                    android.util.Log.d("DriverViewModel", "Loaded persistent earnings: ₱$earnings, trips: $trips")
+            try {
+                val userResult = userRepository.getUserByUid(driverId)
+                userResult.onSuccess { user ->
+                    val totalEarnings = user.driverData?.totalEarnings ?: 0.0
+                    val totalTrips = user.driverData?.totalTrips ?: 0
+                    android.util.Log.d("DriverViewModel", "✅ Loaded user data - Total earnings: ₱$totalEarnings, trips: $totalTrips")
 
-                    // Also load weekly earnings from PaymentRepository
-                    viewModelScope.launch {
+                    // Update total earnings immediately
+                    _uiState.value = _uiState.value.copy(
+                        totalEarnings = totalEarnings,
+                        todayTrips = totalTrips
+                    )
+
+                    // Calculate date keys
+                    val thisWeek = java.text.SimpleDateFormat("yyyy-'W'ww", java.util.Locale.getDefault()).format(java.util.Date())
+                    val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+
+                    android.util.Log.d("DriverViewModel", "📅 Date keys - Week: $thisWeek, Today: $today")
+
+                    // Launch separate coroutine for weekly earnings Flow
+                    launch {
                         try {
-                            paymentRepository.getDriverEarnings(driverId).collect { driverEarnings ->
-                                val thisWeek = java.text.SimpleDateFormat("yyyy-'W'ww", java.util.Locale.getDefault()).format(java.util.Date())
-                                val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+                            android.util.Log.d("DriverViewModel", "🔄 Starting to collect weekly earnings Flow...")
 
-                                val weeklyEarnings = driverEarnings?.weeklyEarnings?.get(thisWeek) ?: 0.0
-                                val todayEarnings = driverEarnings?.dailyEarnings?.get(today) ?: 0.0
+                            paymentRepository.getDriverEarnings(driverId).collect { driverEarnings ->
+                                android.util.Log.d("DriverViewModel", "📦 Received earnings data from Flow")
+
+                                if (driverEarnings == null) {
+                                    android.util.Log.w("DriverViewModel", "⚠️ driverEarnings is null - using defaults")
+                                    _uiState.value = _uiState.value.copy(
+                                        todayEarnings = 0.0,
+                                        weeklyEarnings = 0.0
+                                    )
+                                    return@collect
+                                }
+
+                                val weeklyEarnings = driverEarnings.weeklyEarnings?.get(thisWeek) ?: 0.0
+                                val todayEarnings = driverEarnings.dailyEarnings?.get(today) ?: 0.0
+
+                                android.util.Log.d("DriverViewModel", "💰 Earnings calculated:")
+                                android.util.Log.d("DriverViewModel", "   - Weekly map: ${driverEarnings.weeklyEarnings}")
+                                android.util.Log.d("DriverViewModel", "   - Daily map: ${driverEarnings.dailyEarnings}")
+                                android.util.Log.d("DriverViewModel", "   - Weekly earnings for $thisWeek: ₱$weeklyEarnings")
+                                android.util.Log.d("DriverViewModel", "   - Today earnings for $today: ₱$todayEarnings")
 
                                 _uiState.value = _uiState.value.copy(
-                                    totalEarnings = earnings,
                                     todayEarnings = todayEarnings,
-                                    weeklyEarnings = weeklyEarnings,
-                                    todayTrips = trips  // This shows total trips, not just today - can be improved later
+                                    weeklyEarnings = weeklyEarnings
                                 )
-                                android.util.Log.d("DriverViewModel", "Loaded weekly earnings: ₱$weeklyEarnings")
+
+                                android.util.Log.d("DriverViewModel", "✅ UI State updated with weekly/daily earnings")
                             }
                         } catch (e: Exception) {
-                            android.util.Log.e("DriverViewModel", "Failed to load weekly earnings", e)
-                            // Still set the basic earnings even if weekly fails
+                            android.util.Log.e("DriverViewModel", "❌ Exception in weekly earnings Flow", e)
                             _uiState.value = _uiState.value.copy(
-                                totalEarnings = earnings,
                                 todayEarnings = 0.0,
-                                weeklyEarnings = 0.0,
-                                todayTrips = trips
+                                weeklyEarnings = 0.0
                             )
                         }
                     }
+                }.onFailure { exception ->
+                    android.util.Log.e("DriverViewModel", "❌ Failed to load user data", exception)
+                    _uiState.value = _uiState.value.copy(
+                        totalEarnings = 0.0,
+                        todayEarnings = 0.0,
+                        weeklyEarnings = 0.0,
+                        todayTrips = 0
+                    )
                 }
-                .onFailure { exception ->
-                    android.util.Log.e("DriverViewModel", "Failed to load driver earnings from Firebase", exception)
+            } catch (e: Exception) {
+                android.util.Log.e("DriverViewModel", "💥 Exception in loadDriverProfile", e)
+                _uiState.value = _uiState.value.copy(
+                    totalEarnings = 0.0,
+                    todayEarnings = 0.0,
+                    weeklyEarnings = 0.0,
+                    todayTrips = 0
+                )
+            }
+        }
+    }
+
+    /**
+     * Fallback: Calculate today and weekly earnings from completed bookings
+     */
+    private fun calculateEarningsFromBookings() {
+        viewModelScope.launch {
+            val driverId = auth.currentUser?.uid ?: return@launch
+
+            try {
+                android.util.Log.d("DriverViewModel", "🔄 Calculating earnings from bookings as fallback...")
+
+                // Get today's range
+                val todayRange = getTodayRange()
+                val weekRange = getCurrentWeekRange()
+
+                android.util.Log.d("DriverViewModel", "📅 Today range: ${todayRange.startDate} to ${todayRange.endDate}")
+                android.util.Log.d("DriverViewModel", "📅 Week range: ${weekRange.startDate} to ${weekRange.endDate}")
+
+                // Get completed trips
+                val todayTripsResult = getDriverCompletedTrips(todayRange)
+                val weekTripsResult = getDriverCompletedTrips(weekRange)
+
+                todayTripsResult.onSuccess { todayTrips ->
+                    val todayEarnings = todayTrips.sumOf { booking ->
+                        // Apply discount if passenger had one
+                        if (booking.passengerDiscountPercentage != null && booking.passengerDiscountPercentage > 0) {
+                            val discountMultiplier = (100 - booking.passengerDiscountPercentage) / 100.0
+                            booking.fareEstimate.totalEstimate * discountMultiplier
+                        } else {
+                            booking.fareEstimate.totalEstimate
+                        }
+                    }
+                    android.util.Log.d("DriverViewModel", "📊 Calculated today earnings: ₱$todayEarnings from ${todayTrips.size} trips")
+
+                    _uiState.update { it.copy(todayEarnings = todayEarnings) }
+                    android.util.Log.d("DriverViewModel", "✅ Updated UI state with today earnings: ₱$todayEarnings")
+                }.onFailure { e ->
+                    android.util.Log.e("DriverViewModel", "❌ Failed to get today trips", e)
                 }
+
+                weekTripsResult.onSuccess { weekTrips ->
+                    val weeklyEarnings = weekTrips.sumOf { booking ->
+                        // Apply discount if passenger had one
+                        if (booking.passengerDiscountPercentage != null && booking.passengerDiscountPercentage > 0) {
+                            val discountMultiplier = (100 - booking.passengerDiscountPercentage) / 100.0
+                            booking.fareEstimate.totalEstimate * discountMultiplier
+                        } else {
+                            booking.fareEstimate.totalEstimate
+                        }
+                    }
+                    android.util.Log.d("DriverViewModel", "📊 Calculated weekly earnings: ₱$weeklyEarnings from ${weekTrips.size} trips")
+
+                    _uiState.update { it.copy(weeklyEarnings = weeklyEarnings) }
+                    android.util.Log.d("DriverViewModel", "✅ Updated UI state with weekly earnings: ₱$weeklyEarnings")
+                }.onFailure { e ->
+                    android.util.Log.e("DriverViewModel", "❌ Failed to get week trips", e)
+                }
+
+            } catch (e: Exception) {
+                android.util.Log.e("DriverViewModel", "❌ Failed to calculate earnings from bookings", e)
+            }
         }
     }
 
@@ -2043,7 +2234,7 @@ class DriverHomeViewModel @Inject constructor(
     private fun loadEarnings() {
         // Don't calculate earnings from ride requests here - this was overriding Firebase earnings
         // The persistent earnings from loadDriverProfile() are the authoritative source
-        android.util.Log.d("DriverViewModel", "loadEarnings: Using persistent Firebase earnings, not recalculating from requests")
+        d("DriverViewModel", "loadEarnings: Using persistent Firebase earnings, not recalculating from requests")
     }
 
 
@@ -2068,14 +2259,14 @@ class DriverHomeViewModel @Inject constructor(
                         }
                     } ?: emptyList()
                 } else {
-                    Log.w("DriverHomeViewModel", "Failed to load service areas: ${serviceAreaResult.exceptionOrNull()}")
+                    w("DriverHomeViewModel", "Failed to load service areas: ${serviceAreaResult.exceptionOrNull()}")
                     emptyList()
                 }
 
                 _uiState.value = _uiState.value.copy(customLandmarks = serviceAreaLandmarks)
-                Log.d("DriverHomeViewModel", "Loaded ${serviceAreaLandmarks.size} service area destinations for driver")
+                d("DriverHomeViewModel", "Loaded ${serviceAreaLandmarks.size} service area destinations for driver")
             } catch (e: Exception) {
-                Log.e("DriverHomeViewModel", "Error loading service area destinations", e)
+                e("DriverHomeViewModel", "Error loading service area destinations", e)
             }
         }
     }
@@ -2112,7 +2303,7 @@ class DriverHomeViewModel @Inject constructor(
             showPassengerCancellationDialog = false,
             errorMessage = null
         )
-        android.util.Log.d("DriverHomeVM", "Dismissed passenger cancellation dialog")
+        d("DriverHomeVM", "Dismissed passenger cancellation dialog")
     }
 
     /**
@@ -2123,7 +2314,7 @@ class DriverHomeViewModel @Inject constructor(
             showServiceBoundaryDialog = false,
             serviceBoundaryMessage = null
         )
-        android.util.Log.d("DriverHomeVM", "Dismissed service boundary dialog")
+        d("DriverHomeVM", "Dismissed service boundary dialog")
     }
 
   
@@ -2153,7 +2344,7 @@ class DriverHomeViewModel @Inject constructor(
                         _uiState.value = _uiState.value.copy(
                             passengerLocation = point
                         )
-                        Log.d("DriverHomeViewModel", "Updated passenger location: ${point.latitude()}, ${point.longitude()}")
+                        d("DriverHomeViewModel", "Updated passenger location: ${point.latitude()}, ${point.longitude()}")
 
                         // Only recalculate route for driver's current location changes, NOT passenger GPS changes
                         // Reason: During pickup phase, driver routes to STATIC pickup address
@@ -2163,7 +2354,7 @@ class DriverHomeViewModel @Inject constructor(
                 }
             }
         } catch (e: Exception) {
-            Log.e("DriverHomeViewModel", "Failed to observe passenger location", e)
+            e("DriverHomeViewModel", "Failed to observe passenger location", e)
         }
     }
 
@@ -2172,7 +2363,7 @@ class DriverHomeViewModel @Inject constructor(
      */
     private suspend fun observeBookingStatus(bookingId: String) {
         try {
-            Log.d("DriverHomeViewModel", "👀 Starting to observe booking status for: $bookingId")
+            d("DriverHomeViewModel", "👀 Starting to observe booking status for: $bookingId")
             bookingRepository.observeBooking(bookingId).collect { result ->
                 result.onSuccess { updatedBooking ->
                     if (updatedBooking != null) {
@@ -2184,7 +2375,7 @@ class DriverHomeViewModel @Inject constructor(
                         val isInQueue = currentState.queuedBookings.any { it.id == bookingId }
                         val queuedBooking = currentState.queuedBookings.find { it.id == bookingId }
 
-                        Log.d("DriverHomeViewModel", "📊 Observing booking $bookingId: isCurrent=$isCurrentBooking, isQueued=$isInQueue, status=${updatedBooking.status}")
+                        d("DriverHomeViewModel", "📊 Observing booking $bookingId: isCurrent=$isCurrentBooking, isQueued=$isInQueue, status=${updatedBooking.status}")
 
                         // Only process if this booking is either current or queued
                         if (isCurrentBooking || isInQueue) {
@@ -2194,29 +2385,29 @@ class DriverHomeViewModel @Inject constructor(
 
                                 // Only process if status actually changed to CANCELLED
                                 if (previousStatus != BookingStatus.CANCELLED) {
-                                    Log.e("DriverHomeViewModel", "🚫 CANCELLATION DETECTED for booking $bookingId")
-                                    Log.e("DriverHomeViewModel", "   - Is current booking: $isCurrentBooking")
-                                    Log.e("DriverHomeViewModel", "   - Is in queue: $isInQueue")
-                                    Log.e("DriverHomeViewModel", "   - Cancelled by: ${updatedBooking.cancelledBy}")
-                                    Log.e("DriverHomeViewModel", "🧹 Starting cleanup for specific booking...")
+                                    e("DriverHomeViewModel", "🚫 CANCELLATION DETECTED for booking $bookingId")
+                                    e("DriverHomeViewModel", "   - Is current booking: $isCurrentBooking")
+                                    e("DriverHomeViewModel", "   - Is in queue: $isInQueue")
+                                    e("DriverHomeViewModel", "   - Cancelled by: ${updatedBooking.cancelledBy}")
+                                    e("DriverHomeViewModel", "🧹 Starting cleanup for specific booking...")
 
                                     // Remove only this specific cancelled booking, keep others
                                     handleSpecificBookingCancellation(bookingId, updatedBooking.cancelledBy ?: "unknown")
 
-                                    Log.i("DriverHomeViewModel", "✅ Cleanup completed for booking: $bookingId")
+                                    i("DriverHomeViewModel", "✅ Cleanup completed for booking: $bookingId")
                                     return@collect // Exit the observer since booking is cancelled
                                 }
                             } else if (isCurrentBooking) {
                                 // Update current booking with new data (other status changes)
                                 _uiState.value = currentState.copy(currentBooking = updatedBooking)
-                                Log.d("DriverHomeViewModel", "🔄 Updated current booking with new status: ${updatedBooking.status}")
+                                d("DriverHomeViewModel", "🔄 Updated current booking with new status: ${updatedBooking.status}")
 
                                 // IMPORTANT: Only trigger route-related side effects for CURRENT booking
                                 if (updatedBooking.status == BookingStatus.IN_PROGRESS) {
                                     // Reset route flag when status changes to IN_PROGRESS (new destination: pickup -> dropoff)
                                     isRouteCalculated = false
                                     lastCalculatedDestination = null
-                                    android.util.Log.d("DriverHomeVM", "🔄 Route flag reset - Current booking status changed to IN_PROGRESS, will calculate route to destination")
+                                    d("DriverHomeVM", "🔄 Route flag reset - Current booking status changed to IN_PROGRESS, will calculate route to destination")
 
                                     // Fetch route from pickup to destination for navigation (ONLY for current booking)
                                     fetchRouteForTrip(updatedBooking)
@@ -2227,29 +2418,29 @@ class DriverHomeViewModel @Inject constructor(
                                     if (booking.id == bookingId) updatedBooking else booking
                                 }
                                 _uiState.value = currentState.copy(queuedBookings = updatedQueue)
-                                Log.d("DriverHomeViewModel", "🔄 Updated queued booking with new status: ${updatedBooking.status}")
+                                d("DriverHomeViewModel", "🔄 Updated queued booking with new status: ${updatedBooking.status}")
 
                                 // IMPORTANT: DO NOT trigger route calculations for queued bookings
                                 if (updatedBooking.status == BookingStatus.IN_PROGRESS) {
-                                    Log.w("DriverHomeViewModel", "⚠️ Queued booking ${bookingId} status changed to IN_PROGRESS, but NOT triggering route calculation (only current booking gets routes)")
+                                    w("DriverHomeViewModel", "⚠️ Queued booking ${bookingId} status changed to IN_PROGRESS, but NOT triggering route calculation (only current booking gets routes)")
                                 }
                             }
                         } else {
-                            Log.w("DriverHomeViewModel", "⚠️ Received update for booking not in current/queue. BookingId: $bookingId")
+                            w("DriverHomeViewModel", "⚠️ Received update for booking not in current/queue. BookingId: $bookingId")
                         }
                     } else {
                         // Booking was deleted, treat as cancellation
-                        Log.w("DriverHomeViewModel", "🗑️ Booking $bookingId document was deleted - treating as emergency cancellation")
+                        w("DriverHomeViewModel", "🗑️ Booking $bookingId document was deleted - treating as emergency cancellation")
                         handleSpecificBookingCancellation(bookingId, "system_deleted")
                     }
                 }.onFailure { exception ->
-                    Log.e("DriverHomeViewModel", "❌ Failed to observe booking status for $bookingId", exception)
+                    e("DriverHomeViewModel", "❌ Failed to observe booking status for $bookingId", exception)
                     // If observation fails, we might need to check manually
                     scheduleManualCancellationCheck(bookingId)
                 }
             }
         } catch (e: Exception) {
-            Log.e("DriverHomeViewModel", "💥 CRITICAL: Failed to set up booking status observer for $bookingId", e)
+            e("DriverHomeViewModel", "💥 CRITICAL: Failed to set up booking status observer for $bookingId", e)
             // Schedule manual check as backup
             scheduleManualCancellationCheck(bookingId)
         }
@@ -2261,15 +2452,15 @@ class DriverHomeViewModel @Inject constructor(
      */
     private suspend fun handleSpecificBookingCancellation(cancelledBookingId: String, cancelledBy: String) {
         try {
-            Log.e("DriverHomeViewModel", "🧹 handleSpecificBookingCancellation for booking: $cancelledBookingId (by: $cancelledBy)")
+            e("DriverHomeViewModel", "🧹 handleSpecificBookingCancellation for booking: $cancelledBookingId (by: $cancelledBy)")
 
             val currentState = _uiState.value
             val isCurrentBooking = currentState.currentBooking?.id == cancelledBookingId
             val isInQueue = currentState.queuedBookings.any { it.id == cancelledBookingId }
 
-            Log.e("DriverHomeViewModel", "📋 BEFORE CANCELLATION:")
-            Log.e("DriverHomeViewModel", "   - currentBooking: ${currentState.currentBooking?.id}")
-            Log.e("DriverHomeViewModel", "   - queuedBookings: ${currentState.queuedBookings.map { it.id }}")
+            e("DriverHomeViewModel", "📋 BEFORE CANCELLATION:")
+            e("DriverHomeViewModel", "   - currentBooking: ${currentState.currentBooking?.id}")
+            e("DriverHomeViewModel", "   - queuedBookings: ${currentState.queuedBookings.map { it.id }}")
 
             // Remove cancelled booking from queue
             val filteredQueue = currentState.queuedBookings.filter { it.id != cancelledBookingId }
@@ -2292,11 +2483,11 @@ class DriverHomeViewModel @Inject constructor(
 
             val hasRemainingRides = newCurrentBooking != null || newQueue.isNotEmpty()
 
-            Log.e("DriverHomeViewModel", "📝 AFTER CANCELLATION:")
-            Log.e("DriverHomeViewModel", "   - NEW currentBooking: ${newCurrentBooking?.id}")
-            Log.e("DriverHomeViewModel", "   - NEW queuedBookings: ${newQueue.map { it.id }}")
-            Log.e("DriverHomeViewModel", "   - Has remaining rides: $hasRemainingRides")
-            Log.e("DriverHomeViewModel", "   - Should keep 60/40 view: $hasRemainingRides")
+            e("DriverHomeViewModel", "📝 AFTER CANCELLATION:")
+            e("DriverHomeViewModel", "   - NEW currentBooking: ${newCurrentBooking?.id}")
+            e("DriverHomeViewModel", "   - NEW queuedBookings: ${newQueue.map { it.id }}")
+            e("DriverHomeViewModel", "   - Has remaining rides: $hasRemainingRides")
+            e("DriverHomeViewModel", "   - Should keep 60/40 view: $hasRemainingRides")
 
             // Update state
             _uiState.value = currentState.copy(
@@ -2314,7 +2505,7 @@ class DriverHomeViewModel @Inject constructor(
                     "A passenger cancelled their ride request." else null
             )
 
-            Log.e("DriverHomeViewModel", "✅ State updated - UI should ${if (hasRemainingRides) "STAY in 60/40" else "go to 100%"} view")
+            e("DriverHomeViewModel", "✅ State updated - UI should ${if (hasRemainingRides) "STAY in 60/40" else "go to 100%"} view")
 
             // Only stop navigation if no remaining rides
             if (!hasRemainingRides) {
@@ -2323,7 +2514,7 @@ class DriverHomeViewModel @Inject constructor(
 
             // If we promoted a new current booking, start observing it and fetch route
             if (isCurrentBooking && newCurrentBooking != null) {
-                Log.d("DriverHomeViewModel", "🔄 Promoted booking ${newCurrentBooking.id} to current, starting observers and fetching route")
+                d("DriverHomeViewModel", "🔄 Promoted booking ${newCurrentBooking.id} to current, starting observers and fetching route")
 
                 // Get passenger location
                 viewModelScope.launch {
@@ -2357,10 +2548,10 @@ class DriverHomeViewModel @Inject constructor(
                         mapboxRepository.getRoute(driverLocation, newCurrentBooking.pickupLocation)
                             .onSuccess { route ->
                                 _uiState.value = _uiState.value.copy(routeInfo = route)
-                                Log.d("DriverHomeViewModel", "✅ Route fetched for promoted booking: ${route.totalDistance}km")
+                                d("DriverHomeViewModel", "✅ Route fetched for promoted booking: ${route.totalDistance}km")
                             }
                             .onFailure { e ->
-                                Log.e("DriverHomeViewModel", "❌ Failed to fetch route for promoted booking", e)
+                                e("DriverHomeViewModel", "❌ Failed to fetch route for promoted booking", e)
                             }
                     }
 
@@ -2370,7 +2561,7 @@ class DriverHomeViewModel @Inject constructor(
             }
 
         } catch (e: Exception) {
-            Log.e("DriverHomeViewModel", "💥 CRITICAL: handleSpecificBookingCancellation failed", e)
+            e("DriverHomeViewModel", "💥 CRITICAL: handleSpecificBookingCancellation failed", e)
         }
     }
 
@@ -2381,7 +2572,7 @@ class DriverHomeViewModel @Inject constructor(
      */
     private suspend fun performGhostRideCleanup(cancelledBy: String) {
         try {
-            Log.i("DriverHomeViewModel", "🧹 Starting ghost ride cleanup (cancelled by: $cancelledBy)")
+            i("DriverHomeViewModel", "🧹 Starting ghost ride cleanup (cancelled by: $cancelledBy)")
 
             val currentState = _uiState.value
             val hadAcceptedBooking = currentState.currentBooking != null
@@ -2431,7 +2622,7 @@ class DriverHomeViewModel @Inject constructor(
                 errorMessage = if (cancelledBy == "passenger" && hadAcceptedBooking) "A passenger cancelled their ride request." else null
             )
 
-            Log.d("DriverHomeViewModel", "🧹 Ghost ride cleanup completed - removed requests for booking: $cancelledBookingId")
+            d("DriverHomeViewModel", "🧹 Ghost ride cleanup completed - removed requests for booking: $cancelledBookingId")
 
             // Stop navigation to reset map view to normal mode
             // Only call stopNavigation if we don't have remaining rides to avoid interfering with 60/40 split view
@@ -2452,9 +2643,9 @@ class DriverHomeViewModel @Inject constructor(
                     longitude = currentLocation.longitude(),
                     online = true // Critical: ensure driver is marked as online
                 ).onSuccess {
-                    Log.d("DriverHomeViewModel", "✅ Driver location updated: online=true")
+                    d("DriverHomeViewModel", "✅ Driver location updated: online=true")
                 }.onFailure { e ->
-                    Log.e("DriverHomeViewModel", "❌ Failed to update driver location", e)
+                    e("DriverHomeViewModel", "❌ Failed to update driver location", e)
                 }
             }
 
@@ -2463,18 +2654,18 @@ class DriverHomeViewModel @Inject constructor(
                 online = true,
                 vehicleCategory = currentState.selectedVehicleCategory
             ).onSuccess {
-                Log.d("DriverHomeViewModel", "✅ Driver status updated: online=true")
+                d("DriverHomeViewModel", "✅ Driver status updated: online=true")
             }.onFailure { e ->
-                Log.e("DriverHomeViewModel", "❌ Failed to update driver status", e)
+                e("DriverHomeViewModel", "❌ Failed to update driver status", e)
             }
 
             // Reset proximity alerts
             resetProximityAlerts()
 
-            Log.i("DriverHomeViewModel", "✅ Ghost ride cleanup completed successfully")
+            i("DriverHomeViewModel", "✅ Ghost ride cleanup completed successfully")
 
         } catch (e: Exception) {
-            Log.e("DriverHomeViewModel", "💥 CRITICAL: Ghost ride cleanup failed", e)
+            e("DriverHomeViewModel", "💥 CRITICAL: Ghost ride cleanup failed", e)
             // Even if cleanup fails, try to at least clear the current booking
             _uiState.value = _uiState.value.copy(
                 currentBooking = null,
@@ -2488,7 +2679,7 @@ class DriverHomeViewModel @Inject constructor(
      */
     private fun scheduleManualCancellationCheck(bookingId: String) {
         viewModelScope.launch {
-            Log.w("DriverHomeViewModel", "⏰ Scheduling manual cancellation check for booking: $bookingId")
+            w("DriverHomeViewModel", "⏰ Scheduling manual cancellation check for booking: $bookingId")
 
             // Check every 5 seconds for up to 1 minute
             repeat(12) { attempt ->
@@ -2499,23 +2690,23 @@ class DriverHomeViewModel @Inject constructor(
                     result.fold(
                         onSuccess = { booking ->
                             if (booking?.status == BookingStatus.CANCELLED) {
-                                Log.i("DriverHomeViewModel", "🔍 Manual check detected cancellation for booking: $bookingId")
+                                i("DriverHomeViewModel", "🔍 Manual check detected cancellation for booking: $bookingId")
                                 performGhostRideCleanup(booking.cancelledBy ?: "manual_check")
                                 return@launch // Stop checking
                             } else if (_uiState.value.currentBooking?.id == bookingId) {
-                                Log.d("DriverHomeViewModel", "🔍 Manual check: booking still active (attempt ${attempt + 1}/12)")
+                                d("DriverHomeViewModel", "🔍 Manual check: booking still active (attempt ${attempt + 1}/12)")
                             }
                         },
                         onFailure = {
-                            Log.w("DriverHomeViewModel", "🔍 Manual check failed (attempt ${attempt + 1}/12)")
+                            w("DriverHomeViewModel", "🔍 Manual check failed (attempt ${attempt + 1}/12)")
                         }
                     )
                 } catch (e: Exception) {
-                    Log.e("DriverHomeViewModel", "🔍 Manual check error (attempt ${attempt + 1}/12)", e)
+                    e("DriverHomeViewModel", "🔍 Manual check error (attempt ${attempt + 1}/12)", e)
                 }
             }
 
-            Log.w("DriverHomeViewModel", "⏰ Manual cancellation check completed for booking: $bookingId")
+            w("DriverHomeViewModel", "⏰ Manual cancellation check completed for booking: $bookingId")
         }
     }
 
@@ -2527,12 +2718,12 @@ class DriverHomeViewModel @Inject constructor(
         // with turn-by-turn directions
         val lat = destination.coordinates.latitude
         val lng = destination.coordinates.longitude
-        Log.d("DriverHomeViewModel", "Opening external navigation to: $lat, $lng (${destination.address})")
+        d("DriverHomeViewModel", "Opening external navigation to: $lat, $lng (${destination.address})")
         // Intent to open navigation app would go here in actual implementation
     }
 
     fun stopNavigation() {
-        Log.d("DriverHomeViewModel", "Navigation stopped")
+        d("DriverHomeViewModel", "Navigation stopped")
         // Stop any ongoing navigation tracking
         _uiState.value = _uiState.value.copy(routeInfo = null)
     }
@@ -2541,12 +2732,12 @@ class DriverHomeViewModel @Inject constructor(
      * Fetch route information for trip navigation
      */
     private fun fetchRouteForTrip(booking: Booking) {
-        Log.d("DriverHomeViewModel", "fetchRouteForTrip: Starting ACTIVE RIDE route calculation from current location to destination")
+        d("DriverHomeViewModel", "fetchRouteForTrip: Starting ACTIVE RIDE route calculation from current location to destination")
 
         // Get driver's current location
         val currentLocation = _uiState.value.currentUserLocation
         if (currentLocation == null) {
-            Log.w("DriverHomeViewModel", "Cannot fetch route: Current location is null")
+            w("DriverHomeViewModel", "Cannot fetch route: Current location is null")
             return
         }
 
@@ -2558,51 +2749,51 @@ class DriverHomeViewModel @Inject constructor(
             )
         )
 
-        Log.d("DriverHomeViewModel", "  Current Location: (${currentLocation.latitude()}, ${currentLocation.longitude()})")
-        Log.d("DriverHomeViewModel", "  Destination: ${booking.destination.address} (${booking.destination.coordinates.latitude}, ${booking.destination.coordinates.longitude})")
+        d("DriverHomeViewModel", "  Current Location: (${currentLocation.latitude()}, ${currentLocation.longitude()})")
+        d("DriverHomeViewModel", "  Destination: ${booking.destination.address} (${booking.destination.coordinates.latitude}, ${booking.destination.coordinates.longitude})")
 
         viewModelScope.launch {
             try {
                 // Force real Mapbox Directions API for active ride navigation - from CURRENT location to destination
                 mapboxRepository.getRoute(driverCurrentLocation, booking.destination, forceRealRoute = true)
                     .onSuccess { route ->
-                        Log.d("DriverHomeViewModel", "fetchRouteForTrip: ACTIVE RIDE route calculation SUCCESS!")
-                        Log.d("DriverHomeViewModel", "  Route ID: ${route.routeId}")
-                        Log.d("DriverHomeViewModel", "  Waypoints: ${route.waypoints.size}")
-                        Log.d("DriverHomeViewModel", "  Distance: ${route.totalDistance}km")
-                        Log.d("DriverHomeViewModel", "  Duration: ${route.estimatedDuration}min")
+                        d("DriverHomeViewModel", "fetchRouteForTrip: ACTIVE RIDE route calculation SUCCESS!")
+                        d("DriverHomeViewModel", "  Route ID: ${route.routeId}")
+                        d("DriverHomeViewModel", "  Waypoints: ${route.waypoints.size}")
+                        d("DriverHomeViewModel", "  Distance: ${route.totalDistance}km")
+                        d("DriverHomeViewModel", "  Duration: ${route.estimatedDuration}min")
 
                         if (route.routeId.startsWith("simple_direct")) {
-                            Log.w("DriverHomeViewModel", "⚠️ WARNING: fetchRouteForTrip got simple direct route instead of real roads for active ride!")
+                            w("DriverHomeViewModel", "⚠️ WARNING: fetchRouteForTrip got simple direct route instead of real roads for active ride!")
                         } else {
-                            Log.i("DriverHomeViewModel", "✅ SUCCESS: fetchRouteForTrip using real Mapbox Directions API for active ride")
+                            i("DriverHomeViewModel", "✅ SUCCESS: fetchRouteForTrip using real Mapbox Directions API for active ride")
                         }
 
                         _uiState.value = _uiState.value.copy(routeInfo = route)
 
-                        Log.d("DriverHomeViewModel", "fetchRouteForTrip: UI State updated with routeInfo")
-                        Log.d("DriverHomeViewModel", "  Current booking status: ${_uiState.value.currentBooking?.status}")
-                        Log.d("DriverHomeViewModel", "  showRoute will be: ${_uiState.value.currentBooking != null}")
+                        d("DriverHomeViewModel", "fetchRouteForTrip: UI State updated with routeInfo")
+                        d("DriverHomeViewModel", "  Current booking status: ${_uiState.value.currentBooking?.status}")
+                        d("DriverHomeViewModel", "  showRoute will be: ${_uiState.value.currentBooking != null}")
 
                         if (route.routeId.startsWith("fallback_route_")) {
-                            Log.i("DriverHomeViewModel", "Using fallback route - ${"%.1f".format(route.totalDistance)}km estimated")
+                            i("DriverHomeViewModel", "Using fallback route - ${"%.1f".format(route.totalDistance)}km estimated")
                             // Show notification about fallback route
                             _uiState.value = _uiState.value.copy(
                                 errorMessage = "ℹ️ Showing estimated route. For precise navigation, use Google Maps or Waze.",
                             )
                         } else {
-                            Log.d("DriverHomeViewModel", "Route fetched successfully with ${route.waypoints.size} waypoints")
+                            d("DriverHomeViewModel", "Route fetched successfully with ${route.waypoints.size} waypoints")
                         }
                     }
                     .onFailure { exception ->
-                        Log.e("DriverHomeViewModel", "Failed to fetch route for trip", exception)
+                        e("DriverHomeViewModel", "Failed to fetch route for trip", exception)
                         // Still allow trip to continue without route visualization
                         _uiState.value = _uiState.value.copy(
                             errorMessage = "Navigation temporarily unavailable. Please use your preferred maps app."
                         )
                     }
             } catch (e: Exception) {
-                Log.e("DriverHomeViewModel", "Error fetching route for trip", e)
+                e("DriverHomeViewModel", "Error fetching route for trip", e)
             }
         }
     }
@@ -2614,14 +2805,14 @@ class DriverHomeViewModel @Inject constructor(
         val currentLocation = _uiState.value.currentUserLocation ?: return
         val queuedBookings = _uiState.value.queuedBookings
 
-        android.util.Log.d("DriverHomeViewModel", "🚀 Pre-caching routes for ${queuedBookings.size} queued bookings")
+        d("DriverHomeViewModel", "🚀 Pre-caching routes for ${queuedBookings.size} queued bookings")
 
         val updatedCachedRoutes = _uiState.value.cachedRoutes.toMutableMap()
 
         queuedBookings.forEach { booking ->
             // Skip if route is already cached
             if (updatedCachedRoutes.containsKey(booking.id)) {
-                android.util.Log.d("DriverHomeViewModel", "   ✅ Route already cached for booking ${booking.id}")
+                d("DriverHomeViewModel", "   ✅ Route already cached for booking ${booking.id}")
                 return@forEach
             }
 
@@ -2631,23 +2822,23 @@ class DriverHomeViewModel @Inject constructor(
                     coordinates = GeoPoint(currentLocation.latitude(), currentLocation.longitude())
                 )
 
-                android.util.Log.d("DriverHomeViewModel", "   📍 Calculating route to booking ${booking.id} pickup")
+                d("DriverHomeViewModel", "   📍 Calculating route to booking ${booking.id} pickup")
 
                 mapboxRepository.getRoute(driverLocation, booking.pickupLocation, forceRealRoute = true)
                     .onSuccess { route ->
                         updatedCachedRoutes[booking.id] = route
-                        android.util.Log.d("DriverHomeViewModel", "   ✅ Route cached for booking ${booking.id}: ${route.totalDistance}km, ${route.estimatedDuration}min")
+                        d("DriverHomeViewModel", "   ✅ Route cached for booking ${booking.id}: ${route.totalDistance}km, ${route.estimatedDuration}min")
 
                         // Update UI with new cached routes
                         _uiState.value = _uiState.value.copy(cachedRoutes = updatedCachedRoutes)
                     }
                     .onFailure { error ->
-                        android.util.Log.e("DriverHomeViewModel", "   ❌ Failed to cache route for booking ${booking.id} - no straight line fallback", error)
+                        e("DriverHomeViewModel", "   ❌ Failed to cache route for booking ${booking.id} - no straight line fallback", error)
                         // Don't cache anything - better to show no route than a straight line
                     }
 
             } catch (e: Exception) {
-                android.util.Log.e("DriverHomeViewModel", "   ❌ Exception caching route for booking ${booking.id}", e)
+                e("DriverHomeViewModel", "   ❌ Exception caching route for booking ${booking.id}", e)
             }
         }
     }
@@ -2687,9 +2878,9 @@ class DriverHomeViewModel @Inject constructor(
                 }
             }
 
-            Log.d("DriverHomeViewModel", "Loaded ${ratedBookings.size} already-rated bookings from SharedPreferences")
+            d("DriverHomeViewModel", "Loaded ${ratedBookings.size} already-rated bookings from SharedPreferences")
         } catch (e: Exception) {
-            Log.e("DriverHomeViewModel", "Error loading rated bookings", e)
+            e("DriverHomeViewModel", "Error loading rated bookings", e)
         }
     }
 
@@ -2704,13 +2895,13 @@ class DriverHomeViewModel @Inject constructor(
      * Reset rating navigation trigger after navigating to rating screen
      */
     fun resetRatingTrigger() {
-        android.util.Log.d("DriverHomeViewModel", "resetRatingTrigger called - current queued bookings: ${_uiState.value.queuedBookings.size}")
+        d("DriverHomeViewModel", "resetRatingTrigger called - current queued bookings: ${_uiState.value.queuedBookings.size}")
         _uiState.value = _uiState.value.copy(
             shouldNavigateToRating = false,
             completedBookingId = null,
             completedPassengerId = null
         )
-        android.util.Log.d("DriverHomeViewModel", "resetRatingTrigger completed - queued bookings preserved: ${_uiState.value.queuedBookings.size}")
+        d("DriverHomeViewModel", "resetRatingTrigger completed - queued bookings preserved: ${_uiState.value.queuedBookings.size}")
     }
 
     /**
@@ -2727,10 +2918,10 @@ class DriverHomeViewModel @Inject constructor(
      */
     fun advanceToNextBookingAfterRating() {
         val currentQueuedBookings = _uiState.value.queuedBookings
-        android.util.Log.d("DriverHomeViewModel", "advanceToNextBookingAfterRating called with ${currentQueuedBookings.size} queued bookings")
+        d("DriverHomeViewModel", "advanceToNextBookingAfterRating called with ${currentQueuedBookings.size} queued bookings")
 
         if (currentQueuedBookings.isEmpty()) {
-            android.util.Log.w("DriverHomeViewModel", "No queued bookings to advance to")
+            w("DriverHomeViewModel", "No queued bookings to advance to")
             return
         }
 
@@ -2738,7 +2929,7 @@ class DriverHomeViewModel @Inject constructor(
         val remainingQueue = currentQueuedBookings.drop(1)
 
         if (nextBooking != null) {
-            android.util.Log.d("DriverHomeViewModel", "Advancing to next booking after rating: ${nextBooking.id}, remaining queue size: ${remainingQueue.size}")
+            d("DriverHomeViewModel", "Advancing to next booking after rating: ${nextBooking.id}, remaining queue size: ${remainingQueue.size}")
 
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
@@ -2790,10 +2981,10 @@ class DriverHomeViewModel @Inject constructor(
                 if (cachedRoute != null) {
                     // Use cached route instantly
                     _uiState.value = _uiState.value.copy(routeInfo = cachedRoute)
-                    android.util.Log.d("DriverHomeViewModel", "⚡ Using cached route for next passenger: ${nextBooking.id}")
+                    d("DriverHomeViewModel", "⚡ Using cached route for next passenger: ${nextBooking.id}")
                 } else {
                     // No cached route, calculate it
-                    android.util.Log.d("DriverHomeViewModel", "No cached route for ${nextBooking.id}, calculating now...")
+                    d("DriverHomeViewModel", "No cached route for ${nextBooking.id}, calculating now...")
 
                     val currentLocation = _uiState.value.currentUserLocation
                     if (currentLocation != null) {
@@ -2805,10 +2996,10 @@ class DriverHomeViewModel @Inject constructor(
                         mapboxRepository.getRoute(driverLocation, nextBooking.pickupLocation, forceRealRoute = true)
                             .onSuccess { route ->
                                 _uiState.value = _uiState.value.copy(routeInfo = route)
-                                android.util.Log.d("DriverHomeViewModel", "Route calculated for next passenger: ${nextBooking.id}")
+                                d("DriverHomeViewModel", "Route calculated for next passenger: ${nextBooking.id}")
                             }
                             .onFailure { error ->
-                                android.util.Log.e("DriverHomeViewModel", "Failed to calculate route for next passenger: ${nextBooking.id} - no straight line fallback", error)
+                                e("DriverHomeViewModel", "Failed to calculate route for next passenger: ${nextBooking.id} - no straight line fallback", error)
                                 // Keep routeInfo as null - better to show no route than a straight line
                             }
                     }
@@ -2833,7 +3024,7 @@ class DriverHomeViewModel @Inject constructor(
                 queuedBookings = emptyList()
             )
 
-            android.util.Log.d("DriverHomeViewModel", "No more queued bookings, staying online and available")
+            d("DriverHomeViewModel", "No more queued bookings, staying online and available")
         }
     }
 
@@ -2843,9 +3034,9 @@ class DriverHomeViewModel @Inject constructor(
     private fun checkProximityToPickup(driverLocation: Point) {
         val currentBooking = _uiState.value.currentBooking
 
-        android.util.Log.d("DriverHomeVM", "🔍 Checking proximity to pickup...")
-        android.util.Log.d("DriverHomeVM", "   📋 Current booking: ${currentBooking?.id}")
-        android.util.Log.d("DriverHomeVM", "   📊 Booking status: ${currentBooking?.status}")
+        d("DriverHomeVM", "🔍 Checking proximity to pickup...")
+        d("DriverHomeVM", "   📋 Current booking: ${currentBooking?.id}")
+        d("DriverHomeVM", "   📊 Booking status: ${currentBooking?.status}")
 
         // Only check proximity for active bookings where driver is heading to pickup
         if (currentBooking != null &&
@@ -2864,12 +3055,12 @@ class DriverHomeViewModel @Inject constructor(
                 driverLocation.longitude()
             )
 
-            android.util.Log.i("DriverHomeVM", "✅ PROXIMITY CHECK ACTIVE - Driver heading to pickup")
+            i("DriverHomeVM", "✅ PROXIMITY CHECK ACTIVE - Driver heading to pickup")
 
             // Check proximity and trigger alerts if close to pickup
             proximityAlertUtils.checkProximityAndAlert(driverGeoPoint, pickupLocation)
         } else {
-            android.util.Log.d("DriverHomeVM", "❌ No proximity check - No active booking or not heading to pickup")
+            d("DriverHomeVM", "❌ No proximity check - No active booking or not heading to pickup")
         }
     }
 
@@ -2878,7 +3069,7 @@ class DriverHomeViewModel @Inject constructor(
      */
     private fun resetProximityAlerts() {
         proximityAlertUtils.resetAlerts()
-        android.util.Log.d("DriverHomeVM", "Proximity alerts reset for new booking")
+        d("DriverHomeVM", "Proximity alerts reset for new booking")
     }
 
     /**
@@ -2897,7 +3088,7 @@ class DriverHomeViewModel @Inject constructor(
             recentDeclinedRequests = filteredRecentDeclinedRequests
         )
 
-        android.util.Log.d("DriverHomeVM", "Removed request ${request.requestId} from UI. Remaining: ${filteredIncomingRequests.size} incoming, ${filteredSecondChanceRequests.size} second chance")
+        d("DriverHomeVM", "Removed request ${request.requestId} from UI. Remaining: ${filteredIncomingRequests.size} incoming, ${filteredSecondChanceRequests.size} second chance")
     }
 
 
@@ -2912,7 +3103,7 @@ class DriverHomeViewModel @Inject constructor(
                 onSuccess = { booking ->
                     val isCancelled = booking?.status == BookingStatus.CANCELLED
                     if (isCancelled) {
-                        android.util.Log.d("DriverHomeVM", "Booking $bookingId is cancelled - removing associated requests")
+                        d("DriverHomeVM", "Booking $bookingId is cancelled - removing associated requests")
                     }
                     isCancelled
                 },
@@ -2921,7 +3112,7 @@ class DriverHomeViewModel @Inject constructor(
                 }
             )
         } catch (e: Exception) {
-            android.util.Log.w("DriverHomeVM", "Error checking booking status for $bookingId", e)
+            w("DriverHomeVM", "Error checking booking status for $bookingId", e)
             false // Default to not cancelled on error
         }
     }
@@ -2965,7 +3156,7 @@ class DriverHomeViewModel @Inject constructor(
 
             Result.success(filteredAndSortedBookings)
         } catch (e: Exception) {
-            android.util.Log.e("DriverHomeVM", "Error getting completed trips", e)
+            e("DriverHomeVM", "Error getting completed trips", e)
             Result.failure(e)
         }
     }
@@ -3008,7 +3199,7 @@ class DriverHomeViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-                Log.e("DriverHomeViewModel", "Error loading booking", e)
+                e("DriverHomeViewModel", "Error loading booking", e)
             }
         }
     }
@@ -3023,7 +3214,7 @@ class DriverHomeViewModel @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
-                Log.e("DriverHomeViewModel", "Error loading passenger for trip details", e)
+                e("DriverHomeViewModel", "Error loading passenger for trip details", e)
             }
         }
     }
@@ -3034,21 +3225,21 @@ class DriverHomeViewModel @Inject constructor(
         authStateListener = com.google.firebase.auth.FirebaseAuth.AuthStateListener { firebaseAuth ->
             if (firebaseAuth.currentUser == null) {
                 // User signed out - immediately stop all driver services
-                android.util.Log.w("DriverHomeViewModel", "🚪 AUTH STATE CHANGED: User signed out - stopping ALL driver services")
+                w("DriverHomeViewModel", "🚪 AUTH STATE CHANGED: User signed out - stopping ALL driver services")
 
                 viewModelScope.launch {
                     try {
                         // Stop location updates immediately
                         stopLocationUpdates()
-                        android.util.Log.d("DriverHomeViewModel", "✅ Location updates stopped on logout")
+                        d("DriverHomeViewModel", "✅ Location updates stopped on logout")
 
                         // Stop session monitoring
                         stopStaleDriverMonitoring()
-                        android.util.Log.d("DriverHomeViewModel", "✅ Session monitoring stopped on logout")
+                        d("DriverHomeViewModel", "✅ Session monitoring stopped on logout")
 
                         // Set driver offline (just in case it wasn't done already)
                         driverRepository.updateDriverStatus(online = false).onSuccess {
-                            android.util.Log.d("DriverHomeViewModel", "✅ Driver status set offline on logout")
+                            d("DriverHomeViewModel", "✅ Driver status set offline on logout")
                         }
 
                         // Update UI state to offline
@@ -3059,19 +3250,19 @@ class DriverHomeViewModel @Inject constructor(
                             incomingRequests = emptyList()
                         )
 
-                        android.util.Log.d("DriverHomeViewModel", "✅ All driver services stopped successfully on logout")
+                        d("DriverHomeViewModel", "✅ All driver services stopped successfully on logout")
                     } catch (e: Exception) {
-                        android.util.Log.e("DriverHomeViewModel", "❌ Error stopping services on logout", e)
+                        e("DriverHomeViewModel", "❌ Error stopping services on logout", e)
                     }
                 }
             } else {
-                android.util.Log.d("DriverHomeViewModel", "ℹ️ AUTH STATE: User logged in: ${firebaseAuth.currentUser?.uid}")
+                d("DriverHomeViewModel", "ℹ️ AUTH STATE: User logged in: ${firebaseAuth.currentUser?.uid}")
             }
         }
 
         // Add the listener
         authStateListener?.let { auth.addAuthStateListener(it) }
 
-        android.util.Log.d("DriverHomeViewModel", "🔍 Auth state observer registered")
+        d("DriverHomeViewModel", "🔍 Auth state observer registered")
     }
 }
