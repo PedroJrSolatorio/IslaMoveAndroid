@@ -18,3 +18,4 @@ app/src/main/assets/*.json
 *.keystore
 *.apk
 output-metadata.json
+app/release/baselineProfiles/
