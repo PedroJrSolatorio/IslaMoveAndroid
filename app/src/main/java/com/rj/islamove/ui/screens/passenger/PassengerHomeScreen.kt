@@ -995,7 +995,7 @@ private fun MapsContent(
                     }
                 }
             },
-            onBookRide = { bookingLocation, passengerComment ->
+            onBookRide = { bookingLocation, passengerComment, companions ->
                 // Only handle booking if not in special selection modes
                 if (!uiState.isSelectingHomeLocation && !uiState.isSelectingFavoriteLocation && !uiState.isSelectingPickupLocation) {
                     // Set destination and directly book the ride (show "Looking for driver..." state)
@@ -1005,8 +1005,8 @@ private fun MapsContent(
                         placeId = bookingLocation.placeId
                     )
 
-                    // Directly book the ride with comment - this will show "Looking for driver..." state
-                    viewModel.bookRideToLocationWithComment(destination, passengerComment)
+                    // Directly book the ride with comment and companions - this will show "Looking for driver..." state
+                    viewModel.bookRideToLocationWithComment(destination, passengerComment, companions)
                 }
             },
             onCalculateFare = { destinationLocation ->
@@ -1759,7 +1759,6 @@ private fun MapsContent(
     }
 
     } // Close outer Box
-
 }
 
 @Composable

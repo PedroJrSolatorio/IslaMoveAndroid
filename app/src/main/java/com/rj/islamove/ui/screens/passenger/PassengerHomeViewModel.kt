@@ -44,6 +44,7 @@ import kotlinx.coroutines.isActive
 import android.util.Log
 import android.content.Context
 import kotlinx.coroutines.flow.update
+import java.util.UUID
 import javax.inject.Inject
 import kotlin.text.Regex
 
@@ -584,234 +585,146 @@ class PassengerHomeViewModel @Inject constructor(
         }
     }
 
-
-    /**
-     * Create booking with passenger comment - First check for available drivers
-     */
-    fun createBookingWithComment(passengerComment: String = "") {
-        // Check if cancellation is currently in progress
-        if (cancellationInProgress) {
-            Log.d("PassengerHomeViewModel", "Booking creation blocked - cancellation in progress")
-            return
-        }
-
-        // Check if passenger has exceeded cancellation limit
-        if (_uiState.value.hasExceededCancellationLimit) {
-            val resetTime = _uiState.value.cancellationResetTimeMillis
-            val message = if (resetTime != null) {
-                val hoursRemaining = ((resetTime - System.currentTimeMillis()) / (1000 * 60 * 60)).toInt()
-                val minutesRemaining = (((resetTime - System.currentTimeMillis()) / (1000 * 60)) % 60).toInt()
-                "You have reached your cancellation limit (3 cancellations). You can book again in $hoursRemaining hours and $minutesRemaining minutes."
-            } else {
-                "You have reached your cancellation limit (3 cancellations). Please try again later."
-            }
-
-            _uiState.value = _uiState.value.copy(
-                errorMessage = message
-            )
-            return
-        }
-
-        val state = _uiState.value
-        var pickup = state.pickupLocation
-        val destination = state.destination
-        val fareEstimate = state.fareEstimate
-
-        if (pickup == null || destination == null || fareEstimate == null) {
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "Please select pickup and destination locations"
-            )
-            return
-        }
-
-        // IMPORTANT: Update pickup address with boundary name if it's using lat/lng format
-        if (pickup.address.startsWith("Lat:")) {
-            val pickupBoundary = BoundaryFareUtils.determineBoundary(pickup.coordinates, zoneBoundaryRepository)
-            if (pickupBoundary != null) {
-                Log.i("PassengerHomeViewModel", "🔄 Updating pickup before booking from '${pickup.address}' to '$pickupBoundary'")
-                pickup = pickup.copy(address = pickupBoundary)
-            }
-        }
-
-        // Also update destination if it uses generic format and is within a boundary
-        var finalDestination = destination
-        if (destination.address.startsWith("Selected Location") || destination.address.startsWith("Lat:")) {
-            val destBoundary = BoundaryFareUtils.determineBoundary(destination.coordinates, zoneBoundaryRepository)
-            if (destBoundary != null) {
-                Log.i("PassengerHomeViewModel", "🔄 Updating destination before booking from '${destination.address}' to '$destBoundary'")
-                finalDestination = destination.copy(address = destBoundary)
-            }
-        }
-
-        // Update UI state with corrected locations
-        _uiState.value = _uiState.value.copy(
-            pickupLocation = pickup,
-            destination = finalDestination
-        )
-
-        // Check if passenger already has an active trip (not completed)
-        if (state.currentBooking != null && state.currentBooking.status != BookingStatus.COMPLETED) {
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "You already have an active trip. Please complete or cancel your current trip before booking a new one."
-            )
-            return
-        }
-
-        // Additional check: prevent rebooking if rating screen was just shown for a completed trip
-        if (state.completedBookingId != null || state.showRatingScreen) {
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "Please complete the rating for your completed trip before booking a new one."
-            )
-            return
-        }
-
-        // Check if current user is blocked/inactive
-        val currentUserId = firebaseAuth.currentUser?.uid
-        if (currentUserId == null) {
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "Please log in to book a ride."
-            )
-            return
-        }
-
+    private fun createBookingWithCompanions(
+        passengerComment: String,
+        companions: List<CompanionType>,
+        baseFareEstimate: FareEstimate
+    ) {
         viewModelScope.launch {
-            // Verify user status using real-time data
-            val currentUser = _uiState.value.currentUser
-            if (currentUser == null || !currentUser.isActive) {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    errorMessage = "Your account has been blocked. Please contact support for assistance."
+            try {
+                val currentUserId = firebaseAuth.currentUser?.uid ?: return@launch
+                val pickupLocation = _uiState.value.pickupLocation ?: return@launch
+                val destination = _uiState.value.destination ?: return@launch
+
+                // Calculate fares for each companion
+                val companionFaresList = mutableListOf<CompanionFare>()
+                val companionsList = mutableListOf<Companion>()
+
+                companions.forEach { companionType ->
+                    val discountPercentage = when (companionType) {
+                        CompanionType.STUDENT, CompanionType.SENIOR -> 20
+                        CompanionType.CHILD -> 50
+                        else -> 0
+                    }
+
+                    val companionBaseFare = baseFareEstimate.baseFare
+                    val discountAmount = companionBaseFare * (discountPercentage / 100.0)
+                    val finalFare = companionBaseFare - discountAmount
+
+                    companionFaresList.add(
+                        CompanionFare(
+                            companionType = companionType,
+                            baseFare = companionBaseFare,
+                            discountPercentage = discountPercentage,
+                            discountAmount = discountAmount,
+                            finalFare = finalFare
+                        )
+                    )
+
+                    companionsList.add(
+                        Companion(
+                            type = companionType,
+                            discountPercentage = discountPercentage,
+                            fare = finalFare
+                        )
+                    )
+                }
+
+                // Calculate main passenger fare with their discount
+                val passengerDiscountPercentage = _uiState.value.currentUser?.discountPercentage ?: 0
+                val passengerBaseFare = baseFareEstimate.baseFare
+                val passengerDiscountAmount = passengerBaseFare * (passengerDiscountPercentage / 100.0)
+                val passengerFinalFare = passengerBaseFare - passengerDiscountAmount
+
+                // Calculate total fare
+                val totalFare = passengerFinalFare + companionsList.sumOf { it.fare }
+
+                // Create fare breakdown string
+                val breakdown = buildString {
+                    appendLine("Main Passenger: ₱${kotlin.math.floor(passengerBaseFare).toInt()}")
+                    if (passengerDiscountPercentage > 0) {
+                        appendLine("  Discount ($passengerDiscountPercentage%): -₱${kotlin.math.floor(passengerDiscountAmount).toInt()}")
+                        appendLine("  Subtotal: ₱${kotlin.math.floor(passengerFinalFare).toInt()}")
+                    }
+
+                    companionFaresList.forEachIndexed { index, fare ->
+                        val typeName = when (fare.companionType) {
+                            CompanionType.STUDENT -> "Student"
+                            CompanionType.SENIOR -> "Senior"
+                            CompanionType.CHILD -> "Child"
+                            else -> "Companion"
+                        }
+                        appendLine("${typeName} ${index + 1}: ₱${kotlin.math.floor(fare.baseFare).toInt()}")
+                        if (fare.discountPercentage > 0) {
+                            appendLine("  Discount (${fare.discountPercentage}%): -₱${kotlin.math.floor(fare.discountAmount).toInt()}")
+                            appendLine("  Subtotal: ₱${kotlin.math.floor(fare.finalFare).toInt()}")
+                        }
+                    }
+
+                    appendLine("─────────────")
+                    append("TOTAL: ₱${kotlin.math.floor(totalFare).toInt()}")
+                }
+
+                // Create updated fare estimate with breakdown
+                val updatedFareEstimate = baseFareEstimate.copy(
+                    totalEstimate = totalFare,
+                    passengerFare = passengerFinalFare,
+                    companionFares = companionFaresList,
+                    fareBreakdown = breakdown
                 )
-                return@launch
-            }
-            // First, check if there are any online drivers available
-            val onlineDriversCount = _uiState.value.onlineDriverCount
-            if (onlineDriversCount == 0) {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    passengerRoute = null, // Clear route when no drivers available
-                    errorMessage = "No drivers are currently online worldwide. Please try again later."
+
+                // Create booking
+                val bookingId = UUID.randomUUID().toString()
+                val booking = Booking(
+                    id = bookingId,
+                    passengerId = currentUserId,
+                    pickupLocation = pickupLocation,
+                    destination = destination,
+                    fareEstimate = updatedFareEstimate,
+                    status = BookingStatus.PENDING,
+                    requestTime = System.currentTimeMillis(),
+                    specialInstructions = passengerComment,
+                    passengerDiscountPercentage = passengerDiscountPercentage,
+                    companions = companionsList,
+                    totalPassengers = 1 + companions.size
                 )
-                return@launch
+
+                // Save to Firestore
+                bookingRepository.createBooking(booking)
+
+                // Update UI state
+                _uiState.value = _uiState.value.copy(
+                    currentBooking = booking,
+                    showFareEstimate = false,
+                    pickupLocation = null,
+                    destination = null,
+                    fareEstimate = null
+                )
+
+                // Find available drivers using matching repository
+                viewModelScope.launch {
+                    try {
+                        driverMatchingRepository.findAndNotifyDrivers(
+                            booking = booking,
+                            maxDrivers = 10 // Notify up to 10 nearby drivers
+                        )
+                        Log.d("PassengerHomeViewModel", "Successfully notified drivers for booking ${booking.id}")
+                    } catch (e: Exception) {
+                        Log.e("PassengerHomeViewModel", "Error finding drivers", e)
+                        _uiState.value = _uiState.value.copy(
+                            errorMessage = "Could not find nearby drivers. Please try again."
+                        )
+                    }
+                }
+                // Start monitoring booking status for rating screen
+                monitorBookingStatus(booking.id)
+                Log.d("PassengerHomeViewModel", "Started monitoring booking ${booking.id} for status changes")
+            } catch (e: Exception) {
+                Log.e("PassengerHomeViewModel", "Error creating booking with companions", e)
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = "Failed to create booking: ${e.message}"
+                )
             }
-
-            val bookingId = bookingRepository.getNewBookingId()
-            // Use the updated pickup and destination (with boundary names if applicable)
-            val finalPickup = _uiState.value.pickupLocation ?: pickup
-            val finalDest = _uiState.value.destination ?: finalDestination
-            val booking = Booking(
-                id = bookingId,
-                pickupLocation = finalPickup,
-                destination = finalDest,
-                fareEstimate = fareEstimate,
-                status = BookingStatus.PENDING,
-                vehicleCategory = state.selectedVehicleCategory,
-                specialInstructions = passengerComment.trim(), // Add passenger comment here
-                passengerDiscountPercentage = state.currentUser?.discountPercentage
-            )
-
-            // IMMEDIATE UI UPDATE: Show "Looking for driver..." right away
-            _uiState.value = _uiState.value.copy(
-                isLoading = false,  // Stop loading spinner
-                currentBooking = booking,  // Show booking UI immediately
-                showFareEstimate = false,
-                completedBookingId = null,
-                showRatingScreen = false,
-                passengerRoute = null  // Clear fare estimate route while finding driver
-            )
-
-            // Now handle driver matching in the background
-            android.util.Log.d(
-                "PassengerBooking",
-                "Attempting to find and notify drivers for booking: ${booking.id} with comment: '${booking.specialInstructions}'"
-            )
-            driverMatchingRepository.findAndNotifyDrivers(booking)
-                .onSuccess { notifiedDriverIds ->
-                    android.util.Log.d(
-                        "PassengerBooking",
-                        "Driver matching result: ${notifiedDriverIds.size} drivers notified"
-                    )
-                    if (notifiedDriverIds.isEmpty()) {
-                        // No suitable drivers found - clear the booking and show error
-                        android.util.Log.w("PassengerBooking", "No drivers available for booking")
-                        _uiState.value = _uiState.value.copy(
-                            currentBooking = null,  // Clear the optimistic booking
-                            errorMessage = "No drivers available in your area. Service is only available within San Jose, Dinagat Islands."
-                        )
-                    } else {
-                        // Drivers found - create the actual booking in Firestore
-                        android.util.Log.d(
-                            "PassengerBooking",
-                            "Creating booking with ${notifiedDriverIds.size} drivers notified: ${notifiedDriverIds.joinToString()}"
-                        )
-                        createBookingWithDrivers(booking, notifiedDriverIds)
-                    }
-                }
-                .onFailure { exception ->
-                    // Driver matching failed - clear the optimistic booking and show error
-                    val errorMsg = exception.message ?: "Failed to find nearby drivers"
-                    if (errorMsg.contains("must be within", ignoreCase = true)) {
-                        _uiState.value = _uiState.value.copy(
-                            currentBooking = null,  // Clear the optimistic booking
-                            showServiceBoundaryDialog = true,
-                            serviceBoundaryMessage = errorMsg
-                        )
-                    } else {
-                        _uiState.value = _uiState.value.copy(
-                            currentBooking = null,  // Clear the optimistic booking
-                            errorMessage = "Failed to find nearby drivers: $errorMsg"
-                        )
-                    }
-                }
-        }
-    }
-
-    /**
-     * Create booking after confirming drivers are available
-     */
-    private fun createBookingWithDrivers(booking: Booking, notifiedDriverIds: List<String>) {
-        // Check if cancellation is currently in progress
-        if (cancellationInProgress) {
-            Log.d("PassengerHomeViewModel", "createBookingWithDrivers blocked - cancellation in progress")
-            return
-        }
-
-        viewModelScope.launch {
-            // Double-check cancellation status inside the coroutine
-            if (cancellationInProgress) {
-                Log.d("PassengerHomeViewModel", "createBookingWithDrivers coroutine blocked - cancellation in progress")
-                return@launch
-            }
-            bookingRepository.createBooking(booking)
-                .onSuccess {
-                    // ADD THIS CHECK: If this booking was cancelled while we were creating it, do nothing.
-                    if (locallyCancelledBookings.contains(booking.id)) {
-                        Log.d("PassengerHomeViewModel", "Booking ${booking.id} was cancelled during creation. Aborting UI update.")
-                        return@onSuccess
-                    }
-
-                    // Reset proximity alerts for new booking
-                    resetProximityAlerts()
-
-                    // Clear any completed booking before setting the new one
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        currentBooking = booking,
-                        showFareEstimate = false,
-                        completedBookingId = null,  // Clear any completed booking reference
-                        showRatingScreen = false,   // Ensure rating screen is dismissed
-                        passengerRoute = null       // Clear fare estimate route while finding driver
-                    )
-
-                    // Start monitoring booking status
-                    monitorBookingStatus(booking.id)
-                }
-                .onFailure { exception ->
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        errorMessage = exception.message ?: "Failed to create booking"
-                    )
-                }
         }
     }
 
@@ -1414,7 +1327,7 @@ class PassengerHomeViewModel @Inject constructor(
     /**
      * Book a ride to the specified destination with passenger comment using BookingLocation
      */
-    fun bookRideToLocationWithComment(destination: BookingLocation, passengerComment: String = "") {
+    fun bookRideToLocationWithComment(destination: BookingLocation, passengerComment: String = "", companions: List<CompanionType> = emptyList()) {
         // Check if current user is blocked/inactive using real-time data
         val currentUser = _uiState.value.currentUser
         val currentUserId = firebaseAuth.currentUser?.uid
@@ -1434,10 +1347,10 @@ class PassengerHomeViewModel @Inject constructor(
         }
 
         // Continue with existing booking logic
-        performBookingToLocationWithComment(destination, passengerComment)
+        performBookingToLocationWithComment(destination, passengerComment, companions)
     }
 
-    private fun performBookingToLocationWithComment(destination: BookingLocation, passengerComment: String = "") {
+    private fun performBookingToLocationWithComment(destination: BookingLocation, passengerComment: String = "", companions: List<CompanionType> = emptyList()) {
         // Check if passenger already has an active trip (not completed)
         if (_uiState.value.currentBooking != null && _uiState.value.currentBooking!!.status != BookingStatus.COMPLETED) {
             _uiState.value = _uiState.value.copy(
@@ -1538,8 +1451,8 @@ class PassengerHomeViewModel @Inject constructor(
                 passengerRoute = null // Explicitly clear route
             )
 
-            // Create the booking with comment immediately (no delay needed)
-            createBookingWithComment(passengerComment)
+            // Create the booking with comment and companions immediately (no delay needed)
+            createBookingWithCompanions(passengerComment, companions, fareEstimate)
         }
     }
 
@@ -2827,27 +2740,116 @@ class PassengerHomeViewModel @Inject constructor(
 
                 val currentBookingId = _uiState.value.currentBooking?.id
 
-                if (currentBookingId != null) {
-                    // Check if current booking still exists in active bookings
-                    val stillActive = activeBookings.any { it.bookingId == currentBookingId }
+                if (activeBookings.isNotEmpty()) {
+                    val latestActiveBooking = activeBookings.first()
 
-                    if (!stillActive) {
-                        Log.w("PassengerHomeViewModel", "❌ Current booking $currentBookingId was removed from active bookings - clearing UI")
+                    // If we have a current booking, check if status changed
+                    if (currentBookingId != null && currentBookingId == latestActiveBooking.bookingId) {
+                        // Status might have changed - convert and update
+                        val updatedStatus = when (latestActiveBooking.status) {
+                            com.rj.islamove.data.repository.ActiveBookingStatus.SEARCHING_DRIVER -> BookingStatus.PENDING
+                            com.rj.islamove.data.repository.ActiveBookingStatus.DRIVER_ASSIGNED -> BookingStatus.ACCEPTED
+                            com.rj.islamove.data.repository.ActiveBookingStatus.DRIVER_ARRIVING -> BookingStatus.DRIVER_ARRIVING
+                            com.rj.islamove.data.repository.ActiveBookingStatus.DRIVER_ARRIVED -> BookingStatus.DRIVER_ARRIVED
+                            com.rj.islamove.data.repository.ActiveBookingStatus.IN_PROGRESS -> BookingStatus.IN_PROGRESS
+                            else -> BookingStatus.PENDING
+                        }
 
-                        // Check the actual booking status in Firestore to understand why it was removed
-                        val bookingStatus = bookingRepository.getBooking(currentBookingId).getOrNull()?.status
+                        // Update current booking status if changed
+                        if (_uiState.value.currentBooking?.status != updatedStatus) {
+                            Log.d("PassengerHomeViewModel", "📊 Booking status changed from ${_uiState.value.currentBooking?.status} to $updatedStatus")
+                            _uiState.value = _uiState.value.copy(
+                                currentBooking = _uiState.value.currentBooking?.copy(
+                                    status = updatedStatus,
+                                    driverId = latestActiveBooking.assignedDriverId
+                                )
+                            )
+
+                            // Start driver tracking if just accepted
+                            if (updatedStatus == BookingStatus.ACCEPTED && latestActiveBooking.assignedDriverId != null) {
+                                startDriverTracking(latestActiveBooking.assignedDriverId!!)
+                                fetchDriverInfo(latestActiveBooking.assignedDriverId!!)
+                            }
+                        }
+                    }
+                } else if (currentBookingId != null) {
+                    // No active bookings but we have a current booking - it was removed
+                    Log.w("PassengerHomeViewModel", "❌ Current booking $currentBookingId was removed from active bookings")
+
+                    // Check if UI is already showing rating screen - don't interfere
+                    if (_uiState.value.showRatingScreen) {
+                        Log.d("PassengerHomeViewModel", "⭐ Rating screen already showing - ignoring active booking removal")
+                        return@collect
+                    }
+
+                    // Check if booking is already marked as completed in UI state
+                    if (_uiState.value.currentBooking?.status == BookingStatus.COMPLETED) {
+                        Log.d("PassengerHomeViewModel", "✅ Current booking already COMPLETED in UI - ignoring active booking removal")
+                        return@collect
+                    }
+
+                    // CRITICAL FIX: Check booking status BEFORE clearing UI
+                    try {
+                        val bookingResult = bookingRepository.getBooking(currentBookingId)
+                        val actualBooking = bookingResult.getOrNull()
+                        val bookingStatus = actualBooking?.status
                         Log.d("PassengerHomeViewModel", "Booking $currentBookingId status in Firestore: $bookingStatus")
 
-                        // Clear the current booking from UI
-                        _uiState.value = _uiState.value.copy(
-                            currentBooking = null,
-                            isLoading = false
-                        )
-
-                        // Show a message to user if booking was expired
-                        if (bookingStatus == BookingStatus.EXPIRED) {
+                        when (bookingStatus) {
+                            BookingStatus.COMPLETED -> {
+                                Log.d("PassengerHomeViewModel", "✅ Booking is COMPLETED - updating UI to COMPLETED and waiting for monitorBookingStatus")
+                                // Update current booking to COMPLETED status but DON'T clear it
+                                // monitorBookingStatus will handle showing the rating screen
+                                _uiState.value = _uiState.value.copy(
+                                    currentBooking = actualBooking,
+                                    isLoading = false
+                                )
+                                // Don't clear - let monitorBookingStatus show rating screen
+                                return@collect
+                            }
+                            BookingStatus.EXPIRED -> {
+                                Log.d("PassengerHomeViewModel", "⏱️ Booking EXPIRED - clearing UI")
+                                _uiState.value = _uiState.value.copy(
+                                    currentBooking = null,
+                                    isLoading = false,
+                                    showOnlineDrivers = true,
+                                    errorMessage = "No drivers available. Please try again."
+                                )
+                            }
+                            BookingStatus.CANCELLED -> {
+                                Log.d("PassengerHomeViewModel", "Booking CANCELLED - clearing UI")
+                                _uiState.value = _uiState.value.copy(
+                                    currentBooking = null,
+                                    isLoading = false,
+                                    showOnlineDrivers = true
+                                )
+                            }
+                            null -> {
+                                Log.d("PassengerHomeViewModel", "Booking not found in Firestore - clearing UI")
+                                _uiState.value = _uiState.value.copy(
+                                    currentBooking = null,
+                                    isLoading = false,
+                                    showOnlineDrivers = true
+                                )
+                            }
+                            else -> {
+                                Log.d("PassengerHomeViewModel", "Unknown status ($bookingStatus) - clearing UI")
+                                _uiState.value = _uiState.value.copy(
+                                    currentBooking = null,
+                                    isLoading = false,
+                                    showOnlineDrivers = true
+                                )
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("PassengerHomeViewModel", "Error checking booking status", e)
+                        // On error, don't clear if rating screen is showing or booking is completed
+                        if (!_uiState.value.showRatingScreen &&
+                            _uiState.value.currentBooking?.status != BookingStatus.COMPLETED) {
                             _uiState.value = _uiState.value.copy(
-                                errorMessage = "No drivers available. Please try again."
+                                currentBooking = null,
+                                isLoading = false,
+                                showOnlineDrivers = true
                             )
                         }
                     }

@@ -46,6 +46,13 @@ import com.rj.islamove.data.models.ServiceArea
 import com.rj.islamove.data.models.BoundaryPoint
 import com.rj.islamove.data.repository.DriverLocation
 import com.rj.islamove.utils.MapboxStyleHelper
+import com.rj.islamove.data.models.Companion
+import com.rj.islamove.data.models.CompanionType
+import com.rj.islamove.data.models.CompanionFare
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.lazy.LazyColumn
 
 /**
  * State for smooth navigation camera updates
@@ -394,7 +401,7 @@ fun MapboxRideView(
     centerOnPassenger: Boolean = false, // When true, center on passenger location
     onMapClick: ((Point) -> Unit)? = null,
     onPlaceSelected: ((PlaceDetails) -> Unit)? = null, // For POI selection
-    onBookRide: ((BookingLocation, String) -> Unit)? = null, // For booking rides to places with comment
+    onBookRide: ((BookingLocation, String, List<CompanionType>) -> Unit)? = null, // For booking rides with comment and companions
     onCalculateFare: ((BookingLocation) -> String?)? = null, // For calculating dynamic fare estimates
     passengerDiscountPercentage: Int? = null, // For displaying passenger discount in POI
     selectedPlaceDetails: PlaceDetails? = null, // For externally controlling place selection
@@ -1240,8 +1247,8 @@ fun MapboxRideView(
                         discountPercentage = passengerDiscountPercentage,
                         tripDistance = routeInfo?.let { "${String.format("%.1f", it.totalDistance)} km" } ?: calculateFallbackDistance(pickupLocation, selectedPlace),
                         tripDuration = routeInfo?.let { "${it.estimatedDuration} min" } ?: calculateFallbackDuration(pickupLocation, selectedPlace),
-                        onBookRide = { bookingLocation, comment ->
-                            onBookRide?.invoke(bookingLocation, comment)
+                        onBookRide = { bookingLocation, comment, companions ->
+                            onBookRide?.invoke(bookingLocation, comment, companions)
                             selectedPlace = null // Hide the card
                             onPlaceDialogDismiss?.invoke() // Notify external component
                         },
@@ -1872,7 +1879,7 @@ fun MapboxPlaceDetailsCard(
     discountPercentage: Int? = null,
     tripDistance: String? = null,
     tripDuration: String? = null,
-    onBookRide: (BookingLocation, String) -> Unit, // Updated to include comment
+    onBookRide: (BookingLocation, String, List<CompanionType>) -> Unit, // Updated to include comment and companions
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     isInSelectionMode: Boolean = false,
@@ -1885,11 +1892,50 @@ fun MapboxPlaceDetailsCard(
 ) {
     // State for passenger comment
     var passengerComment by remember { mutableStateOf("") }
+    // State for companions (moved to top level for access in buttons)
+    var companions by remember { mutableStateOf<List<CompanionType>>(emptyList()) }
+    var showMaxCompanionsWarning by remember { mutableStateOf(false) }
+
+    // Parse base fare once (this should be the BASE fare WITHOUT any discounts)
+    val baseFareValue = remember(estimatedFare) {
+        estimatedFare?.replace("₱", "")?.replace(",", "")?.toDoubleOrNull() ?: 0.0
+    }
+
+    // Calculate fare correctly
+    val calculatedFare by remember {
+        derivedStateOf {
+            // Main passenger uses the DISPLAYED fare (already includes their discount from estimatedFare)
+            val passengerFare = baseFareValue
+
+            // Companions use base fare with their own discounts applied
+            // But we need the ORIGINAL base fare before passenger discount
+            val originalBaseFare = if (discountPercentage != null && discountPercentage > 0) {
+                // Reverse calculate: if displayed fare is after discount, find original
+                baseFareValue / (1 - (discountPercentage / 100.0))
+            } else {
+                baseFareValue
+            }
+
+            val companionFaresTotal = companions.sumOf { companionType ->
+                val companionDiscount = when (companionType) {
+                    CompanionType.STUDENT, CompanionType.SENIOR -> 0.20
+                    CompanionType.CHILD -> 0.50
+                    CompanionType.REGULAR -> 0.0
+                    else -> 0.0
+                }
+                originalBaseFare * (1 - companionDiscount)
+            }
+
+            val totalFare = passengerFare + companionFaresTotal
+            "₱${String.format("%.0f", totalFare)}"
+        }
+    }
 
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(16.dp),
+            .padding(16.dp)
+            .heightIn(max = 650.dp),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color.White
@@ -1897,239 +1943,638 @@ fun MapboxPlaceDetailsCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         border = BorderStroke(0.dp, Color.Transparent)
     ) {
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(20.dp)
         ) {
             // Header with close button
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                IconButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.size(24.dp)
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
                 ) {
-                    Icon(
-                        Icons.Default.Close,
-                        contentDescription = "Close",
-                        tint = Color.Gray,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = Color.Gray,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
 
             // Estimated Fare Section
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "Fare Amount",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.Gray,
-                    fontSize = 14.sp
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = estimatedFare ?: "$0.00",
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Black,
-                    fontSize = 32.sp
-                )
-
-                // Show discount information if user has a discount
-                if (discountPercentage != null && discountPercentage > 0) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            Icons.Default.Star,
-                            contentDescription = null,
-                            tint = when (discountPercentage) {
-                                20 -> Color(0xFF4CAF50)
-                                50 -> Color(0xFF2196F3)
-                                else -> Color(0xFF9E9E9E)
-                            },
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "$discountPercentage% discount applied",
-                            fontSize = 14.sp,
-                            color = when (discountPercentage) {
-                                20 -> Color(0xFF4CAF50)
-                                50 -> Color(0xFF2196F3)
-                                else -> Color(0xFF9E9E9E)
-                            },
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                // Show trip details if available
-                if (tripDistance != null || tripDuration != null) {
-                    val tripInfo = buildString {
-                        tripDistance?.let { append("Trip of $it") }
-                        if (tripDistance != null && tripDuration != null) append(" • ")
-                        tripDuration?.let { append(it) }
-                    }
-
-                    Text(
-                        text = tripInfo,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Gray,
-                        fontSize = 14.sp
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Pickup Location
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Default.LocationOn,
-                    contentDescription = "Pickup",
-                    tint = Color(0xFF4CAF50), // Green color for pickup
-                    modifier = Modifier.size(20.dp)
-                )
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column {
-                    Text(
-                        text = "Pickup",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.Black,
-                        fontSize = 14.sp
-                    )
-                    Text(
-                        text = currentLocation ?: "Current Location",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Gray,
-                        fontSize = 14.sp
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Drop-off Location
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Default.LocationOn,
-                    contentDescription = "Drop-off",
-                    tint = Color(0xFFF44336), // Red color for drop-off
-                    modifier = Modifier.size(20.dp)
-                )
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column {
-                    Text(
-                        text = "Drop-off",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.Black,
-                        fontSize = 14.sp
-                    )
-                    Text(
-                        text = placeDetails.address ?: placeDetails.name,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Gray,
-                        fontSize = 14.sp
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Optional Comment Section (only show in normal booking mode, not in selection modes)
-            if (!isInSelectionMode) {
+            item {
                 Column(
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "Passenger Note (Optional)",
+                        text = "Fare Amount",
                         style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.Black,
+                        color = Color.Gray,
                         fontSize = 14.sp
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    OutlinedTextField(
-                        value = passengerComment,
-                        onValueChange = { newValue ->
-                            if (newValue.length <= 100) {
-                                passengerComment = newValue
-                            }
-                        },
-                        placeholder = {
-                            Text(
-                                text = "e.g., \"Wearing red jacket\", \"Standing by the fountain\"",
-                                color = Color.Gray,
-                                fontSize = 14.sp
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF1976D2),
-                            unfocusedBorderColor = Color.Gray.copy(alpha = 0.5f)
-                        ),
-                        maxLines = 2,
-                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp),
-                        supportingText = {
-                            Text(
-                                text = "${passengerComment.length}/100",
-                                fontSize = 12.sp,
-                                color = if (passengerComment.length >= 90) Color.Red else Color.Gray
-                            )
-                        }
                     )
 
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        text = "Help your driver identify you easily",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray,
-                        fontSize = 12.sp
+                        text = calculatedFare,
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black,
+                        fontSize = 32.sp
                     )
+
+                    // Show discount information if user has a discount
+                    if (discountPercentage != null && discountPercentage > 0) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Star,
+                                contentDescription = null,
+                                tint = when (discountPercentage) {
+                                    20 -> Color(0xFF4CAF50)
+                                    50 -> Color(0xFF2196F3)
+                                    else -> Color(0xFF9E9E9E)
+                                },
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "$discountPercentage% discount applied",
+                                fontSize = 14.sp,
+                                color = when (discountPercentage) {
+                                    20 -> Color(0xFF4CAF50)
+                                    50 -> Color(0xFF2196F3)
+                                    else -> Color(0xFF9E9E9E)
+                                },
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Show trip details if available
+                    if (tripDistance != null || tripDuration != null) {
+                        val tripInfo = buildString {
+                            tripDistance?.let { append("Trip of $it") }
+                            if (tripDistance != null && tripDuration != null) append(" • ")
+                            tripDuration?.let { append(it) }
+                        }
+
+                        Text(
+                            text = tripInfo,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Gray,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+            }
+
+            item { Spacer(modifier = Modifier.height(24.dp)) }
+
+            // Pickup Location
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.LocationOn,
+                        contentDescription = "Pickup",
+                        tint = Color(0xFF4CAF50), // Green color for pickup
+                        modifier = Modifier.size(20.dp)
+                    )
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column {
+                        Text(
+                            text = "Pickup",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.Black,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = currentLocation ?: "Current Location",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Gray,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+            }
+
+            item { Spacer(modifier = Modifier.height(16.dp)) }
+
+            // Drop-off Location
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.LocationOn,
+                        contentDescription = "Drop-off",
+                        tint = Color(0xFFF44336), // Red color for drop-off
+                        modifier = Modifier.size(20.dp)
+                    )
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column {
+                        Text(
+                            text = "Drop-off",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.Black,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = placeDetails.address ?: placeDetails.name,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Gray,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+            }
+
+            item { Spacer(modifier = Modifier.height(24.dp)) }
+
+            // Companion Selector Section (only show in normal booking mode)
+            if (!isInSelectionMode) {
+                item {
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Add Companions",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.Black,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                text = "${companions.size}/4",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (companions.size >= 4) Color.Red else Color.Gray,
+                                fontSize = 12.sp
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Companion type buttons - TWO ROWS for better layout
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // First row: Student and Senior
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        if (companions.size < 4) {
+                                            companions = companions + CompanionType.STUDENT
+                                            showMaxCompanionsWarning = false
+                                        } else {
+                                            showMaxCompanionsWarning = true
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = Color(0xFF4CAF50)
+                                    )
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text("Student", fontSize = 12.sp)
+                                        Text("20% off", fontSize = 10.sp, color = Color.Gray)
+                                    }
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        if (companions.size < 4) {
+                                            companions = companions + CompanionType.SENIOR
+                                            showMaxCompanionsWarning = false
+                                        } else {
+                                            showMaxCompanionsWarning = true
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = Color(0xFF4CAF50)
+                                    )
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text("Senior", fontSize = 12.sp)
+                                        Text("20% off", fontSize = 10.sp, color = Color.Gray)
+                                    }
+                                }
+                            }
+
+                            // Second row: Child and Regular
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        if (companions.size < 4) {
+                                            companions = companions + CompanionType.CHILD
+                                            showMaxCompanionsWarning = false
+                                        } else {
+                                            showMaxCompanionsWarning = true
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = Color(0xFF2196F3)
+                                    )
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text("Child", fontSize = 12.sp)
+                                        Text("50% off", fontSize = 10.sp, color = Color.Gray)
+                                    }
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        if (companions.size < 4) {
+                                            companions = companions + CompanionType.REGULAR
+                                            showMaxCompanionsWarning = false
+                                        } else {
+                                            showMaxCompanionsWarning = true
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = Color(0xFF757575)
+                                    )
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text("Regular", fontSize = 12.sp)
+                                        Text("No discount", fontSize = 10.sp, color = Color.Gray)
+                                    }
+                                }
+                            }
+                        }
+
+                        // Show warning when max companions reached
+                        if (showMaxCompanionsWarning) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Maximum 4 companions allowed",
+                                color = Color.Red,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Add companions traveling to the same destination",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray,
+                            fontSize = 12.sp
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                    // Show added companions with remove button
+                if (companions.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Companions (${companions.size})",
+                            fontSize = 12.sp,
+                            color = Color.Gray,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    items(companions.size) { index ->
+                        val companionType = companions[index]
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFFF5F5F5)
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Person,
+                                        contentDescription = null,
+                                        tint = when (companionType) {
+                                            CompanionType.STUDENT, CompanionType.SENIOR -> Color(
+                                                0xFF4CAF50
+                                            )
+
+                                            CompanionType.CHILD -> Color(0xFF2196F3)
+                                            CompanionType.REGULAR -> Color(0xFF757575)
+                                            else -> Color.Gray
+                                        },
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = when (companionType) {
+                                                CompanionType.STUDENT -> "Student"
+                                                CompanionType.SENIOR -> "Senior Citizen"
+                                                CompanionType.CHILD -> "Child (≤12 yrs)"
+                                                CompanionType.REGULAR -> "Regular Passenger"
+                                                else -> "Regular"
+                                            },
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Text(
+                                            text = when (companionType) {
+                                                CompanionType.STUDENT, CompanionType.SENIOR -> "20% discount"
+                                                CompanionType.CHILD -> "50% discount"
+                                                CompanionType.REGULAR -> "No discount"
+                                                else -> "No discount"
+                                            },
+                                            fontSize = 11.sp,
+                                            color = Color.Gray
+                                        )
+                                    }
+                                }
+                                IconButton(
+                                    onClick = {
+                                        companions =
+                                            companions.filterIndexed { i, _ -> i != index }
+                                        showMaxCompanionsWarning = false
+                                    },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = "Remove companion",
+                                        tint = Color.Gray,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                item { Spacer(modifier = Modifier.height(24.dp)) }
+            }
+
+            // Optional Comment Section (only show in normal booking mode)
+            if (!isInSelectionMode) {
+                item {
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Passenger Note (Optional)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.Black,
+                            fontSize = 14.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        OutlinedTextField(
+                            value = passengerComment,
+                            onValueChange = { newValue ->
+                                if (newValue.length <= 100) {
+                                    passengerComment = newValue
+                                }
+                            },
+                            placeholder = {
+                                Text(
+                                    text = "e.g., \"Wearing red jacket\", \"Standing by the fountain\"",
+                                    color = Color.Gray,
+                                    fontSize = 14.sp
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFF1976D2),
+                                unfocusedBorderColor = Color.Gray.copy(alpha = 0.5f)
+                            ),
+                            maxLines = 2,
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp),
+                            supportingText = {
+                                Text(
+                                    text = "${passengerComment.length}/100",
+                                    fontSize = 12.sp,
+                                    color = if (passengerComment.length >= 90) Color.Red else Color.Gray
+                                )
+                            }
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Text(
+                            text = "Help your driver identify you easily",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                item { Spacer(modifier = Modifier.height(24.dp)) }
             } else {
-                Spacer(modifier = Modifier.height(32.dp))
+                item { Spacer(modifier = Modifier.height(32.dp)) }
             }
 
             // Action Buttons - changes based on mode
-            when {
-                // Home Location - Show "Book" and "Remove Home" buttons
-                isHomeLocation && onRemoveHome != null -> {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        // Book Ride button
+            item {
+                when {
+                    // Home Location - Show "Book" and "Remove Home" buttons
+                    isHomeLocation && onRemoveHome != null -> {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            // Book Ride button
+                            Button(
+                                onClick = {
+                                    val bookingLocation = BookingLocation(
+                                        address = placeDetails.address ?: placeDetails.name,
+                                        coordinates = com.google.firebase.firestore.GeoPoint(
+                                            placeDetails.point.latitude(),
+                                            placeDetails.point.longitude()
+                                        ),
+                                        placeId = placeDetails.id
+                                    )
+                                    onBookRide(bookingLocation, passengerComment, companions)
+                                },
+                                enabled = companions.size <= 4, // Disable if more than 4 companions
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(50.dp),
+                                shape = RoundedCornerShape(25.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF1976D2)
+                                )
+                            ) {
+                                Text(
+                                    text = "Book",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 16.sp
+                                )
+                            }
+
+                            // Remove Home button
+                            Button(
+                                onClick = {
+                                    val bookingLocation = BookingLocation(
+                                        address = placeDetails.address ?: placeDetails.name,
+                                        coordinates = com.google.firebase.firestore.GeoPoint(
+                                            placeDetails.point.latitude(),
+                                            placeDetails.point.longitude()
+                                        ),
+                                        placeId = placeDetails.id
+                                    )
+                                    onRemoveHome(bookingLocation)
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(50.dp),
+                                shape = RoundedCornerShape(25.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFFD32F2F)
+                                )
+                            ) {
+                                Text(
+                                    text = "Remove",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 16.sp
+                                )
+                            }
+                        }
+                    }
+                    // Existing Favorite - Show "Book" and "Remove Favorite" buttons
+                    isExistingFavorite && onRemoveFavorite != null -> {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            // Book Ride button
+                            Button(
+                                onClick = {
+                                    val bookingLocation = BookingLocation(
+                                        address = placeDetails.address ?: placeDetails.name,
+                                        coordinates = com.google.firebase.firestore.GeoPoint(
+                                            placeDetails.point.latitude(),
+                                            placeDetails.point.longitude()
+                                        ),
+                                        placeId = placeDetails.id
+                                    )
+                                    onBookRide(bookingLocation, passengerComment, companions)
+                                },
+                                enabled = companions.size <= 4, // Disable if more than 4 companions
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(50.dp),
+                                shape = RoundedCornerShape(25.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF1976D2)
+                                )
+                            ) {
+                                Text(
+                                    text = "Book",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 16.sp
+                                )
+                            }
+
+                            // Remove Favorite button
+                            Button(
+                                onClick = {
+                                    val bookingLocation = BookingLocation(
+                                        address = placeDetails.address ?: placeDetails.name,
+                                        coordinates = com.google.firebase.firestore.GeoPoint(
+                                            placeDetails.point.latitude(),
+                                            placeDetails.point.longitude()
+                                        ),
+                                        placeId = placeDetails.id
+                                    )
+                                    onRemoveFavorite(bookingLocation)
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(50.dp),
+                                shape = RoundedCornerShape(25.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFFD32F2F)
+                                )
+                            ) {
+                                Text(
+                                    text = "Remove",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 16.sp
+                                )
+                            }
+                        }
+                    }
+                    // Selection Mode - Show "Set as [Type]" button
+                    isInSelectionMode && onSetAsFavorite != null -> {
+                        val buttonText = when (selectionModeType) {
+                            "favorite" -> "Set as Favorite"
+                            "home" -> "Set as Home"
+                            else -> "Select Location"
+                        }
+
                         Button(
                             onClick = {
                                 val bookingLocation = BookingLocation(
@@ -2140,10 +2585,10 @@ fun MapboxPlaceDetailsCard(
                                     ),
                                     placeId = placeDetails.id
                                 )
-                                onBookRide(bookingLocation, passengerComment)
+                                onSetAsFavorite(bookingLocation)
                             },
                             modifier = Modifier
-                                .weight(1f)
+                                .fillMaxWidth()
                                 .height(50.dp),
                             shape = RoundedCornerShape(25.dp),
                             colors = ButtonDefaults.buttonColors(
@@ -2151,50 +2596,15 @@ fun MapboxPlaceDetailsCard(
                             )
                         ) {
                             Text(
-                                text = "Book",
-                                color = Color.White,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 16.sp
-                            )
-                        }
-
-                        // Remove Home button
-                        Button(
-                            onClick = {
-                                val bookingLocation = BookingLocation(
-                                    address = placeDetails.address ?: placeDetails.name,
-                                    coordinates = com.google.firebase.firestore.GeoPoint(
-                                        placeDetails.point.latitude(),
-                                        placeDetails.point.longitude()
-                                    ),
-                                    placeId = placeDetails.id
-                                )
-                                onRemoveHome(bookingLocation)
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(50.dp),
-                            shape = RoundedCornerShape(25.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFD32F2F)
-                            )
-                        ) {
-                            Text(
-                                text = "Remove",
+                                text = buttonText,
                                 color = Color.White,
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 16.sp
                             )
                         }
                     }
-                }
-                // Existing Favorite - Show "Book" and "Remove Favorite" buttons
-                isExistingFavorite && onRemoveFavorite != null -> {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        // Book Ride button
+                    // Normal Mode - Show "Book Ride" button
+                    else -> {
                         Button(
                             onClick = {
                                 val bookingLocation = BookingLocation(
@@ -2205,10 +2615,11 @@ fun MapboxPlaceDetailsCard(
                                     ),
                                     placeId = placeDetails.id
                                 )
-                                onBookRide(bookingLocation, passengerComment)
+                                onBookRide(bookingLocation, passengerComment, companions)
                             },
+                            enabled = companions.size <= 4, // Disable if more than 4 companions
                             modifier = Modifier
-                                .weight(1f)
+                                .fillMaxWidth()
                                 .height(50.dp),
                             shape = RoundedCornerShape(25.dp),
                             colors = ButtonDefaults.buttonColors(
@@ -2216,107 +2627,13 @@ fun MapboxPlaceDetailsCard(
                             )
                         ) {
                             Text(
-                                text = "Book",
+                                text = "Book Ride",
                                 color = Color.White,
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 16.sp
                             )
-                        }
 
-                        // Remove Favorite button
-                        Button(
-                            onClick = {
-                                val bookingLocation = BookingLocation(
-                                    address = placeDetails.address ?: placeDetails.name,
-                                    coordinates = com.google.firebase.firestore.GeoPoint(
-                                        placeDetails.point.latitude(),
-                                        placeDetails.point.longitude()
-                                    ),
-                                    placeId = placeDetails.id
-                                )
-                                onRemoveFavorite(bookingLocation)
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(50.dp),
-                            shape = RoundedCornerShape(25.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFD32F2F)
-                            )
-                        ) {
-                            Text(
-                                text = "Remove",
-                                color = Color.White,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 16.sp
-                            )
                         }
-                    }
-                }
-                // Selection Mode - Show "Set as [Type]" button
-                isInSelectionMode && onSetAsFavorite != null -> {
-                    val buttonText = when (selectionModeType) {
-                        "favorite" -> "Set as Favorite"
-                        "home" -> "Set as Home"
-                        else -> "Select Location"
-                    }
-
-                    Button(
-                        onClick = {
-                            val bookingLocation = BookingLocation(
-                                address = placeDetails.address ?: placeDetails.name,
-                                coordinates = com.google.firebase.firestore.GeoPoint(
-                                    placeDetails.point.latitude(),
-                                    placeDetails.point.longitude()
-                                ),
-                                placeId = placeDetails.id
-                            )
-                            onSetAsFavorite(bookingLocation)
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        shape = RoundedCornerShape(25.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF1976D2)
-                        )
-                    ) {
-                        Text(
-                            text = buttonText,
-                            color = Color.White,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 16.sp
-                        )
-                    }
-                }
-                // Normal Mode - Show "Book Ride" button
-                else -> {
-                    Button(
-                        onClick = {
-                            val bookingLocation = BookingLocation(
-                                address = placeDetails.address ?: placeDetails.name,
-                                coordinates = com.google.firebase.firestore.GeoPoint(
-                                    placeDetails.point.latitude(),
-                                    placeDetails.point.longitude()
-                                ),
-                                placeId = placeDetails.id
-                            )
-                            onBookRide(bookingLocation, passengerComment)
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        shape = RoundedCornerShape(25.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF1976D2)
-                        )
-                    ) {
-                        Text(
-                            text = "Book Ride",
-                            color = Color.White,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 16.sp
-                        )
                     }
                 }
             }

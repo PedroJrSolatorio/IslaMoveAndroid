@@ -22,7 +22,9 @@ data class Booking(
     val route: RouteInfo? = null,
     val cancelledBy: String = "", // "passenger", "driver", or empty if not cancelled
     val canCancelWithoutPenalty: Boolean = true, // Track if passenger can still cancel within 20s window
-    val passengerDiscountPercentage: Int? = null // null = no discount, 20, 50, etc.
+    val passengerDiscountPercentage: Int? = null, // null = no discount, 20, 50, etc.
+    val companions: List<Companion> = emptyList(), // List of companions
+    val totalPassengers: Int = 1 // Total passengers including main passenger
 )
 
 data class BookingLocation(
@@ -41,7 +43,18 @@ data class FareEstimate(
     val totalEstimate: Double = 0.0,   // Equals baseFare from matrix
     val currency: String = "PHP",
     val estimatedDuration: Int = 0,    // in minutes (for display only)
-    val estimatedDistance: Double = 0.0 // in meters (for display only)
+    val estimatedDistance: Double = 0.0, // in meters (for display only)
+    val passengerFare: Double = 0.0, // Main passenger's fare
+    val companionFares: List<CompanionFare> = emptyList(), // Individual companion fares
+    val fareBreakdown: String = "" // Human-readable breakdown
+)
+
+data class CompanionFare(
+    val companionType: CompanionType = CompanionType.REGULAR,
+    val baseFare: Double = 0.0,
+    val discountPercentage: Int = 0,
+    val discountAmount: Double = 0.0,
+    val finalFare: Double = 0.0
 )
 
 data class RouteInfo(
@@ -87,4 +100,17 @@ enum class VehicleCategory(val displayName: String, val baseMultiplier: Double) 
     STANDARD("Standard", 1.0),
     PREMIUM("Premium", 1.5),
     LARGE("Large Vehicle", 1.3)
+}
+
+data class Companion(
+    val type: CompanionType = CompanionType.REGULAR,
+    val discountPercentage: Int = 0, // 0, 20, or 50
+    val fare: Double = 0.0 // Individual fare for this companion
+)
+
+enum class CompanionType {
+    REGULAR,    // No discount
+    STUDENT,    // 20% discount
+    SENIOR,     // 20% discount
+    CHILD       // 50% discount (12 years old or below)
 }

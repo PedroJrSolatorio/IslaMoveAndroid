@@ -1853,6 +1853,164 @@ private fun IncomingRequestsCard(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Total Passengers Count
+            if (request.totalPassengers > 1) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFFE3F2FD)
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Person,
+                            contentDescription = null,
+                            tint = Color(0xFF1976D2),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "TOTAL PASSENGERS",
+                            fontSize = 11.sp,
+                            color = Color(0xFF1976D2),
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            text = "${request.totalPassengers}",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1976D2)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // Companion Breakdown
+            if (request.companions.isNotEmpty()) {
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "COMPANIONS (${request.companions.size})",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    request.companions.forEachIndexed { index, companion ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = when (companion.type) {
+                                    CompanionType.STUDENT, CompanionType.SENIOR -> Color(0xFFE8F5E8)
+                                    CompanionType.CHILD -> Color(0xFFE3F2FD)
+                                    else -> Color(0xFFF5F5F5)
+                                }
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Person,
+                                        contentDescription = null,
+                                        tint = when (companion.type) {
+                                            CompanionType.STUDENT, CompanionType.SENIOR -> Color(0xFF4CAF50)
+                                            CompanionType.CHILD -> Color(0xFF2196F3)
+                                            else -> Color.Gray
+                                        },
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = when (companion.type) {
+                                                CompanionType.STUDENT -> "Student ${index + 1}"
+                                                CompanionType.SENIOR -> "Senior ${index + 1}"
+                                                CompanionType.CHILD -> "Child ${index + 1}"
+                                                else -> "Companion ${index + 1}"
+                                            },
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        if (companion.discountPercentage > 0) {
+                                            Text(
+                                                text = "${companion.discountPercentage}% discount",
+                                                fontSize = 10.sp,
+                                                color = Color.Gray
+                                            )
+                                        }
+                                    }
+                                }
+                                Text(
+                                    text = "₱${kotlin.math.floor(companion.fare).toInt()}",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = when (companion.type) {
+                                        CompanionType.STUDENT, CompanionType.SENIOR -> Color(0xFF4CAF50)
+                                        CompanionType.CHILD -> Color(0xFF2196F3)
+                                        else -> Color.Gray
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // Fare Breakdown Button (expandable)
+            if (request.fareEstimate.fareBreakdown.isNotBlank()) {
+                var showBreakdown by remember { mutableStateOf(false) }
+
+                OutlinedButton(
+                    onClick = { showBreakdown = !showBreakdown },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = if (showBreakdown) "Hide Fare Breakdown" else "Show Fare Breakdown",
+                        fontSize = 12.sp
+                    )
+                }
+
+                if (showBreakdown) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFFFF9C4)
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = request.fareEstimate.fareBreakdown,
+                            modifier = Modifier.padding(12.dp),
+                            fontSize = 11.sp,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            color = Color.Black,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
             // Discount Badge (if passenger has discount)
             if (request.passengerDiscountPercentage != null) {
                 Card(

@@ -1199,7 +1199,9 @@ class DriverHomeViewModel @Inject constructor(
                         fareEstimate = request.fareEstimate.toFareEstimate(),
                         status = BookingStatus.ACCEPTED,
                         vehicleCategory = _uiState.value.selectedVehicleCategory,
-                        specialInstructions = request.specialInstructions
+                        specialInstructions = request.specialInstructions,
+                        companions = request.companions,
+                        totalPassengers = request.totalPassengers
                     )
 
                     d("DriverViewModel", "Created booking object with ID: '${booking.id}'")
