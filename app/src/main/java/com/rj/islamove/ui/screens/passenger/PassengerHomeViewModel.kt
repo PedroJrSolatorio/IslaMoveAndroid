@@ -596,6 +596,17 @@ class PassengerHomeViewModel @Inject constructor(
                 val pickupLocation = _uiState.value.pickupLocation ?: return@launch
                 val destination = _uiState.value.destination ?: return@launch
 
+                val onlineDriversCount = _uiState.value.onlineDriverCount
+                if (onlineDriversCount == 0) {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        passengerRoute = null,
+                        errorMessage = "No drivers are currently online. Please try again later."
+                    )
+                    Log.w("PassengerHomeViewModel", "Booking creation blocked - no drivers online")
+                    return@launch
+                }
+
                 // Calculate fares for each companion
                 val companionFaresList = mutableListOf<CompanionFare>()
                 val companionsList = mutableListOf<Companion>()
