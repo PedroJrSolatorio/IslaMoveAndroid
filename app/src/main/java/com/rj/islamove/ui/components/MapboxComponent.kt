@@ -2327,7 +2327,7 @@ fun MapboxPlaceDetailsCard(
                                             text = when (companionType) {
                                                 CompanionType.STUDENT -> "Student"
                                                 CompanionType.SENIOR -> "Senior Citizen"
-                                                CompanionType.CHILD -> "Child (≤12 yrs)"
+                                                CompanionType.CHILD -> "Child (12 yrs & below)"
                                                 CompanionType.REGULAR -> "Regular Passenger"
                                                 else -> "Regular"
                                             },
