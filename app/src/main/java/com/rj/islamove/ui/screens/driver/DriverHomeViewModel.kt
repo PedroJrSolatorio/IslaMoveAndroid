@@ -246,30 +246,36 @@ class DriverHomeViewModel @Inject constructor(
 
     // Track previous request count to detect new ride requests
     private var previousRequestCount: Int = 0
+    private var lastNotificationTime = 0L
+
+    private fun notifyNewRideRequest() {
+        val now = System.currentTimeMillis()
+        if (now - lastNotificationTime < 3000) { // Ignore if <3s since last
+            d("DriverViewModel", "⚠️ Skipping duplicate ride request notification")
+            return
+        }
+        lastNotificationTime = now
+
+        vibrateForNewRideRequest()
+        playRideRequestSound()
+    }
 
     /**
-     * Vibrate device 5 times when there's a new active ride request
+     * Vibrate device once when there's a new active ride request
      */
     private fun vibrateForNewRideRequest() {
         try {
             val vibrator = ContextCompat.getSystemService(context, Vibrator::class.java)
             if (vibrator?.hasVibrator() == true) {
                 if (VERSION.SDK_INT >= VERSION_CODES.O) {
-                    // Create vibration pattern: 5 bursts with 200ms on, 200ms off
-                    val timings = LongArray(10) // 5 on + 5 off = 10 elements
-                    val amplitudes = IntArray(10)
-
-                    for (i in timings.indices) {
-                        timings[i] = 200L // 200ms for each segment
-                        amplitudes[i] = if (i % 2 == 0) VibrationEffect.DEFAULT_AMPLITUDE else 0 // On for even indices, off for odd
-                    }
-
-                    val vibrationEffect = VibrationEffect.createWaveform(timings, amplitudes, -1)
+                    val vibrationEffect = VibrationEffect.createOneShot(
+                        500L,  // 0.5 second vibration
+                        VibrationEffect.DEFAULT_AMPLITUDE
+                    )
                     vibrator.vibrate(vibrationEffect)
                 } else {
                     @Suppress("DEPRECATION")
-                    val pattern = longArrayOf(200, 200, 200, 200, 200, 200, 200, 200, 200, 200)
-                    vibrator.vibrate(pattern, -1)
+                    vibrator.vibrate(500L)
                 }
                 d("DriverViewModel", "📳 Vibrating device for new ride request")
             }
@@ -283,45 +289,22 @@ class DriverHomeViewModel @Inject constructor(
      */
     private fun playRideRequestSound() {
         try {
-            d("DriverViewModel", "🔊 Playing ride request notification sound 5 times...")
-            playRideRequestSoundRecursive(1, 5)
+            val mediaPlayer = MediaPlayer.create(context, R.raw.ride_request_notification)
+            mediaPlayer?.let {
+                it.setOnCompletionListener(MediaPlayer::release)
+                it.start()
+                d("DriverViewModel", "🔊 Playing ride request notification sound once")
+            } ?: e("DriverViewModel", "❌ MediaPlayer.create returned null for ride request sound")
         } catch (e: Exception) {
             e("DriverViewModel", "❌ Failed to play ride request sound", e)
         }
     }
 
-    /**
-     * Recursively play the ride request sound a specified number of times
-     */
-    private fun playRideRequestSoundRecursive(currentPlay: Int, totalPlays: Int) {
-        if (currentPlay > totalPlays) {
-            d("DriverViewModel", "✅ Completed playing ride request sound $totalPlays times")
-            return
-        }
-
-        try {
-            val mediaPlayer = MediaPlayer.create(context, R.raw.ride_request_notification)
-            if (mediaPlayer != null) {
-                mediaPlayer.setOnCompletionListener { mp ->
-                    mp.release()
-                    d("DriverViewModel", "🔊 Ride request sound #$currentPlay completed and released")
-
-                    // Play the next iteration after a short delay
-                    if (currentPlay < totalPlays) {
-                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                            playRideRequestSoundRecursive(currentPlay + 1, totalPlays)
-                        }, 200) // 200ms delay between plays
-                    }
-                }
-                mediaPlayer.start()
-                d("DriverViewModel", "🔊 Playing ride request sound #$currentPlay")
-            } else {
-                e("DriverViewModel", "❌ MediaPlayer.create returned null for ride request sound #$currentPlay")
-            }
-        } catch (e: Exception) {
-            e("DriverViewModel", "❌ Failed to play ride request sound #$currentPlay", e)
-        }
+    // Call this when a new ride request is received
+    fun onNewRideRequestReceived() {
+        notifyNewRideRequest()
     }
+
     private val ratedBookings = mutableSetOf<String>()
 
     // Proximity alert utility
@@ -881,8 +864,7 @@ class DriverHomeViewModel @Inject constructor(
                 if (validRequests.size > previousRequestCount && validRequests.isNotEmpty()) {
                     val newRequestCount = validRequests.size - previousRequestCount
                     d("DriverHomeVM", "🔔 Detected $newRequestCount new ride request(s)")
-                    vibrateForNewRideRequest()
-                    playRideRequestSound()
+                    onNewRideRequestReceived()
                 }
 
                 // Update the previous count for next comparison
