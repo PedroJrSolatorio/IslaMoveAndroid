@@ -24,6 +24,9 @@ import dagger.hilt.components.SingletonComponent
 import okhttp3.OkHttpClient
 import javax.inject.Singleton
 import com.rj.islamove.BuildConfig
+import com.rj.islamove.data.repository.PassengerReportRepository
+import com.rj.islamove.data.repository.PassengerReportRepositoryImpl
+import dagger.Binds
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -133,4 +136,15 @@ object FirebaseModule {
     fun provideSupportCommentRepository(firestore: FirebaseFirestore): SupportCommentRepository {
         return SupportCommentRepository(firestore)
     }
+}
+
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class RepositoryBindings {
+
+    @Binds
+    @Singleton
+    abstract fun bindPassengerReportRepository(
+        impl: PassengerReportRepositoryImpl
+    ): PassengerReportRepository
 }

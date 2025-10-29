@@ -29,6 +29,8 @@ enum class ReportType {
     HYGIENE_CONCERNS,
     OVERCHARGING,
     CANCELLATION_ABUSE,
+    NO_SHOW,
+    WRONG_LOCATION,
     OTHER
 }
 

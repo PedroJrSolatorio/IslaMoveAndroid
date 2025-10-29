@@ -67,19 +67,19 @@ fun CreateAccountScreen(
     var idDocumentUri by rememberSaveable { mutableStateOf<Uri?>(null) }
     var showDocumentPicker by rememberSaveable { mutableStateOf(false) }
     var ageError by rememberSaveable { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    val uiState by viewModel.uiState.collectAsState()
+    var phoneNumberError by rememberSaveable { mutableStateOf<String?>(null) }
 
     // New state for T&C and Privacy Policy
     var termsAccepted by rememberSaveable { mutableStateOf(false) }
     var privacyAccepted by rememberSaveable { mutableStateOf(false) }
 
-    val context = LocalContext.current
-    val uiState by viewModel.uiState.collectAsState()
-
     // Validation logic
     val allFieldsFilled = remember(
         firstName, lastName, email, phoneNumber, password,
         selectedUserType, dateOfBirth, selectedGender, address,
-        idDocumentUri, ageError, termsAccepted, privacyAccepted
+        idDocumentUri, ageError, termsAccepted, privacyAccepted, phoneNumberError
     ) {
         firstName.isNotEmpty() &&
                 lastName.isNotEmpty() &&
@@ -93,6 +93,7 @@ fun CreateAccountScreen(
                 address.isNotEmpty() &&
                 (selectedUserType != "PASSENGER" || idDocumentUri != null) &&
                 ageError == null &&
+                phoneNumberError == null &&
                 termsAccepted &&
                 privacyAccepted
     }
@@ -242,9 +243,23 @@ fun CreateAccountScreen(
             // Phone number field
             OutlinedTextField(
                 value = phoneNumber,
-                onValueChange = {
-                    phoneNumber = it
+                onValueChange = { input ->
+                    // Allow only digits and optional leading "+"
+                    val sanitized = input.filterIndexed { index, c ->
+                        c.isDigit() || (index == 0 && c == '+')
+                    }
+
+                    phoneNumber = sanitized
                     viewModel.clearError()
+
+                    // Validate Philippine phone number
+                    phoneNumberError = when {
+                        phoneNumber.isEmpty() -> null
+                        phoneNumber.matches(Regex("^09\\d{9}$")) -> null
+                        phoneNumber.matches(Regex("^\\+639\\d{9}$")) -> null
+                        phoneNumber.length < 12 -> null // don't show error yet while typing
+                        else -> "Invalid phone number. Use 09XXXXXXXXX or +639XXXXXXXXX"
+                    }
                 },
                 placeholder = {
                     Text(
@@ -252,14 +267,27 @@ fun CreateAccountScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 },
+                isError = phoneNumberError != null,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = IslamovePrimary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                    focusedBorderColor = if (phoneNumberError == null) IslamovePrimary else MaterialTheme.colorScheme.error,
+                    unfocusedBorderColor = if (phoneNumberError == null)
+                        MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                    else MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
                 )
             )
+
+            // Show error text below
+            if (phoneNumberError != null) {
+                Text(
+                    text = phoneNumberError!!,
+                    color = MaterialTheme.colorScheme.error,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                )
+            }
 
             // Password field
             OutlinedTextField(

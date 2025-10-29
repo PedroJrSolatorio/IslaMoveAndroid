@@ -350,6 +350,14 @@ private fun DriverStatusDisplay(
 ) {
     val driverData = driver.driverData
 
+    // Check if all required documents are approved
+    val allDocumentsApproved = driverData?.documents?.let { docs ->
+        val requiredDocTypes = listOf("license", "vehicle_registration", "insurance", "vehicle_inspection", "profile_photo")
+        requiredDocTypes.all { docType ->
+            docs[docType]?.status == DocumentStatus.APPROVED
+        }
+    } ?: false
+
     when (driverData?.verificationStatus) {
         VerificationStatus.APPROVED -> {
             Card(
@@ -390,67 +398,94 @@ private fun DriverStatusDisplay(
             }
         }
         VerificationStatus.UNDER_REVIEW -> {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onRejectDriver,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = "Reject",
-                        fontWeight = FontWeight.Medium
-                    )
-                }
+                    OutlinedButton(
+                        onClick = onRejectDriver,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text(
+                            text = "Reject",
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
 
-                Button(
-                    onClick = onApproveDriver,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF4CAF50)
-                    )
-                ) {
+                    Button(
+                        onClick = onApproveDriver,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF4CAF50)
+                        ),
+                        enabled = allDocumentsApproved
+                    ) {
+                        Text(
+                            text = "Approve",
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White
+                        )
+                    }
+                }
+                if (!allDocumentsApproved) {
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Approve",
-                        fontWeight = FontWeight.Medium,
-                        color = Color.White
+                        text = "⚠️ All documents must be approved before approving the driver application",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }
         }
         else -> {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onRejectDriver,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = "Reject",
-                        fontWeight = FontWeight.Medium
-                    )
+                    OutlinedButton(
+                        onClick = onRejectDriver,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text(
+                            text = "Reject",
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    Button(
+                        onClick = onApproveDriver,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF4CAF50)
+                        ),
+                        enabled = allDocumentsApproved
+                    ) {
+                        Text(
+                            text = "Approve",
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White
+                        )
+                    }
                 }
 
-                Button(
-                    onClick = onApproveDriver,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF4CAF50)
-                    )
-                ) {
+                if (!allDocumentsApproved) {
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Approve",
-                        fontWeight = FontWeight.Medium,
-                        color = Color.White
+                        text = "⚠️ All documents must be approved before approving the driver application",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }
@@ -823,31 +858,6 @@ private fun StatusChip(
             color = color
         )
     }
-}
-
-@Composable
-private fun StudentInfoRow(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f)
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.weight(1f),
-            textAlign = TextAlign.End
-        )
-    }
-    Spacer(modifier = Modifier.height(8.dp))
 }
 
 @Composable

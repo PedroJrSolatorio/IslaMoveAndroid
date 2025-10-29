@@ -1,5 +1,6 @@
 package com.rj.islamove.ui.screens.driver
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -21,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.rj.islamove.data.models.BookingStatus
+import com.rj.islamove.ui.components.ReportPassengerModal
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -40,6 +42,18 @@ fun DriverTripDetailsScreen(
     }
 
     val booking = uiState.selectedTripForDetails
+
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Show success message
+    LaunchedEffect(uiState.successMessage) {
+        uiState.successMessage?.let { message ->
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = SnackbarDuration.Short
+            )
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -63,6 +77,19 @@ fun DriverTripDetailsScreen(
                     titleContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
+        },
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState) { data ->
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = if (uiState.successMessage != null) {
+                        Color(0xFF4CAF50)
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    },
+                    contentColor = Color.White
+                )
+            }
         }
     ) { paddingValues ->
         if (booking == null) {
@@ -394,6 +421,8 @@ fun DriverTripDetailsScreen(
                 // Passenger Information (if available)
                 if (uiState.selectedTripPassenger != null) {
                     val passenger = uiState.selectedTripPassenger!!
+                    var showReportPassengerModal by remember { mutableStateOf(false) }
+
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Column {
@@ -457,9 +486,42 @@ fun DriverTripDetailsScreen(
                                             color = Color.Black
                                         )
                                     }
+
+                                    // Report button
+                                    OutlinedButton(
+                                        onClick = { showReportPassengerModal = true },
+                                        modifier = Modifier.height(36.dp),
+                                        border = BorderStroke(1.dp, Color(0xFFF44336)),
+                                        shape = RoundedCornerShape(6.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Flag,
+                                            contentDescription = "Report Passenger",
+                                            tint = Color(0xFFF44336),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "Report",
+                                            fontSize = 12.sp,
+                                            color = Color(0xFFF44336)
+                                        )
+                                    }
                                 }
                             }
                         }
+                    }
+
+                    // Report Passenger Modal
+                    if (showReportPassengerModal) {
+                        ReportPassengerModal(
+                            passengerName = passenger.displayName ?: "Passenger",
+                            onDismiss = { showReportPassengerModal = false },
+                            onSubmitReport = { reportType, description ->
+                                viewModel.submitPassengerReport(reportType, description)
+                                showReportPassengerModal = false
+                            }
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))

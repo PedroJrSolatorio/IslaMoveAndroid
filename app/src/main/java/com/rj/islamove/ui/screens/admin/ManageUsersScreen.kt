@@ -75,6 +75,7 @@ fun ManageUsersScreen(
         UsersList(
             users = uiState.filteredUsers,
             driverReportCounts = uiState.driverReportCounts,
+            passengerReportCounts = uiState.passengerReportCounts,
             userCommentCounts = uiState.userCommentCounts,
             isLoading = uiState.isLoading,
             onUserClick = onNavigateToUserDetail
@@ -246,6 +247,7 @@ private fun FilterTab(
 private fun UsersList(
     users: List<User>,
     driverReportCounts: Map<String, Int>,
+    passengerReportCounts: Map<String, Int>,
     userCommentCounts: Map<String, Int>,
     isLoading: Boolean,
     onUserClick: (User) -> Unit
@@ -272,6 +274,7 @@ private fun UsersList(
                 UserItem(
                     user = user,
                     reportCount = driverReportCounts[user.uid] ?: 0,
+                    passengerReportCount = passengerReportCounts[user.uid] ?: 0,
                     commentCount = userCommentCounts[user.uid] ?: 0,
                     onClick = { onUserClick(user) }
                 )
@@ -284,6 +287,7 @@ private fun UsersList(
 private fun UserItem(
     user: User,
     reportCount: Int,
+    passengerReportCount: Int,
     commentCount: Int,
     onClick: () -> Unit
 ) {
@@ -360,6 +364,7 @@ private fun UserItem(
             StatusBadgeWithReport(
                 user = user,
                 reportCount = reportCount,
+                passengerReportCount = passengerReportCount,
                 commentCount = commentCount
             )
         }
@@ -370,7 +375,8 @@ private fun UserItem(
 private fun StatusBadgeWithReport(
     user: User,
     reportCount: Int,
-    commentCount: Int
+    commentCount: Int,
+    passengerReportCount: Int = 0
 ) {
     val (backgroundColor, textColor, statusText) = when (user.userType) {
         UserType.DRIVER -> {
@@ -399,13 +405,31 @@ private fun StatusBadgeWithReport(
         if (user.userType == UserType.DRIVER && reportCount > 0) {
             Icon(
                 imageVector = Icons.Default.Flag,
-                contentDescription = "Report",
+                contentDescription = "Driver Report",
                 tint = Color(0xFFFF5722),
                 modifier = Modifier.size(16.dp)
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text(
                 text = reportCount.toString(),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFFF5722)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+        }
+
+        // Show red flag icon and count for passengers with pending reports (ADD THIS)
+        if (user.userType == UserType.PASSENGER && passengerReportCount > 0) {
+            Icon(
+                imageVector = Icons.Default.Flag,
+                contentDescription = "Passenger Report",
+                tint = Color(0xFFFF5722),
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = passengerReportCount.toString(),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFFFF5722)

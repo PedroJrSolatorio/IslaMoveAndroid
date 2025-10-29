@@ -38,6 +38,7 @@ import com.rj.islamove.data.models.DocumentStatus
 import com.rj.islamove.data.models.DriverDocument
 import com.rj.islamove.data.models.SupportComment
 import com.rj.islamove.data.models.DriverReport
+import com.rj.islamove.data.models.PassengerReport
 import com.rj.islamove.data.models.ReportType
 import com.rj.islamove.data.models.ReportStatus
 import com.rj.islamove.data.models.VerificationStatus
@@ -50,6 +51,7 @@ fun UserDetailScreen(
     user: User,
     userComments: List<SupportComment> = emptyList(),
     driverReports: List<DriverReport> = emptyList(),
+    passengerReports: List<PassengerReport> = emptyList(),
     onNavigateBack: () -> Unit = {},
     onViewTripHistory: () -> Unit = {},
     onNavigateToDocumentDetails: (String, String, String) -> Unit = { _, _, _ -> },
@@ -59,6 +61,7 @@ fun UserDetailScreen(
     onResetPassword: (String) -> Unit = { _ -> },
     onUpdateActiveStatus: (String, Boolean) -> Unit = { _, _ -> },
     onUpdateReportStatus: (String, ReportStatus) -> Unit = { _, _ -> },
+    onUpdatePassengerReportStatus: (String, String) -> Unit = { _, _ -> },
     onUpdateDriverVerification: (String, VerificationStatus) -> Unit = { _, _ -> },
     onUpdatePassword: (String, String) -> Unit = { _, _ -> },
     onDeleteUser: (User) -> Unit = { _ -> },
@@ -79,7 +82,9 @@ fun UserDetailScreen(
     var selectedVerificationStatus by remember { mutableStateOf(VerificationStatus.PENDING) }
     var showPassword by remember { mutableStateOf(false) }
     var showDeleteConfirmationDialog by remember { mutableStateOf(false) }
-        
+    var selectedPassengerReport by remember { mutableStateOf<PassengerReport?>(null) }
+    var showPassengerReportStatusDialog by remember { mutableStateOf(false) }
+
     // Debug logging to check discount field
     androidx.compose.runtime.LaunchedEffect(user) {
         android.util.Log.d("UserDetailScreen", "User data: ${user.displayName}")
@@ -200,6 +205,19 @@ fun UserDetailScreen(
                     onReportClick = { report ->
                         selectedReport = report
                         showStatusUpdateDialog = true
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // Passenger Reports Section - Only show for passengers
+            if (user.userType == UserType.PASSENGER) {
+                PassengerReportsSection(
+                    reports = passengerReports,
+                    onReportClick = { report ->
+                        selectedPassengerReport = report
+                        showPassengerReportStatusDialog = true
                     }
                 )
 
@@ -439,6 +457,117 @@ fun UserDetailScreen(
                     onClick = {
                         showStatusUpdateDialog = false
                         selectedReport = null
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Passenger Report Status Update Dialog
+    if (showPassengerReportStatusDialog && selectedPassengerReport != null) {
+        var selectedStatus by remember { mutableStateOf(selectedPassengerReport!!.status) }
+
+        AlertDialog(
+            onDismissRequest = {
+                showPassengerReportStatusDialog = false
+                selectedPassengerReport = null
+            },
+            title = {
+                Text(
+                    text = "Update Report Status",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Report ID: ${selectedPassengerReport!!.reportId.take(8)}",
+                        fontSize = 12.sp,
+                        color = Color(0xFF666666)
+                    )
+                    Text(
+                        text = "Report Type: ${selectedPassengerReport!!.reportType.name.replace("_", " ")}",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        text = "Select new status:",
+                        fontSize = 14.sp,
+                        color = Color(0xFF333333)
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Status selection radio buttons
+                    val statusOptions = listOf(
+                        "pending" to "Pending Review",
+                        "under_review" to "Under Review",
+                        "resolved" to "Resolved",
+                        "dismissed" to "Dismissed"
+                    )
+
+                    statusOptions.forEach { (status, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { selectedStatus = status },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = selectedStatus == status,
+                                onClick = { selectedStatus = status },
+                                colors = RadioButtonDefaults.colors(
+                                    selectedColor = when (status) {
+                                        "pending" -> Color(0xFFF57C00)
+                                        "under_review" -> Color(0xFF2196F3)
+                                        "resolved" -> Color(0xFF4CAF50)
+                                        "dismissed" -> Color(0xFF9E9E9E)
+                                        else -> Color(0xFF9E9E9E)
+                                    }
+                                )
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = label,
+                                fontSize = 14.sp,
+                                color = Color(0xFF333333)
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (selectedStatus != selectedPassengerReport!!.status) {
+                            onUpdatePassengerReportStatus(selectedPassengerReport!!.reportId, selectedStatus)
+                            actionMessage = "Report status updated to ${when (selectedStatus) {
+                                "pending" -> "Pending Review"
+                                "under_review" -> "Under Review"
+                                "resolved" -> "Resolved"
+                                "dismissed" -> "Dismissed"
+                                else -> selectedStatus
+                            }}"
+                        }
+                        showPassengerReportStatusDialog = false
+                        selectedPassengerReport = null
+                    },
+                    enabled = selectedStatus != selectedPassengerReport!!.status
+                ) {
+                    Text("Update")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showPassengerReportStatusDialog = false
+                        selectedPassengerReport = null
                     }
                 ) {
                     Text("Cancel")
@@ -709,6 +838,8 @@ private fun ReportItem(report: DriverReport, onReportClick: (DriverReport) -> Un
             containerColor = when (report.reportType) {
                 ReportType.UNSAFE_DRIVING -> Color(0xFFFFEBEE)
                 ReportType.INAPPROPRIATE_BEHAVIOR -> Color(0xFFFFF3E0)
+                ReportType.NO_SHOW -> Color(0xFFE3F2FD)
+                ReportType.WRONG_LOCATION -> Color(0xFFFFF9C4)
                 else -> Color(0xFFF8F9FA)
             }
         ),
@@ -733,6 +864,8 @@ private fun ReportItem(report: DriverReport, onReportClick: (DriverReport) -> Un
                         ReportType.HYGIENE_CONCERNS -> "Hygiene Concerns"
                         ReportType.OVERCHARGING -> "Overcharging"
                         ReportType.CANCELLATION_ABUSE -> "Cancellation Abuse"
+                        ReportType.NO_SHOW -> "No Show / Didn't Board"
+                        ReportType.WRONG_LOCATION -> "Wrong Pickup Location"
                         ReportType.OTHER -> "Other"
                     },
                     fontSize = 14.sp,
@@ -740,6 +873,8 @@ private fun ReportItem(report: DriverReport, onReportClick: (DriverReport) -> Un
                     color = when (report.reportType) {
                         ReportType.UNSAFE_DRIVING -> Color(0xFFD32F2F)
                         ReportType.INAPPROPRIATE_BEHAVIOR -> Color(0xFFF57C00)
+                        ReportType.NO_SHOW -> Color(0xFF1976D2)
+                        ReportType.WRONG_LOCATION -> Color(0xFFFBC02D)
                         else -> Color(0xFF333333)
                     }
                 )
@@ -793,6 +928,155 @@ private fun ReportItem(report: DriverReport, onReportClick: (DriverReport) -> Un
                             com.rj.islamove.data.models.ReportStatus.UNDER_REVIEW -> Color(0xFF2196F3)
                             com.rj.islamove.data.models.ReportStatus.RESOLVED -> Color(0xFF4CAF50)
                             com.rj.islamove.data.models.ReportStatus.DISMISSED -> Color(0xFF9E9E9E)
+                        },
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun PassengerReportsSection(
+    reports: List<PassengerReport>,
+    onReportClick: (PassengerReport) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                text = "Passenger Reports",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.Black
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (reports.isEmpty()) {
+                Text(
+                    text = "No reports submitted",
+                    fontSize = 14.sp,
+                    color = Color(0xFF666666),
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            } else {
+                reports.forEach { report ->
+                    PassengerReportItem(report = report, onReportClick = onReportClick)
+                    if (report != reports.last()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PassengerReportItem(
+    report: PassengerReport,
+    onReportClick: (PassengerReport) -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onReportClick(report) },
+        colors = CardDefaults.cardColors(
+            containerColor = when (report.reportType) {
+                ReportType.INAPPROPRIATE_BEHAVIOR -> Color(0xFFFFF3E0)
+                ReportType.NO_SHOW -> Color(0xFFE3F2FD)
+                ReportType.WRONG_LOCATION -> Color(0xFFFFF9C4)
+                else -> Color(0xFFF8F9FA)
+            }
+        ),
+        shape = RoundedCornerShape(8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            // Header with report type and date
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = when (report.reportType) {
+                        ReportType.INAPPROPRIATE_BEHAVIOR -> "Inappropriate Behavior"
+                        ReportType.NO_SHOW -> "No Show / Didn't Board"
+                        ReportType.WRONG_LOCATION -> "Wrong Pickup Location"
+                        ReportType.OTHER -> "Other"
+                        else -> report.reportType.name.replace("_", " ")
+                    },
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = when (report.reportType) {
+                        ReportType.INAPPROPRIATE_BEHAVIOR -> Color(0xFFF57C00)
+                        ReportType.NO_SHOW -> Color(0xFF1976D2)
+                        ReportType.WRONG_LOCATION -> Color(0xFFFBC02D)
+                        else -> Color(0xFF333333)
+                    }
+                )
+
+                Text(
+                    text = formatDate(report.timestamp),
+                    fontSize = 12.sp,
+                    color = Color(0xFF666666)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Reporter info
+            Text(
+                text = "Reported by: Driver",
+                fontSize = 12.sp,
+                color = Color(0xFF666666),
+                fontWeight = FontWeight.Medium
+            )
+
+            if (report.description.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Description
+                Text(
+                    text = report.description,
+                    fontSize = 14.sp,
+                    color = Color(0xFF333333),
+                    lineHeight = 20.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Status badge
+            Text(
+                text = when (report.status) {
+                    "pending" -> "Pending Review"
+                    "under_review" -> "Under Review"
+                    "resolved" -> "Resolved"
+                    "dismissed" -> "Dismissed"
+                    else -> report.status
+                },
+                fontSize = 12.sp,
+                color = Color.White,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .background(
+                        color = when (report.status) {
+                            "pending" -> Color(0xFFF57C00)
+                            "under_review" -> Color(0xFF2196F3)
+                            "resolved" -> Color(0xFF4CAF50)
+                            "dismissed" -> Color(0xFF9E9E9E)
+                            else -> Color(0xFF9E9E9E)
                         },
                         shape = RoundedCornerShape(8.dp)
                     )

@@ -3,6 +3,7 @@ package com.rj.islamove.ui.screens.admin
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rj.islamove.data.models.DocumentStatus
 import com.rj.islamove.data.models.User
 import com.rj.islamove.data.models.VerificationStatus
 import com.rj.islamove.data.repository.UserRepository
@@ -67,6 +68,24 @@ class DriverDetailsViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isProcessingAction = true)
 
             try {
+                // First, check if all documents are approved
+                val driver = _uiState.value.driver
+                val allDocumentsApproved = driver?.driverData?.documents?.let { docs ->
+                    val requiredDocTypes = listOf("license", "vehicle_registration", "insurance", "vehicle_inspection", "profile_photo")
+                    requiredDocTypes.all { docType ->
+                        docs[docType]?.status == DocumentStatus.APPROVED
+                    }
+                } ?: false
+
+                if (!allDocumentsApproved) {
+                    _uiState.value = _uiState.value.copy(
+                        isProcessingAction = false,
+                        errorMessage = "Cannot approve driver: All documents must be approved first"
+                    )
+                    Log.w("DriverDetailsVM", "Cannot approve driver $driverUid: Not all documents are approved")
+                    return@launch
+                }
+
                 // First, approve all documents that are currently under review in bulk
                 userRepository.approveAllDriverDocuments(driverUid)
 

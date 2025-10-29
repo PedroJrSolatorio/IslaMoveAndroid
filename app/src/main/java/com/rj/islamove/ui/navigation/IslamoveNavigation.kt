@@ -502,8 +502,14 @@ fun IslamoveNavigation(
                 userComments = manageUsersViewModel.getUserComments(userId)
                 // Load driver reports if this is a driver
                 user?.let {
-                    if (it.userType == com.rj.islamove.data.models.UserType.DRIVER) {
-                        manageUsersViewModel.loadDriverReports(userId)
+                    when (it.userType) {
+                        com.rj.islamove.data.models.UserType.DRIVER -> {
+                            manageUsersViewModel.loadDriverReports(userId)
+                        }
+                        com.rj.islamove.data.models.UserType.PASSENGER -> {
+                            manageUsersViewModel.loadPassengerReports(userId)
+                        }
+                        else -> {}
                     }
                 }
             }
@@ -512,6 +518,7 @@ fun IslamoveNavigation(
                 user = user!!,
                 userComments = userComments,
                 driverReports = manageUsersViewModel.uiState.collectAsState().value.driverReports,
+                passengerReports = manageUsersViewModel.uiState.collectAsState().value.passengerReports,
                 onNavigateBack = {
                     navController.popBackStack()
                 },
@@ -535,6 +542,9 @@ fun IslamoveNavigation(
                 },
                 onUpdateReportStatus = { reportId, newStatus ->
                     manageUsersViewModel.updateReportStatus(reportId, newStatus)
+                },
+                onUpdatePassengerReportStatus = { reportId, newStatus -> // ADD THIS
+                    manageUsersViewModel.updatePassengerReportStatus(reportId, newStatus)
                 },
                 onUpdateDriverVerification = { userId, verificationStatus ->
                     manageUsersViewModel.updateDriverVerification(userId, verificationStatus)

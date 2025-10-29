@@ -1,5 +1,6 @@
 package com.rj.islamove.ui.screens.admin
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
@@ -17,6 +18,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import com.rj.islamove.data.repository.PassengerReportRepository
+import com.rj.islamove.data.models.PassengerReport
+import kotlinx.coroutines.tasks.await
 
 @HiltViewModel
 class ManageUsersViewModel @Inject constructor(
@@ -24,6 +28,7 @@ class ManageUsersViewModel @Inject constructor(
     private val userStatusRepository: UserStatusRepository,
     private val supportCommentRepository: SupportCommentRepository,
     private val driverReportRepository: DriverReportRepository,
+    private val passengerReportRepository: PassengerReportRepository,
     private val firebaseAuth: FirebaseAuth
 ) : ViewModel() {
 
@@ -36,6 +41,7 @@ class ManageUsersViewModel @Inject constructor(
     init {
         loadUsers()
         loadDriverReportCounts()
+        loadPassengerReportCounts()
         loadUserCommentCounts()
         // Clean up any stale pending operations on app start
         cleanupStalePendingOperations()
@@ -110,10 +116,7 @@ class ManageUsersViewModel @Inject constructor(
 
     fun refreshDriverReportCounts() {
         loadDriverReportCounts()
-    }
-
-    fun refreshUserCommentCounts() {
-        loadUserCommentCounts()
+        loadPassengerReportCounts()
     }
 
     private fun loadDriverReportCounts() {
@@ -133,6 +136,102 @@ class ManageUsersViewModel @Inject constructor(
             } catch (e: Exception) {
                 android.util.Log.e("ManageUsersVM", "Error loading driver report counts", e)
                 _uiState.update { it.copy(driverReportCounts = emptyMap()) }
+            }
+        }
+    }
+
+    private fun loadPassengerReportCounts() {
+        viewModelScope.launch {
+            try {
+                val result = passengerReportRepository.getAllPassengerReports()
+                result.fold(
+                    onSuccess = { reports ->
+                        // Filter only pending and under review reports
+                        val pendingReports = reports.filter {
+                            it.status == "pending" || it.status == "under_review"
+                        }
+
+                        // Group by passenger ID and count
+                        val reportCounts = pendingReports
+                            .groupBy { it.passengerId }
+                            .mapValues { (_, reports) -> reports.size }
+
+                        _uiState.update { it.copy(passengerReportCounts = reportCounts) }
+                        android.util.Log.d("ManageUsersVM", "Loaded passenger report counts: $reportCounts")
+                    },
+                    onFailure = { exception ->
+                        android.util.Log.e("ManageUsersVM", "Failed to load passenger report counts: ${exception.message}")
+                        _uiState.update { it.copy(passengerReportCounts = emptyMap()) }
+                    }
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("ManageUsersVM", "Error loading passenger report counts", e)
+                _uiState.update { it.copy(passengerReportCounts = emptyMap()) }
+            }
+        }
+    }
+
+    /**
+     * Load passenger reports for a specific passenger
+     */
+    fun loadPassengerReports(passengerId: String) {
+        viewModelScope.launch {
+            try {
+                Log.d("ManageUsersViewModel", "🔍 Loading passenger reports for passenger: $passengerId")
+
+                val result = passengerReportRepository.getPassengerReports(passengerId)
+                result.fold(
+                    onSuccess = { reports ->
+                        Log.d("ManageUsersViewModel", "✅ Loaded ${reports.size} reports for passenger $passengerId")
+                        reports.forEach { report ->
+                            Log.d("ManageUsersViewModel", "  Report: ${report.reportId} - Type: ${report.reportType} - Status: ${report.status}")
+                        }
+                        _uiState.update { it.copy(passengerReports = reports.sortedByDescending { it.timestamp }) }
+                    },
+                    onFailure = { exception ->
+                        Log.e("ManageUsersViewModel", "Failed to load passenger reports for $passengerId: ${exception.message}")
+                        _uiState.update { it.copy(passengerReports = emptyList()) }
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e("ManageUsersViewModel", "Error loading passenger reports for $passengerId", e)
+                _uiState.update { it.copy(passengerReports = emptyList()) }
+            }
+        }
+    }
+
+    /**
+     * Update the status of a passenger report
+     */
+    fun updatePassengerReportStatus(reportId: String, newStatus: String) {
+        viewModelScope.launch {
+            try {
+                // Update in Firestore
+                val updates = mapOf("status" to newStatus)
+                com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                    .collection("passenger_reports")
+                    .document(reportId)
+                    .update(updates)
+                    .await()
+
+                android.util.Log.d("ManageUsersViewModel", "Successfully updated passenger report $reportId status to $newStatus")
+
+                // Refresh the reports list to show the updated status
+                val currentReports = _uiState.value.passengerReports
+                val updatedReports = currentReports.map { report ->
+                    if (report.reportId == reportId) {
+                        report.copy(status = newStatus)
+                    } else {
+                        report
+                    }
+                }
+                _uiState.update { it.copy(passengerReports = updatedReports) }
+
+                // Refresh passenger report counts after status update
+                loadPassengerReportCounts()
+            } catch (e: Exception) {
+                android.util.Log.e("ManageUsersViewModel", "Error updating passenger report $reportId status", e)
+                _uiState.update { it.copy(error = "Error updating report status: ${e.message}") }
             }
         }
     }
@@ -522,7 +621,9 @@ data class ManageUsersUiState(
     val isStatusDropdownExpanded: Boolean = false,
     val filteredUsers: List<User> = emptyList(),
     val driverReports: List<DriverReport> = emptyList(),
+    val passengerReports: List<PassengerReport> = emptyList(),
     val driverReportCounts: Map<String, Int> = emptyMap(),
+    val passengerReportCounts: Map<String, Int> = emptyMap(),
     val userCommentCounts: Map<String, Int> = emptyMap(),
     val isLoading: Boolean = false,
     val error: String? = null

@@ -48,23 +48,6 @@ class DriverReportRepository @Inject constructor(
         }
     }
 
-    suspend fun getReportsFromPassenger(passengerId: String): Result<List<DriverReport>> {
-        return try {
-            val querySnapshot = firestore.collection(COLLECTION_NAME)
-                .whereEqualTo("passengerId", passengerId)
-                .get()
-                .await()
-
-            val reports = querySnapshot.documents.mapNotNull { document ->
-                document.toObject(DriverReport::class.java)
-            }
-
-            Result.success(reports)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
     suspend fun updateReportStatus(reportId: String, newStatus: com.rj.islamove.data.models.ReportStatus): Result<Unit> {
         return try {
             firestore.collection(COLLECTION_NAME)
@@ -97,23 +80,6 @@ class DriverReportRepository @Inject constructor(
                 .mapValues { (_, reports) -> reports.size }
 
             Result.success(reportCounts)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun getPendingReportCountForDriver(driverId: String): Result<Int> {
-        return try {
-            val querySnapshot = firestore.collection(COLLECTION_NAME)
-                .whereEqualTo("driverId", driverId)
-                .whereIn("status", listOf(
-                    com.rj.islamove.data.models.ReportStatus.PENDING.name,
-                    com.rj.islamove.data.models.ReportStatus.UNDER_REVIEW.name
-                ))
-                .get()
-                .await()
-
-            Result.success(querySnapshot.size())
         } catch (e: Exception) {
             Result.failure(e)
         }

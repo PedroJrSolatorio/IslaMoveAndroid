@@ -39,8 +39,12 @@ import androidx.core.content.ContextCompat
 import javax.inject.Inject
 import com.rj.islamove.R
 import com.rj.islamove.data.repository.DriverRequestStatus
-import com.rj.islamove.data.repository.RequestPhase
 import kotlinx.coroutines.flow.update
+import com.rj.islamove.data.models.PassengerReport
+import com.rj.islamove.data.models.ReportType
+import com.rj.islamove.data.repository.PassengerReportRepository
+import java.util.UUID
+import kotlinx.coroutines.delay
 
 data class DateRange(
     val startDate: Long,
@@ -136,6 +140,7 @@ data class DriverHomeUiState(
     val online: Boolean = false,
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
+    val successMessage: String? = null,
     val currentUserLocation: Point? = null,
     val hasLocationPermissions: Boolean = false,
     val totalEarnings: Double = 0.0,
@@ -200,6 +205,8 @@ class DriverHomeViewModel @Inject constructor(
     private val ratingRepository: RatingRepository,
     private val zoneBoundaryRepository: ZoneBoundaryRepository,
     private val firestore: FirebaseFirestore,
+    private val passengerReportRepository: PassengerReportRepository,
+    private val firebaseAuth: FirebaseAuth,
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) : ViewModel() {
 
@@ -2271,20 +2278,11 @@ class DriverHomeViewModel @Inject constructor(
         }
     }
 
-    private fun getTodayStartTime(): Long {
-        val calendar = java.util.Calendar.getInstance()
-        calendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
-        calendar.set(java.util.Calendar.MINUTE, 0)
-        calendar.set(java.util.Calendar.SECOND, 0)
-        calendar.set(java.util.Calendar.MILLISECOND, 0)
-        return calendar.timeInMillis
-    }
-
     /**
      * Clear error message
      */
     fun clearError() {
-        _uiState.value = _uiState.value.copy(errorMessage = null)
+        _uiState.value = _uiState.value.copy(errorMessage = null, successMessage = null)
     }
 
     /**
@@ -3264,5 +3262,61 @@ class DriverHomeViewModel @Inject constructor(
         authStateListener?.let { auth.addAuthStateListener(it) }
 
         d("DriverHomeViewModel", "🔍 Auth state observer registered")
+    }
+
+    /**
+     * Submit a report about a passenger
+     */
+    fun submitPassengerReport(reportType: ReportType, description: String) {
+        val booking = _uiState.value.selectedTripForDetails ?: return
+        val passengerId = booking.passengerId
+        val currentDriverId = firebaseAuth.currentUser?.uid ?: return
+
+        Log.d("DriverHomeViewModel", "🚨 Starting passenger report submission")
+        Log.d("DriverHomeViewModel", "Passenger ID: $passengerId")
+        Log.d("DriverHomeViewModel", "Driver ID: $currentDriverId")
+        Log.d("DriverHomeViewModel", "Report Type: $reportType")
+
+        viewModelScope.launch {
+            try {
+                val report = PassengerReport(
+                    reportId = "",
+                    passengerId = passengerId,
+                    reportedBy = currentDriverId,
+                    reporterType = "driver",
+                    bookingId = booking.id,
+                    reportType = reportType,
+                    description = description,
+                    timestamp = System.currentTimeMillis(),
+                    status = "pending"
+                )
+                Log.d("DriverHomeViewModel", "📝 Submitting report to repository...")
+
+                passengerReportRepository.submitPassengerReport(report)
+                    .onSuccess {
+                        Log.d("DriverHomeViewModel", "✅ Report saved successfully!")
+                        _uiState.value = _uiState.value.copy(
+                            successMessage = "Report submitted successfully"
+                        )
+
+                        // Clear success message after 3 seconds
+                        viewModelScope.launch {
+                            delay(3000)
+                            _uiState.value = _uiState.value.copy(successMessage = null)
+                        }
+                    }
+                    .onFailure { exception ->
+                        Log.e("DriverHomeViewModel", "Failed to save report: ${exception.message}", exception)
+                        _uiState.value = _uiState.value.copy(
+                            errorMessage = "Failed to submit report: ${exception.message}"
+                        )
+                    }
+            } catch (e: Exception) {
+                Log.e("DriverHomeViewModel", "Exception during report submission: ${e.message}", e)
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = "Failed to submit report: ${e.message}"
+                )
+            }
+        }
     }
 }

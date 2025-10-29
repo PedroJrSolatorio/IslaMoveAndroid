@@ -25,7 +25,6 @@ import com.rj.islamove.data.repository.SupportCommentRepository
 import com.rj.islamove.data.repository.DriverReportRepository
 import com.rj.islamove.data.repository.SanJoseLocationRepository
 import com.rj.islamove.data.models.CustomLandmark
-import com.rj.islamove.data.models.SupportComment
 import com.rj.islamove.data.models.DriverReport
 import com.google.firebase.auth.FirebaseAuth
 import com.rj.islamove.data.services.PassengerLocationService
@@ -65,7 +64,7 @@ data class PassengerHomeUiState(
     val onlineDrivers: List<DriverLocation> = emptyList(),
     val showOnlineDrivers: Boolean = true,
     val onlineDriverCount: Int = 0,
-    // New fields for passenger dashboard
+    // Fields for passenger dashboard
     val savedPlaces: List<BookingLocation> = emptyList(),
     val homeAddress: BookingLocation? = null,
     val recentTrips: List<Booking> = emptyList(),
@@ -112,6 +111,7 @@ data class PassengerHomeUiState(
     val cancellationTimeRemaining: Int = 0, // Seconds remaining (visual indicator only)
     val remainingCancellations: Int = 3, // Number of cancellations remaining (out of 3)
     val hasExceededCancellationLimit: Boolean = false, // Whether user has used all 3 cancellations
+    val cancellationResetTimeMillis: Long? = null, // When the cancellation limit will reset
     // Current user data for profile display
     val currentUser: User? = null,
     // User rating statistics for reviews section
@@ -484,74 +484,6 @@ class PassengerHomeViewModel @Inject constructor(
         calculateFareIfReady()
     }
 
-    /**
-     * Set pickup location from text input with geocoding (pickup can be anywhere)
-     */
-    fun setPickupLocationFromText(
-        address: String,
-        coordinates: GeoPoint = GeoPoint(14.5995, 120.9842)
-    ) {
-        viewModelScope.launch {
-            try {
-                // Try to geocode the pickup location (no geographic restrictions)
-                val geocodedLocation = geocodeLocationAnywhere(address)
-                setPickupLocation(geocodedLocation)
-            } catch (e: Exception) {
-                // Fallback to provided coordinates or default
-                val location = BookingLocation(
-                    address = address,
-                    coordinates = coordinates
-                )
-                setPickupLocation(location)
-
-                // Show warning that geocoding failed but pickup is still allowed
-                _uiState.value = _uiState.value.copy(
-                    errorMessage = "Could not find exact coordinates for pickup location. Please verify the location is correct."
-                )
-            }
-        }
-    }
-
-    /**
-     * Set destination from text input (pickup is auto-set from current location)
-     */
-    fun setDestinationFromText(address: String) {
-        // Ensure we have current location as pickup
-        if (_uiState.value.pickupLocation == null && _uiState.value.currentUserLocation != null) {
-            val currentLoc = _uiState.value.currentUserLocation!!
-            val geoPoint = GeoPoint(currentLoc.latitude(), currentLoc.longitude())
-
-            // Check if current location is in a boundary
-            val boundaryName = BoundaryFareUtils.determineBoundary(geoPoint, zoneBoundaryRepository)
-            val pickupAddress = boundaryName ?: "Lat: ${String.format("%.6f", currentLoc.latitude())}, Lng: ${String.format("%.6f", currentLoc.longitude())}"
-
-            val currentLocationBooking = BookingLocation(
-                address = pickupAddress,
-                coordinates = geoPoint
-            )
-            setPickupLocation(currentLocationBooking)
-        }
-
-        viewModelScope.launch {
-            try {
-                // Use geocoding to get actual coordinates for San Jose, Dinagat Islands
-                val geocodedLocation = geocodeLocationInSanJose(address)
-                setDestination(geocodedLocation)
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    errorMessage = e.message ?: "Invalid destination location"
-                )
-            }
-        }
-    }
-
-    /**
-     * Select vehicle type
-     */
-    fun selectVehicleCategory(vehicleCategory: VehicleCategory) {
-        _uiState.value = _uiState.value.copy(selectedVehicleCategory = vehicleCategory)
-        calculateFareIfReady()
-    }
 
     /**
      * Calculate fare estimate and route if both locations are set
@@ -652,12 +584,6 @@ class PassengerHomeViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Create booking - First check for available drivers
-     */
-    fun createBooking() {
-        createBookingWithComment("")
-    }
 
     /**
      * Create booking with passenger comment - First check for available drivers
@@ -666,6 +592,23 @@ class PassengerHomeViewModel @Inject constructor(
         // Check if cancellation is currently in progress
         if (cancellationInProgress) {
             Log.d("PassengerHomeViewModel", "Booking creation blocked - cancellation in progress")
+            return
+        }
+
+        // Check if passenger has exceeded cancellation limit
+        if (_uiState.value.hasExceededCancellationLimit) {
+            val resetTime = _uiState.value.cancellationResetTimeMillis
+            val message = if (resetTime != null) {
+                val hoursRemaining = ((resetTime - System.currentTimeMillis()) / (1000 * 60 * 60)).toInt()
+                val minutesRemaining = (((resetTime - System.currentTimeMillis()) / (1000 * 60)) % 60).toInt()
+                "You have reached your cancellation limit (3 cancellations). You can book again in $hoursRemaining hours and $minutesRemaining minutes."
+            } else {
+                "You have reached your cancellation limit (3 cancellations). Please try again later."
+            }
+
+            _uiState.value = _uiState.value.copy(
+                errorMessage = message
+            )
             return
         }
 
@@ -1001,20 +944,7 @@ class PassengerHomeViewModel @Inject constructor(
     }
 
     /**
-     * Get current date in YYYY-MM-DD format
-     */
-    private fun getCurrentDate(): String {
-        val calendar = java.util.Calendar.getInstance()
-        return String.format(
-            "%04d-%02d-%02d",
-            calendar.get(java.util.Calendar.YEAR),
-            calendar.get(java.util.Calendar.MONTH) + 1,
-            calendar.get(java.util.Calendar.DAY_OF_MONTH)
-        )
-    }
-
-    /**
-     * Check if passenger has exceeded cancellation limit (resets daily)
+     * Check if passenger has exceeded cancellation limit (resets after 12 hours)
      */
     private suspend fun checkCancellationLimit(): Boolean {
         val currentUserId = firebaseAuth.currentUser?.uid ?: return false
@@ -1023,18 +953,20 @@ class PassengerHomeViewModel @Inject constructor(
             val userResult = userRepository.getUserByUid(currentUserId)
             userResult.fold(
                 onSuccess = { user ->
-                    val currentDate = getCurrentDate()
-                    val lastCancellationDate = user.preferences.lastCancellationDate
+                    val currentTimeMillis = System.currentTimeMillis()
+                    val lastCancellationTimestamp = user.preferences.lastCancellationTimestamp
+                    val twelveHoursInMillis = 12 * 60 * 60 * 1000L
 
-                    // Reset counter if it's a new day
-                    val cancellationCount = if (lastCancellationDate != currentDate) {
-                        // It's a new day, reset the counter in Firestore
-                        Log.d("PassengerViewModel", "New day detected! Resetting cancellation count from ${user.preferences.cancellationCount} to 0")
+                    // Check if 12 hours have passed since last cancellation
+                    val cancellationCount = if (lastCancellationTimestamp == null ||
+                        (currentTimeMillis - lastCancellationTimestamp) >= twelveHoursInMillis) {
+                        // 12 hours have passed, reset the counter
+                        Log.d("PassengerViewModel", "12 hours elapsed! Resetting cancellation count from ${user.preferences.cancellationCount} to 0")
                         userRepository.updateUserProfile(
                             uid = currentUserId,
                             preferences = mapOf(
                                 "cancellationCount" to 0,
-                                "lastCancellationDate" to currentDate
+                                "lastCancellationTimestamp" to com.google.firebase.firestore.FieldValue.delete()
                             )
                         )
                         0
@@ -1043,13 +975,22 @@ class PassengerHomeViewModel @Inject constructor(
                     }
 
                     val remainingCancellations = maxOf(0, 3 - cancellationCount)
+                    val hasExceededLimit = cancellationCount >= 3
+
+                    // Calculate reset time if limit is exceeded
+                    val resetTimeMillis = if (hasExceededLimit && lastCancellationTimestamp != null) {
+                        lastCancellationTimestamp + twelveHoursInMillis
+                    } else {
+                        null
+                    }
 
                     _uiState.value = _uiState.value.copy(
                         remainingCancellations = remainingCancellations,
-                        hasExceededCancellationLimit = cancellationCount >= 3
+                        hasExceededCancellationLimit = hasExceededLimit,
+                        cancellationResetTimeMillis = resetTimeMillis
                     )
 
-                    Log.d("PassengerViewModel", "Cancellation limit check - Count: $cancellationCount, Remaining: $remainingCancellations, Date: $currentDate")
+                    Log.d("PassengerViewModel", "Cancellation limit check - Count: $cancellationCount, Remaining: $remainingCancellations")
 
                     cancellationCount >= 3
                 },
@@ -1062,7 +1003,7 @@ class PassengerHomeViewModel @Inject constructor(
     }
 
     /**
-     * Increment user's cancellation count (resets daily)
+     * Increment user's cancellation count (resets after 12 hours)
      */
     private suspend fun incrementCancellationCount() {
         val currentUserId = firebaseAuth.currentUser?.uid ?: return
@@ -1070,39 +1011,45 @@ class PassengerHomeViewModel @Inject constructor(
         try {
             val userResult = userRepository.getUserByUid(currentUserId)
             userResult.onSuccess { user ->
-                val currentDate = getCurrentDate()
-                val lastCancellationDate = user.preferences.lastCancellationDate
+                val currentTimeMillis = System.currentTimeMillis()
+                val lastCancellationTimestamp = user.preferences.lastCancellationTimestamp
+                val twelveHoursInMillis = 12 * 60 * 60 * 1000L
 
-                // Reset counter if it's a new day, otherwise increment
-                val newCancellationCount = if (lastCancellationDate != currentDate) {
-                    // It's a new day, start fresh
+                // Check if 12 hours have passed since last cancellation
+                val newCancellationCount = if (lastCancellationTimestamp == null ||
+                    (currentTimeMillis - lastCancellationTimestamp) >= twelveHoursInMillis) {
+                    // 12 hours have passed, start fresh
                     1
                 } else {
                     user.preferences.cancellationCount + 1
                 }
 
-                val updatedPreferences = user.preferences.copy(
-                    cancellationCount = newCancellationCount,
-                    lastCancellationDate = currentDate
-                )
-                val updatedUser = user.copy(preferences = updatedPreferences)
-
                 userRepository.updateUserProfile(
                     uid = currentUserId,
                     preferences = mapOf(
                         "cancellationCount" to newCancellationCount,
-                        "lastCancellationDate" to currentDate
+                        "lastCancellationTimestamp" to currentTimeMillis
                     )
                 )
 
                 // Update UI with new cancellation status
                 val remainingCancellations = maxOf(0, 3 - newCancellationCount)
+                val hasExceededLimit = newCancellationCount >= 3
+
+                // Calculate reset time if limit is exceeded
+                val resetTimeMillis = if (hasExceededLimit) {
+                    currentTimeMillis + twelveHoursInMillis
+                } else {
+                    null
+                }
+
                 _uiState.value = _uiState.value.copy(
                     remainingCancellations = remainingCancellations,
-                    hasExceededCancellationLimit = newCancellationCount >= 3
+                    hasExceededCancellationLimit = hasExceededLimit,
+                    cancellationResetTimeMillis = resetTimeMillis
                 )
 
-                Log.d("PassengerViewModel", "Updated cancellation count to: $newCancellationCount for date: $currentDate")
+                Log.d("PassengerViewModel", "Updated cancellation count to: $newCancellationCount, reset time: $resetTimeMillis")
             }
         } catch (e: Exception) {
             Log.w("PassengerViewModel", "Error incrementing cancellation count", e)
@@ -1120,179 +1067,6 @@ class PassengerHomeViewModel @Inject constructor(
             BookingStatus.DRIVER_ARRIVED,
             BookingStatus.IN_PROGRESS -> true
             else -> false
-        }
-    }
-
-    /**
-     * Book a ride to a specific POI (Point of Interest) from the map
-     */
-    fun bookRideToPOI(sanJoseLocation: SanJoseLocation) {
-        // Check if current user is blocked/inactive using real-time data
-        val currentUser = _uiState.value.currentUser
-        val currentUserId = firebaseAuth.currentUser?.uid
-
-        if (currentUserId == null) {
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "Please log in to book a ride."
-            )
-            return
-        }
-
-        if (currentUser == null || !currentUser.isActive) {
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "Your account has been blocked. Please contact support for assistance."
-            )
-            return
-        }
-
-        // Continue with existing booking logic
-        performBookingToPOI(sanJoseLocation)
-    }
-
-    private fun performBookingToPOI(sanJoseLocation: SanJoseLocation) {
-        // Check if passenger already has an active trip (not completed)
-        if (_uiState.value.currentBooking != null && _uiState.value.currentBooking!!.status != BookingStatus.COMPLETED) {
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "You already have an active trip. Please complete or cancel your current trip before booking a new one."
-            )
-            return
-        }
-
-        // Additional check: prevent rebooking if rating screen was just shown for a completed trip
-        if (_uiState.value.completedBookingId != null || _uiState.value.showRatingScreen) {
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "Please complete the rating for your completed trip before booking a new one."
-            )
-            return
-        }
-
-        viewModelScope.launch {
-            // Ensure we have current location
-            if (_uiState.value.currentUserLocation == null) {
-                _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
-                loadCurrentLocation()
-                // Wait a moment for location to load
-                delay(1000)
-            }
-
-            val currentLocation = _uiState.value.currentUserLocation
-            if (currentLocation == null) {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    errorMessage = locationUtils.getLocationErrorMessage()
-                )
-                return@launch
-            }
-
-            // Convert SanJoseLocation to BookingLocation
-            val pickupGeoPoint = GeoPoint(currentLocation.latitude(), currentLocation.longitude())
-            val boundaryName = BoundaryFareUtils.determineBoundary(pickupGeoPoint, zoneBoundaryRepository)
-            val pickupLocation = BookingLocation(
-                address = boundaryName ?: "Lat: ${String.format("%.6f", currentLocation.latitude())}, Lng: ${String.format("%.6f", currentLocation.longitude())}",
-                coordinates = pickupGeoPoint
-            )
-
-            val destinationLocation = BookingLocation(
-                address = "${sanJoseLocation.name}, ${sanJoseLocation.barangay}",
-                coordinates = sanJoseLocation.coordinates,
-                placeName = sanJoseLocation.name,
-                placeType = sanJoseLocation.type.name
-            )
-
-            android.util.Log.d(
-                "PassengerPOIBooking",
-                "Booking POI: ${sanJoseLocation.name} at ${sanJoseLocation.coordinates}"
-            )
-
-            // Calculate fare estimate
-            val fareEstimate = bookingRepository.calculateFareEstimate(
-                pickupLocation = pickupLocation,
-                destination = destinationLocation,
-                vehicleCategory = _uiState.value.selectedVehicleCategory,
-                discountPercentage = _uiState.value.currentUser?.discountPercentage
-            )
-
-            // Route will be calculated after driver accepts the booking
-            // Not showing route preview during "Looking for driver" phase
-
-            // Update UI state to show pickup and destination
-            _uiState.value = _uiState.value.copy(
-                pickupLocation = pickupLocation,
-                destination = destinationLocation,
-                fareEstimate = fareEstimate
-            )
-
-            // Create booking object
-            val booking = Booking(
-                id = "booking_${System.currentTimeMillis()}",
-                passengerId = firebaseAuth.currentUser?.uid ?: "unknown",
-                pickupLocation = pickupLocation,
-                destination = destinationLocation,
-                fareEstimate = fareEstimate,
-                status = BookingStatus.PENDING,
-                requestTime = System.currentTimeMillis(),
-                vehicleCategory = _uiState.value.selectedVehicleCategory,
-                passengerDiscountPercentage = _uiState.value.currentUser?.discountPercentage
-            )
-
-            android.util.Log.d("PassengerPOIBooking", "Created POI booking: ${booking.id}")
-
-            // IMMEDIATE UI UPDATE: Show "Looking for driver..." right away
-            _uiState.value = _uiState.value.copy(
-                isLoading = false,  // Stop loading spinner
-                currentBooking = booking,  // Show booking UI immediately
-                showFareEstimate = false,
-                completedBookingId = null,
-                showRatingScreen = false,
-                passengerRoute = null  // Clear fare estimate route while finding driver
-            )
-
-            // Now handle driver matching in the background
-            android.util.Log.d(
-                "PassengerPOIBooking",
-                "Finding drivers for POI booking: ${booking.id}"
-            )
-            driverMatchingRepository.findAndNotifyDrivers(booking)
-                .onSuccess { notifiedDriverIds ->
-                    android.util.Log.d(
-                        "PassengerPOIBooking",
-                        "Driver matching result: ${notifiedDriverIds.size} drivers notified"
-                    )
-                    if (notifiedDriverIds.isEmpty()) {
-                        // No suitable drivers found - clear the booking and show error
-                        android.util.Log.w(
-                            "PassengerPOIBooking",
-                            "No drivers available for POI booking"
-                        )
-                        _uiState.value = _uiState.value.copy(
-                            currentBooking = null,  // Clear the optimistic booking
-                            errorMessage = "No drivers available in your area. Service is only available within San Jose, Dinagat Islands."
-                        )
-                    } else {
-                        // Drivers found - create the actual booking in Firestore
-                        android.util.Log.d(
-                            "PassengerPOIBooking",
-                            "Creating POI booking with ${notifiedDriverIds.size} drivers notified: ${notifiedDriverIds.joinToString()}"
-                        )
-                        createBookingWithDrivers(booking, notifiedDriverIds)
-                    }
-                }
-                .onFailure { exception ->
-                    // Driver matching failed - clear the optimistic booking and show error
-                    val errorMsg = exception.message ?: "Failed to find nearby drivers"
-                    if (errorMsg.contains("must be within", ignoreCase = true)) {
-                        _uiState.value = _uiState.value.copy(
-                            currentBooking = null,  // Clear the optimistic booking
-                            showServiceBoundaryDialog = true,
-                            serviceBoundaryMessage = errorMsg
-                        )
-                    } else {
-                        _uiState.value = _uiState.value.copy(
-                            currentBooking = null,  // Clear the optimistic booking
-                            errorMessage = "Failed to find nearby drivers: $errorMsg"
-                        )
-                    }
-                }
         }
     }
 
@@ -1543,58 +1317,11 @@ class PassengerHomeViewModel @Inject constructor(
     }
 
     /**
-     * Show driver cancellation dialog notification
-     */
-    fun showDriverCancellationDialog() {
-        _uiState.value = _uiState.value.copy(
-            showDriverCancellationDialog = true
-        )
-    }
-
-    /**
      * Hide driver cancellation dialog notification
      */
     fun hideDriverCancellationDialog() {
         _uiState.value = _uiState.value.copy(
             showDriverCancellationDialog = false
-        )
-    }
-
-    /**
-     * Check for available drivers and show appropriate message
-     */
-    fun checkDriverAvailability() {
-        val onlineDriversCount = _uiState.value.onlineDriverCount
-        if (onlineDriversCount == 0) {
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "No drivers are currently online worldwide. Please try again later."
-            )
-        } else {
-            _uiState.value = _uiState.value.copy(errorMessage = null)
-        }
-    }
-
-    /**
-     * Reset booking state
-     */
-    fun resetBookingState() {
-        _uiState.value = _uiState.value.copy(
-            pickupLocation = null,
-            destination = null,
-            fareEstimate = null,
-            currentBooking = null,
-            showFareEstimate = false,
-            errorMessage = null,
-            passengerRoute = null
-        )
-    }
-
-    fun hideFareEstimate() {
-        _uiState.value = _uiState.value.copy(
-            showFareEstimate = false,
-            fareEstimate = null,
-            errorMessage = null,
-            passengerRoute = null
         )
     }
 
@@ -1677,150 +1404,11 @@ class PassengerHomeViewModel @Inject constructor(
     }
 
     /**
-     * Toggle visibility of online drivers on map
-     */
-    fun toggleDriverVisibility() {
-        _uiState.value = _uiState.value.copy(
-            showOnlineDrivers = !_uiState.value.showOnlineDrivers
-        )
-    }
-
-    /**
      * Refresh online drivers when location changes
      */
     fun refreshDriversForLocation() {
         println("DEBUG PASSENGER: Manual refresh requested")
         observeOnlineDrivers()
-    }
-
-    /**
-     * Force refresh drivers data (useful for debugging sync issues)
-     */
-    fun forceRefreshDrivers() {
-        println("DEBUG PASSENGER: Force refresh - clearing current data first")
-        _uiState.value = _uiState.value.copy(
-            onlineDrivers = emptyList(),
-            onlineDriverCount = 0
-        )
-        // Wait a moment then refresh
-        viewModelScope.launch {
-            delay(500) // Small delay to ensure UI updates
-            println("DEBUG PASSENGER: Force refresh - starting new observation")
-            observeOnlineDrivers()
-            // Also trigger repository force refresh
-            driverRepository.forceRefreshOnlineDrivers()
-        }
-    }
-
-    /**
-     * Book a ride to the specified destination
-     */
-    fun bookRide(destination: String) {
-        bookRideWithComment(destination, "")
-    }
-
-    /**
-     * Book a ride to the specified destination with passenger comment
-     */
-    fun bookRideWithComment(destination: String, passengerComment: String = "") {
-        // Check if current user is blocked/inactive using real-time data
-        val currentUser = _uiState.value.currentUser
-        val currentUserId = firebaseAuth.currentUser?.uid
-
-        if (currentUserId == null) {
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "Please log in to book a ride."
-            )
-            return
-        }
-
-        if (currentUser == null || !currentUser.isActive) {
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "Your account has been blocked. Please contact support for assistance."
-            )
-            return
-        }
-
-        // Continue with existing booking logic
-        performBookingWithComment(destination, passengerComment)
-    }
-
-    private fun performBookingWithComment(destination: String, passengerComment: String = "") {
-        // Check if passenger already has an active trip (not completed)
-        if (_uiState.value.currentBooking != null && _uiState.value.currentBooking!!.status != BookingStatus.COMPLETED) {
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "You already have an active trip. Please complete or cancel your current trip before booking a new one."
-            )
-            return
-        }
-
-        // Additional check: prevent rebooking if rating screen was just shown for a completed trip
-        if (_uiState.value.completedBookingId != null || _uiState.value.showRatingScreen) {
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "Please complete the rating for your completed trip before booking a new one."
-            )
-            return
-        }
-
-        viewModelScope.launch {
-            // Ensure we have current location
-            if (_uiState.value.currentUserLocation == null) {
-                loadCurrentLocation()
-                // Wait a moment for location to load
-                delay(1000)
-            }
-
-            val currentLocation = _uiState.value.currentUserLocation
-            if (currentLocation == null) {
-                _uiState.value = _uiState.value.copy(
-                    errorMessage = locationUtils.getLocationErrorMessage()
-                )
-                return@launch
-            }
-
-            // Set current location as pickup
-            val pickupGeoPoint = GeoPoint(currentLocation.latitude(), currentLocation.longitude())
-            val boundaryName = BoundaryFareUtils.determineBoundary(pickupGeoPoint, zoneBoundaryRepository)
-            val pickupLocation = BookingLocation(
-                address = boundaryName ?: "Lat: ${String.format("%.6f", currentLocation.latitude())}, Lng: ${String.format("%.6f", currentLocation.longitude())}",
-                coordinates = pickupGeoPoint
-            )
-            setPickupLocation(pickupLocation)
-
-            // Geocode destination in San Jose, Dinagat Islands
-            try {
-                val destinationLocation = geocodeLocationInSanJose(destination)
-                setDestination(destinationLocation)
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    errorMessage = e.message ?: "Invalid destination location"
-                )
-                return@launch
-            }
-
-            // Trigger route calculation immediately after setting destination
-            calculateFareIfReady()
-
-            // Wait for fare calculation to complete properly
-            // Poll until fare estimate is available, with timeout
-            var attempts = 0
-            val maxAttempts = 20 // 10 seconds timeout
-            while (_uiState.value.fareEstimate == null && attempts < maxAttempts) {
-                delay(500)
-                attempts++
-            }
-
-            // Check if fare calculation succeeded
-            if (_uiState.value.fareEstimate == null) {
-                _uiState.value = _uiState.value.copy(
-                    errorMessage = "Failed to calculate fare estimate. Please try again."
-                )
-                return@launch
-            }
-
-            // Create the booking with comment
-            createBookingWithComment(passengerComment)
-        }
     }
 
     /**
@@ -1952,126 +1540,6 @@ class PassengerHomeViewModel @Inject constructor(
 
             // Create the booking with comment immediately (no delay needed)
             createBookingWithComment(passengerComment)
-        }
-    }
-
-    /**
-     * Book a ride to a specific landmark with coordinates
-     */
-    fun bookRideToLandmark(landmarkPoint: Point, address: String) {
-        // Check if current user is blocked/inactive using real-time data
-        val currentUser = _uiState.value.currentUser
-        val currentUserId = firebaseAuth.currentUser?.uid
-
-        if (currentUserId == null) {
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "Please log in to book a ride."
-            )
-            return
-        }
-
-        if (currentUser == null || !currentUser.isActive) {
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "Your account has been blocked. Please contact support for assistance."
-            )
-            return
-        }
-
-        // Continue with existing booking logic
-        performBookingToLandmark(landmarkPoint, address)
-    }
-
-    private fun performBookingToLandmark(landmarkPoint: Point, address: String) {
-        // Check if cancellation is currently in progress
-        if (cancellationInProgress) {
-            Log.d("PassengerHomeViewModel", "Booking creation blocked - cancellation in progress")
-            return
-        }
-
-        // Check if passenger already has an active trip (not completed)
-        if (_uiState.value.currentBooking != null && _uiState.value.currentBooking!!.status != BookingStatus.COMPLETED) {
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "You already have an active trip. Please complete or cancel your current trip before booking a new one."
-            )
-            return
-        }
-
-        // Additional check: prevent rebooking if rating screen was just shown for a completed trip
-        if (_uiState.value.completedBookingId != null || _uiState.value.showRatingScreen) {
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "Please complete the rating for your completed trip before booking a new one."
-            )
-            return
-        }
-
-        viewModelScope.launch {
-            // Ensure we have current location
-            if (_uiState.value.currentUserLocation == null) {
-                loadCurrentLocation()
-                // Wait a moment for location to load
-                delay(1000)
-            }
-
-            val currentLocation = _uiState.value.currentUserLocation
-            if (currentLocation == null) {
-                _uiState.value = _uiState.value.copy(
-                    errorMessage = locationUtils.getLocationErrorMessage()
-                )
-                return@launch
-            }
-
-            // Set current location as pickup
-            val pickupGeoPoint = GeoPoint(currentLocation.latitude(), currentLocation.longitude())
-            val boundaryName = BoundaryFareUtils.determineBoundary(pickupGeoPoint, zoneBoundaryRepository)
-            val pickupLocation = BookingLocation(
-                address = boundaryName ?: "Lat: ${String.format("%.6f", currentLocation.latitude())}, Lng: ${String.format("%.6f", currentLocation.longitude())}",
-                coordinates = pickupGeoPoint
-            )
-
-            // Set destination using the actual landmark coordinates
-            val destinationLocation = BookingLocation(
-                address = address,
-                coordinates = GeoPoint(landmarkPoint.latitude(), landmarkPoint.longitude())
-            )
-
-            // FIXED: Set pickup and destination WITHOUT triggering route calculation
-            // This prevents the route from flashing on screen during booking
-            _uiState.value = _uiState.value.copy(
-                pickupLocation = pickupLocation,
-                destination = destinationLocation
-            )
-
-            // Calculate fare WITHOUT showing route (no visual flash)
-            val boundaryFare = BoundaryFareUtils.calculateBoundaryBasedFare(
-                pickupCoordinates = pickupGeoPoint,
-                destinationAddress = address,
-                destinationCoordinates = destinationLocation.coordinates,
-                repository = boundaryFareManagementRepository,
-                zoneBoundaryRepository = zoneBoundaryRepository
-            )
-
-            val adminFare = extractAdminFare(address)
-
-            val fareEstimate = if (boundaryFare != null) {
-                createFareEstimateFromAdminFare(boundaryFare, _uiState.value.selectedVehicleCategory)
-            } else if (adminFare != null) {
-                createFareEstimateFromAdminFare(adminFare, _uiState.value.selectedVehicleCategory)
-            } else {
-                _uiState.value = _uiState.value.copy(
-                    errorMessage = "No fare configured for this route. Please contact support."
-                )
-                return@launch
-            }
-
-            // Set fare estimate WITHOUT route (prevents visual flash)
-            _uiState.value = _uiState.value.copy(
-                fareEstimate = fareEstimate,
-                showFareEstimate = true,
-                passengerRoute = null // Explicitly clear route
-            )
-
-            // Create the booking immediately (no delay needed)
-            createBooking()
         }
     }
 
@@ -2211,29 +1679,6 @@ class PassengerHomeViewModel @Inject constructor(
     }
 
     /**
-     * Create BookingLocation for current location with reverse geocoded address
-     */
-    private suspend fun createCurrentLocationBooking(): BookingLocation? {
-        val currentLocation = _uiState.value.currentUserLocation ?: return null
-
-        return try {
-            val geoPoint = GeoPoint(currentLocation.latitude(), currentLocation.longitude())
-            val locationResult = mapboxRepository.reverseGeocode(geoPoint).getOrNull()
-
-            BookingLocation(
-                address = locationResult?.fullAddress ?: "Lat: ${String.format("%.6f", currentLocation.latitude())}, Lng: ${String.format("%.6f", currentLocation.longitude())}",
-                coordinates = geoPoint
-            )
-        } catch (e: Exception) {
-            Log.e("PassengerHomeViewModel", "Failed to reverse geocode current location", e)
-            BookingLocation(
-                address = "Lat: ${String.format("%.6f", currentLocation.latitude())}, Lng: ${String.format("%.6f", currentLocation.longitude())}",
-                coordinates = GeoPoint(currentLocation.latitude(), currentLocation.longitude())
-            )
-        }
-    }
-
-    /**
      * Apply passenger discount to fare amount
      */
     private fun applyDiscountToFare(baseFare: Double): Double {
@@ -2298,122 +1743,6 @@ class PassengerHomeViewModel @Inject constructor(
         }
 
         return "Select pickup"
-    }
-
-    /**
-     * Get fare from San Jose fare matrix for POI destinations
-     */
-    private fun getFareFromSanJoseMatrix(pickupLocation: BookingLocation, destinationLocation: BookingLocation): Double? {
-        return try {
-            // Try to match destination with known San Jose locations
-            val destinationName = extractDestinationName(destinationLocation.address)
-
-            // Look for exact match in San Jose locations
-            val sanJoseLocation = SanJoseLocationsData.locations.find { location ->
-                location.name.equals(destinationName, ignoreCase = true) ||
-                destinationName.contains(location.name, ignoreCase = true) ||
-                location.name.contains(destinationName, ignoreCase = true)
-            }
-
-            if (sanJoseLocation != null) {
-                // Use San Jose data calculation which includes proper fare matrix
-                val fare = SanJoseLocationsData.calculateFareEstimate(
-                    pickupLat = pickupLocation.coordinates.latitude,
-                    pickupLng = pickupLocation.coordinates.longitude,
-                    destLat = sanJoseLocation.coordinates.latitude,
-                    destLng = sanJoseLocation.coordinates.longitude,
-                    discountPercentage = _uiState.value.currentUser?.discountPercentage
-                )
-                Log.d("PassengerHomeViewModel", "San Jose matrix fare for $destinationName: ₱$fare")
-                fare
-            } else {
-                null
-            }
-        } catch (e: Exception) {
-            Log.e("PassengerHomeViewModel", "Error getting fare from San Jose matrix", e)
-            null
-        }
-    }
-
-    /**
-     * Simple distance calculation for POI fare estimation
-     */
-    private fun calculateSimpleDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-        val R = 6371.0 // Earth's radius in kilometers
-        val dLat = Math.toRadians(lat2 - lat1)
-        val dLon = Math.toRadians(lon2 - lon1)
-        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
-                Math.sin(dLon / 2) * Math.sin(dLon / 2)
-        val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-        return R * c
-    }
-
-    /**
-     * Get landmark information including reverse geocoded address and fare estimate
-     */
-    fun getLandmarkInfo(
-        landmark: Point,
-        onResult: (address: String?, fareEstimate: Double?) -> Unit
-    ) {
-        viewModelScope.launch {
-            try {
-                // Get reverse geocoded address
-                val coordinates = GeoPoint(landmark.latitude(), landmark.longitude())
-                val addressResult = mapboxRepository.reverseGeocode(coordinates)
-
-                var landmarkAddress: String? = null
-                addressResult.onSuccess { locationResult ->
-                    landmarkAddress = locationResult.name
-                }.onFailure {
-                    landmarkAddress = "Unknown location"
-                }
-
-                // Calculate fare estimate if we have current location
-                var fareEstimate: Double? = null
-                val currentLocation = _uiState.value.currentUserLocation
-                if (currentLocation != null) {
-                    try {
-                        val pickupGeoPoint = GeoPoint(
-                            currentLocation.latitude(),
-                            currentLocation.longitude()
-                        )
-                        val boundaryName = BoundaryFareUtils.determineBoundary(pickupGeoPoint, zoneBoundaryRepository)
-                        val pickupLocation = BookingLocation(
-                            address = boundaryName ?: "Current Location",
-                            coordinates = pickupGeoPoint
-                        )
-
-                        val destinationLocation = BookingLocation(
-                            address = landmarkAddress ?: "Selected Location",
-                            coordinates = coordinates
-                        )
-
-                        val fare = bookingRepository.calculateFareEstimate(
-                            pickupLocation = pickupLocation,
-                            destination = destinationLocation,
-                            vehicleCategory = _uiState.value.selectedVehicleCategory,
-                            discountPercentage = _uiState.value.currentUser?.discountPercentage
-                        )
-
-                        fareEstimate = fare.totalEstimate
-                    } catch (e: Exception) {
-                        Log.e(
-                            "PassengerHomeViewModel",
-                            "Failed to calculate fare estimate for landmark",
-                            e
-                        )
-                        fareEstimate = null
-                    }
-                }
-
-                onResult(landmarkAddress, fareEstimate)
-
-            } catch (e: Exception) {
-                Log.e("PassengerHomeViewModel", "Error getting landmark info", e)
-                onResult("Unknown location", null)
-            }
-        }
     }
 
     /**
@@ -2596,48 +1925,6 @@ class PassengerHomeViewModel @Inject constructor(
     }
 
     /**
-     * Calculate ETA from driver to destination (pickup or final destination based on booking status)
-     * Uses the actual route distance if available, otherwise falls back to straight-line distance
-     */
-    private fun calculateRoughETA(driverLocation: Point): Int {
-        val currentBooking = _uiState.value.currentBooking
-        val driverRoute = _uiState.value.driverRoute
-
-        // Determine destination based on booking status
-        val destinationCoords = when (currentBooking?.status) {
-            BookingStatus.ACCEPTED, BookingStatus.DRIVER_ARRIVING, BookingStatus.DRIVER_ARRIVED -> {
-                // Driver is heading to pickup passenger
-                _uiState.value.pickupLocation?.coordinates
-            }
-            BookingStatus.IN_PROGRESS -> {
-                // Driver is heading to final destination (passenger is in vehicle)
-                currentBooking.destination.coordinates
-            }
-            else -> _uiState.value.pickupLocation?.coordinates
-        }
-
-        return if (destinationCoords != null) {
-            // If we have a calculated route with ETA, use that
-            if (driverRoute != null && driverRoute.estimatedDuration > 0) {
-                // Use the route's estimated duration
-                driverRoute.estimatedDuration
-            } else {
-                // Fall back to straight-line distance calculation
-                val distance = calculateDistance(
-                    driverLocation.latitude(),
-                    driverLocation.longitude(),
-                    destinationCoords.latitude,
-                    destinationCoords.longitude
-                )
-                // Rough estimate: 2 minutes per kilometer
-                (distance * 2).toInt()
-            }
-        } else {
-            5 // Default 5 minutes if no destination
-        }
-    }
-
-    /**
      * Calculate distance between two points in kilometers
      */
     private fun calculateDistance(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
@@ -2739,106 +2026,6 @@ class PassengerHomeViewModel @Inject constructor(
             showDriverNavigation = false,
             assignedDriverLocation = null
         )
-    }
-
-    /**
-     * Dismiss the rating screen
-     */
-    fun dismissRatingScreen() {
-        val completedBookingId = _uiState.value.completedBookingId
-
-        _uiState.value = _uiState.value.copy(
-            showRatingScreen = false,
-            completedBookingId = null,
-            // Clear currentBooking to prevent automatic rebooking
-            currentBooking = null,
-            fareEstimate = null,
-            showFareEstimate = false,
-            // Clear pickup and destination to prevent automatic rebooking
-            pickupLocation = null,
-            destination = null,
-            passengerRoute = null,
-            driverRoute = null,
-            showDriverNavigation = false,
-            assignedDriverLocation = null,
-            showOnlineDrivers = true  // Re-enable showing online drivers after trip completion
-        )
-
-        // Refresh ride history after rating screen is dismissed
-        loadRideHistory()
-
-        // Mark this booking as rated to prevent showing rating screen again
-        if (completedBookingId != null) {
-            markBookingAsRated(completedBookingId)
-        }
-
-        // Refresh the trips list to include the newly completed trip
-        loadRecentTrips()
-    }
-
-    /**
-     * Geocode any location name to coordinates (for pickup locations - can be anywhere)
-     */
-    private suspend fun geocodeLocationAnywhere(address: String): BookingLocation {
-        return try {
-            // Use the booking repository to search for the location (no geographic restrictions)
-            val searchResult = bookingRepository.searchLocations(address)
-            searchResult.onSuccess { locations ->
-                if (locations.isNotEmpty()) {
-                    // Return the first result (no location validation)
-                    return locations.first()
-                }
-            }
-
-            // Fallback: Create a basic location object
-            BookingLocation(
-                address = address,
-                coordinates = GeoPoint(
-                    0.0,
-                    0.0
-                ) // Default coordinates - will need user to select on map
-            )
-        } catch (e: Exception) {
-            throw Exception("Unable to find location '$address'. Please check the address or select on map.")
-        }
-    }
-
-    /**
-     * Geocode location name to coordinates within San Jose, Dinagat Islands bounds (for destinations)
-     */
-    private suspend fun geocodeLocationInSanJose(address: String): BookingLocation {
-        return try {
-            // Try to geocode the location, but constrain to San Jose, Dinagat Islands
-            val fullAddress = "$address, San Jose, Dinagat Islands, Philippines"
-
-            // Use the booking repository to search for the location
-            val searchResult = bookingRepository.searchLocations(fullAddress)
-            searchResult.onSuccess { locations ->
-                if (locations.isNotEmpty()) {
-                    // Return the first valid result
-                    val location = locations.first()
-                    // Validate coordinates are within reasonable bounds for Dinagat Islands
-                    if (isWithinDinagatIslands(location.coordinates)) {
-                        return location
-                    } else {
-                        // Location is outside San Jose, Dinagat Islands - reject it
-                        throw Exception("Location '$address' is outside San Jose, Dinagat Islands. Please enter a location within the service area.")
-                    }
-                }
-            }
-
-            // Fallback: Use predefined coordinates for known locations in San Jose, Dinagat Islands
-            getKnownLocationCoordinates(address)
-
-        } catch (e: Exception) {
-            Log.e("PassengerHomeViewModel", "Error geocoding location: $address", e)
-            // If it's our custom validation error, rethrow it
-            if (e.message?.contains("outside San Jose, Dinagat Islands") == true) {
-                throw e
-            }
-            // Otherwise, try fallback to known location or default San Jose center
-            getKnownLocationCoordinates(address)
-        }
     }
 
     /**
@@ -2971,45 +2158,6 @@ class PassengerHomeViewModel @Inject constructor(
                 coordinates = sanJoseLocation.coordinates
             )
         }.take(5) // Limit to 5 suggestions
-    }
-
-
-    /**
-     * Get known coordinates for common locations in San Jose, Dinagat Islands using official data
-     */
-    private fun getKnownLocationCoordinates(address: String): BookingLocation {
-        // Try to find exact match in official San Jose locations
-        val exactMatch = SanJoseLocationsData.locations.find { location ->
-            location.name.equals(address, ignoreCase = true) ||
-            location.barangay.equals(address, ignoreCase = true)
-        }
-        if (exactMatch != null) {
-            return BookingLocation(
-                address = "${exactMatch.name}, ${exactMatch.barangay}, San Jose, Dinagat Islands",
-                coordinates = exactMatch.coordinates
-            )
-        }
-
-        // Try to find partial match
-        val partialMatches = SanJoseLocationsData.locations.filter { location ->
-            location.name.contains(address, ignoreCase = true) ||
-            location.barangay.contains(address, ignoreCase = true)
-        }
-        if (partialMatches.isNotEmpty()) {
-            val bestMatch = partialMatches.first()
-            return BookingLocation(
-                address = "${bestMatch.name}, ${bestMatch.barangay}, San Jose, Dinagat Islands",
-                coordinates = bestMatch.coordinates
-            )
-        }
-
-        // Fallback to San Jose center coordinates
-        val defaultCoordinates = GeoPoint(10.0080, 125.5718) // Official San Jose center
-
-        return BookingLocation(
-            address = address,
-            coordinates = defaultCoordinates
-        )
     }
 
     /**
@@ -3901,26 +3049,6 @@ class PassengerHomeViewModel @Inject constructor(
     }
 
     /**
-     * Mark a booking as rated and save to SharedPreferences
-     */
-    fun markBookingAsRated(bookingId: String) {
-        try {
-            ratedBookings.add(bookingId)
-            val ratedBookingsString = ratedBookings.joinToString(",")
-            val editor = sharedPreferences.edit()
-
-            // Save in both old and new formats for compatibility
-            editor.putString("rated_bookings", ratedBookingsString)
-            editor.putBoolean("passenger_rated_$bookingId", true)
-            editor.apply()
-
-            Log.d("PassengerHomeViewModel", "Marked booking $bookingId as rated by passenger")
-        } catch (e: Exception) {
-            Log.e("PassengerHomeViewModel", "Error saving rated booking", e)
-        }
-    }
-
-    /**
      * Extract admin-set fare from landmark name (format: "Destination Name - ₱50")
      */
     private fun extractAdminFare(landmarkName: String): Double? {
@@ -3931,19 +3059,6 @@ class PassengerHomeViewModel @Inject constructor(
         } catch (e: Exception) {
             Log.e("PassengerHomeViewModel", "Error extracting admin fare from: $landmarkName", e)
             null
-        }
-    }
-
-    /**
-     * Extract clean destination name from landmark name (remove fare part)
-     */
-    private fun extractDestinationName(landmarkName: String): String {
-        return try {
-            val cleanName = landmarkName.split(" - ₱").firstOrNull() ?: landmarkName
-            cleanName.trim()
-        } catch (e: Exception) {
-            Log.e("PassengerHomeViewModel", "Error extracting destination name from: $landmarkName", e)
-            landmarkName
         }
     }
 
@@ -4167,33 +3282,46 @@ class PassengerHomeViewModel @Inject constructor(
             try {
                 val userResult = userRepository.getUserByUid(currentUserId)
                 userResult.onSuccess { user ->
-                    val currentDate = getCurrentDate()
-                    val lastCancellationDate = user.preferences.lastCancellationDate
+                    val currentTimeMillis = System.currentTimeMillis()
+                    val lastCancellationTimestamp = user.preferences.lastCancellationTimestamp
+                    val twelveHoursInMillis = 12 * 60 * 60 * 1000L // 12 hours in milliseconds
 
-                    // Reset counter if it's a new day
-                    val cancellationCount = if (lastCancellationDate != currentDate) {
-                        // It's a new day, reset the counter in Firestore
-                        Log.d("PassengerViewModel", "New day detected on load! Resetting cancellation count from ${user.preferences.cancellationCount} to 0")
-                        userRepository.updateUserProfile(
-                            uid = currentUserId,
-                            preferences = mapOf(
-                                "cancellationCount" to 0,
-                                "lastCancellationDate" to currentDate
+                    // Check if 12 hours have passed since last cancellation
+                    val cancellationCount = if (lastCancellationTimestamp == null ||
+                        (currentTimeMillis - lastCancellationTimestamp) >= twelveHoursInMillis) {
+                        // 12 hours have passed or no previous cancellation, reset the counter
+                        if (user.preferences.cancellationCount > 0) {
+                            Log.d("PassengerViewModel", "12 hours elapsed! Resetting cancellation count from ${user.preferences.cancellationCount} to 0")
+                            userRepository.updateUserProfile(
+                                uid = currentUserId,
+                                preferences = mapOf(
+                                    "cancellationCount" to 0,
+                                    "lastCancellationTimestamp" to com.google.firebase.firestore.FieldValue.delete()
+                                )
                             )
-                        )
+                        }
                         0
                     } else {
                         user.preferences.cancellationCount
                     }
 
                     val remainingCancellations = maxOf(0, 3 - cancellationCount)
+                    val hasExceededLimit = cancellationCount >= 3
+
+                    // Calculate reset time if limit is exceeded
+                    val resetTimeMillis = if (hasExceededLimit && lastCancellationTimestamp != null) {
+                        lastCancellationTimestamp + twelveHoursInMillis
+                    } else {
+                        null
+                    }
 
                     _uiState.value = _uiState.value.copy(
                         remainingCancellations = remainingCancellations,
-                        hasExceededCancellationLimit = cancellationCount >= 3
+                        hasExceededCancellationLimit = hasExceededLimit,
+                        cancellationResetTimeMillis = resetTimeMillis
                     )
 
-                    Log.d("PassengerViewModel", "Loaded cancellation count: $cancellationCount, remaining: $remainingCancellations, date: $currentDate")
+                    Log.d("PassengerViewModel", "Loaded cancellation count: $cancellationCount, remaining: $remainingCancellations")
                 }.onFailure { error ->
                     Log.w("PassengerViewModel", "Could not load cancellation count: ${error.message}", error)
                 }

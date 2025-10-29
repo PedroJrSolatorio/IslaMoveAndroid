@@ -106,7 +106,7 @@ data class UserPreferences(
     val language: String = "en",
     val savedPlaces: Map<String, BookingLocation> = emptyMap(),
     val cancellationCount: Int = 0, // Track passenger cancellation count (max 3 per day)
-    val lastCancellationDate: String? = null, // Track last cancellation date (YYYY-MM-DD format)
+    val lastCancellationTimestamp: Long? = null, // Track last cancellation timestamp (milliseconds)
     val serviceBoundary: UserServiceBoundary? = null // User-defined service area boundary
 )
 
