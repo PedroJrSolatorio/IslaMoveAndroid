@@ -344,7 +344,6 @@ private val DRIVER_PERSONALIZED_MESSAGES = listOf(
     "Respectful",
     "On time",
     "Friendly",
-    "Clean",
     "Polite conversation",
     "Quiet and peaceful"
 )
@@ -354,11 +353,8 @@ private val PASSENGER_PERSONALIZED_MESSAGES = listOf(
     "Cool driver",
     "Hygienic",
     "Safe driving",
-    "Friendly",
     "On time",
-    "Clean vehicle",
-    "Professional",
-    "Good conversation"
+    "Professional"
 )
 
 @Composable
@@ -543,12 +539,12 @@ private fun FareSummarySection(
                         color = Color.Black,
                         modifier = Modifier.padding(bottom = 4.dp)
                     )
-                    companions.forEachIndexed { index, companion ->
+                    companions.forEach { companion ->
                         val companionLabel = when (companion.type) {
-                            CompanionType.REGULAR -> "Companion ${index + 1}"
-                            CompanionType.STUDENT -> "Student ${index + 1}"
-                            CompanionType.SENIOR -> "Senior ${index + 1}"
-                            CompanionType.CHILD -> "Child ${index + 1}"
+                            CompanionType.REGULAR -> "Companion"
+                            CompanionType.STUDENT -> "Student"
+                            CompanionType.SENIOR -> "Senior"
+                            CompanionType.CHILD -> "Child"
                         }
 
                         // Show discount if applicable
@@ -570,9 +566,8 @@ private fun FareSummarySection(
                 // Show discount if applicable
                 val discountPercentage = booking.passengerDiscountPercentage
                 if (discountPercentage != null && discountPercentage > 0) {
-                    val totalBeforeDiscount = fareEstimate.baseFare * (1 + (companions?.size ?: 0)) +
-                            fareEstimate.distanceFare + fareEstimate.timeFare
-                    val discountAmount = totalBeforeDiscount * (discountPercentage / 100.0)
+                    // Discount only applies to main passenger's base fare
+                    val discountAmount = fareEstimate.baseFare * (discountPercentage / 100.0)
                     FareSummaryItem(
                         label = "Discount ($discountPercentage%)",
                         amount = -discountAmount,
