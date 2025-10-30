@@ -816,46 +816,10 @@ private fun IDStatusDisplay(
 
         // Action buttons
         if (currentStatus != DocumentStatus.APPROVED) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                if (currentStatus != DocumentStatus.REJECTED) {
-                    OutlinedButton(
-                        onClick = { /* Reject through document details only */ },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
-                        ),
-                        enabled = false
-                    ) {
-                        Text(
-                            text = "Reject ID",
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-
-                Button(
-                    onClick = onApproveID,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = IslamovePrimary
-                    ),
-                    enabled = currentStatus != DocumentStatus.APPROVED
-                ) {
-                    Text(
-                        text = "Approve ID",
-                        fontWeight = FontWeight.Medium,
-                        color = Color.White
-                    )
-                }
-            }
-
             if (currentStatus != DocumentStatus.REJECTED) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "To reject this ID, please click on the document above and review it individually.",
+                    text = "To approve or reject the ID, please click on the document above and review it individually.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
