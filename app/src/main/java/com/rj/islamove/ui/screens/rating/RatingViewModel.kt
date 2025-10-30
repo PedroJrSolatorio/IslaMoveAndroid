@@ -31,7 +31,9 @@ data class RatingUiState(
     val driverUser: User? = null,
     val driverRatingStats: UserRatingStats? = null,
     val passengerUser: User? = null,
-    val passengerRatingStats: UserRatingStats? = null
+    val passengerRatingStats: UserRatingStats? = null,
+    val personalizedMessages: List<String> = emptyList(),
+    val isFareDetailsExpanded: Boolean = false
 )
 
 @HiltViewModel
@@ -261,6 +263,22 @@ class RatingViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(isAnonymous = isAnonymous)
     }
 
+    fun togglePersonalizedMessage(message: String) {
+        val currentMessages = _uiState.value.personalizedMessages.toMutableList()
+        if (currentMessages.contains(message)) {
+            currentMessages.remove(message)
+        } else {
+            currentMessages.add(message)
+        }
+        _uiState.value = _uiState.value.copy(personalizedMessages = currentMessages)
+    }
+
+    fun toggleFareDetails() {
+        _uiState.value = _uiState.value.copy(
+            isFareDetailsExpanded = !_uiState.value.isFareDetailsExpanded
+        )
+    }
+
     fun submitRating() {
         try {
             Log.d(TAG, "submitRating() called")
@@ -300,12 +318,25 @@ class RatingViewModel @Inject constructor(
                     }
                     Log.d(TAG, "Current user ID: $currentUserId")
 
+                    // Build review text with personalized messages
+                    val reviewText = buildString {
+                        if (currentState.personalizedMessages.isNotEmpty()) {
+                            append(currentState.personalizedMessages.joinToString(", "))
+                            if (currentState.review.isNotBlank()) {
+                                append("\n\n")
+                            }
+                        }
+                        if (currentState.review.isNotBlank()) {
+                            append(currentState.review.trim())
+                        }
+                    }
+
                     Log.d(TAG, "Creating rating submission...")
                     val ratingSubmission = RatingSubmission(
                         bookingId = currentState.bookingId,
                         toUserId = currentState.toUserId,
                         stars = currentState.overallRating,
-                        review = currentState.review.trim(),
+                        review = reviewText,
                         categories = currentState.categoryRatings,
                         isAnonymous = currentState.isAnonymous
                     )

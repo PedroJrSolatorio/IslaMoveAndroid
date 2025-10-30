@@ -15,6 +15,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.Placeable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -127,7 +129,8 @@ fun RatingScreen(
         ) {
             // Fare Summary
             item {
-                FareSummarySection(uiState = uiState)
+                FareSummarySection(uiState = uiState,
+                    onToggleFareDetails = viewModel::toggleFareDetails)
             }
 
             // Rating section
@@ -135,12 +138,14 @@ fun RatingScreen(
                 if (isRatingDriver) {
                     RateDriverSection(
                         uiState = uiState,
-                        onRatingChange = viewModel::updateOverallRating
+                        onRatingChange = viewModel::updateOverallRating,
+                        onMessageToggle = viewModel::togglePersonalizedMessage
                     )
                 } else {
                     RatePassengerSection(
                         uiState = uiState,
-                        onRatingChange = viewModel::updateOverallRating
+                        onRatingChange = viewModel::updateOverallRating,
+                        onMessageToggle = viewModel::togglePersonalizedMessage
                     )
                 }
             }
@@ -174,6 +179,8 @@ fun RatingScreen(
                     }
                 )
             }
+
+
 
             // Debug: Manual navigation button (TEMPORARY)
             if (uiState.isSubmitted) {
@@ -329,60 +336,289 @@ private fun ErrorCard(error: String) {
     }
 }
 
+
+// Add these new composables to your RatingScreen.kt file
+
+// Personalized messages for drivers (when rating passengers)
+private val DRIVER_PERSONALIZED_MESSAGES = listOf(
+    "Respectful",
+    "On time",
+    "Friendly",
+    "Clean",
+    "Polite conversation",
+    "Quiet and peaceful"
+)
+
+// Personalized messages for passengers (when rating drivers)
+private val PASSENGER_PERSONALIZED_MESSAGES = listOf(
+    "Cool driver",
+    "Hygienic",
+    "Safe driving",
+    "Friendly",
+    "On time",
+    "Clean vehicle",
+    "Professional",
+    "Good conversation"
+)
+
 @Composable
-private fun FareSummarySection(uiState: RatingUiState) {
+private fun PersonalizedMessagesSection(
+    selectedMessages: List<String>,
+    isRatingDriver: Boolean,
+    onMessageToggle: (String) -> Unit
+) {
+    val messages = if (isRatingDriver) PASSENGER_PERSONALIZED_MESSAGES else DRIVER_PERSONALIZED_MESSAGES
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "Quick feedback (optional)",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = Color.Black,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        // Wrap chips in rows
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            messages.forEach { message ->
+                val isSelected = selectedMessages.contains(message)
+                FilterChip(
+                    selected = isSelected,
+                    onClick = { onMessageToggle(message) },
+                    label = {
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    },
+                    leadingIcon = if (isSelected) {
+                        {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    } else null,
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = IslamovePrimary.copy(alpha = 0.2f),
+                        selectedLabelColor = IslamovePrimary,
+                        selectedLeadingIconColor = IslamovePrimary,
+                        containerColor = Color.White,
+                        labelColor = Color.Black.copy(alpha = 0.7f)
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = isSelected,
+                        borderColor = if (isSelected) IslamovePrimary else Color.Black.copy(alpha = 0.3f),
+                        selectedBorderColor = IslamovePrimary,
+                        borderWidth = 1.dp,
+                        selectedBorderWidth = 1.5.dp
+                    )
+                )
+            }
+        }
+    }
+}
+
+
+// Note: FlowRow is available in Compose 1.4.0+
+// If you don't have it, use this alternative implementation:
+@Composable
+private fun FlowRow(
+    modifier: Modifier = Modifier,
+    horizontalArrangement: Arrangement.Horizontal = Arrangement.Start,
+    verticalArrangement: Arrangement.Vertical = Arrangement.Top,
+    content: @Composable () -> Unit
+) {
+    Layout(
+        content = content,
+        modifier = modifier
+    ) { measurables, constraints ->
+        val sequences = mutableListOf<List<Placeable>>()
+        var currentSequence = mutableListOf<Placeable>()
+        var currentWidth = 0
+        val spacing = 8.dp.roundToPx()
+
+        measurables.forEach { measurable ->
+            val placeable = measurable.measure(constraints)
+            if (currentWidth + placeable.width > constraints.maxWidth && currentSequence.isNotEmpty()) {
+                sequences.add(currentSequence)
+                currentSequence = mutableListOf()
+                currentWidth = 0
+            }
+            currentSequence.add(placeable)
+            currentWidth += placeable.width + spacing
+        }
+        if (currentSequence.isNotEmpty()) {
+            sequences.add(currentSequence)
+        }
+
+        val height = sequences.sumOf { row ->
+            row.maxOfOrNull { it.height } ?: 0
+        } + (sequences.size - 1) * spacing
+
+        layout(constraints.maxWidth, height) {
+            var yPosition = 0
+            sequences.forEach { row ->
+                var xPosition = 0
+                val rowHeight = row.maxOfOrNull { it.height } ?: 0
+                row.forEach { placeable ->
+                    placeable.placeRelative(x = xPosition, y = yPosition)
+                    xPosition += placeable.width + spacing
+                }
+                yPosition += rowHeight + spacing
+            }
+        }
+    }
+}
+
+@Composable
+private fun FareSummarySection(
+    uiState: RatingUiState,
+    onToggleFareDetails: () -> Unit
+) {
     val currencyFormat = NumberFormat.getCurrencyInstance(Locale("en", "PH")).apply {
         currency = Currency.getInstance("PHP")
         maximumFractionDigits = 0
         minimumFractionDigits = 0
     }
-    
+
     Column {
-        Text(
-            text = "Fare summary",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = Color.Black,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-        
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Fare summary",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black
+            )
+
+            // Show "More details" for both drivers and passengers
+            TextButton(
+                onClick = onToggleFareDetails,
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = IslamovePrimary
+                )
+            ) {
+                Text(
+                    text = if (uiState.isFareDetailsExpanded) "Less details" else "More details",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Icon(
+                    imageVector = if (uiState.isFareDetailsExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         val booking = uiState.booking
         val fareEstimate = booking?.fareEstimate
         val actualFare = booking?.actualFare
-        
+
         if (fareEstimate != null) {
-            // Use actual fare data from booking
-            FareSummaryItem("Base fare", fareEstimate.baseFare, currencyFormat)
+            // Show expanded details if toggle is on
+            if (uiState.isFareDetailsExpanded) {
+                // Base fare
+                FareSummaryItem("Base fare", fareEstimate.baseFare, currencyFormat)
 
-            // Show discount if applicable
-            val discountPercentage = booking?.passengerDiscountPercentage
-            if (discountPercentage != null && discountPercentage > 0) {
-                val discountAmount = fareEstimate.baseFare * (discountPercentage / 100.0)
-                FareSummaryItem(
-                    label = "Discount ($discountPercentage%)",
-                    amount = -discountAmount,
-                    currencyFormat = currencyFormat,
-                    isDiscount = true
-                )
-            }
+                // Companions fare (if any)
+                val companions = booking.companions
+                if (!companions.isNullOrEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Companions",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.Black,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                    companions.forEachIndexed { index, companion ->
+                        val companionLabel = when (companion.type) {
+                            CompanionType.REGULAR -> "Companion ${index + 1}"
+                            CompanionType.STUDENT -> "Student ${index + 1}"
+                            CompanionType.SENIOR -> "Senior ${index + 1}"
+                            CompanionType.CHILD -> "Child ${index + 1}"
+                        }
 
-            // Calculate booking fee as the difference between total and components
-            val components = fareEstimate.baseFare + fareEstimate.distanceFare + fareEstimate.timeFare
-            val bookingFee = fareEstimate.totalEstimate - components
+                        // Show discount if applicable
+                        val label = if (companion.discountPercentage > 0) {
+                            "  $companionLabel (${companion.discountPercentage}% off)"
+                        } else {
+                            "  $companionLabel"
+                        }
 
+                        FareSummaryItem(
+                            label = label,
+                            amount = companion.fare,
+                            currencyFormat = currencyFormat
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
-            // Show surge if applicable
-            if (fareEstimate.surgeFactor > 1.0) {
-                val surgeAmount = fareEstimate.totalEstimate * (fareEstimate.surgeFactor - 1.0)
-                FareSummaryItem("Surge", surgeAmount, currencyFormat)
+                // Show discount if applicable
+                val discountPercentage = booking.passengerDiscountPercentage
+                if (discountPercentage != null && discountPercentage > 0) {
+                    val totalBeforeDiscount = fareEstimate.baseFare * (1 + (companions?.size ?: 0)) +
+                            fareEstimate.distanceFare + fareEstimate.timeFare
+                    val discountAmount = totalBeforeDiscount * (discountPercentage / 100.0)
+                    FareSummaryItem(
+                        label = "Discount ($discountPercentage%)",
+                        amount = -discountAmount,
+                        currencyFormat = currencyFormat,
+                        isDiscount = true
+                    )
+                }
+
+                // Show surge if applicable
+                if (fareEstimate.surgeFactor > 1.0) {
+                    val surgePercentage = ((fareEstimate.surgeFactor - 1.0) * 100).toInt()
+                    FareSummaryItem(
+                        label = "Surge ($surgePercentage%)",
+                        amount = fareEstimate.totalEstimate * (fareEstimate.surgeFactor - 1.0),
+                        currencyFormat = currencyFormat
+                    )
+                }
+            } else {
+                // Collapsed view - just show base fare
+                FareSummaryItem("Base fare", fareEstimate.baseFare, currencyFormat)
+
+                // Show discount if applicable
+                val discountPercentage = booking.passengerDiscountPercentage
+                if (discountPercentage != null && discountPercentage > 0) {
+                    val discountAmount = fareEstimate.baseFare * (discountPercentage / 100.0)
+                    FareSummaryItem(
+                        label = "Discount ($discountPercentage%)",
+                        amount = -discountAmount,
+                        currencyFormat = currencyFormat,
+                        isDiscount = true
+                    )
+                }
+
+                // Show surge if applicable
+                if (fareEstimate.surgeFactor > 1.0) {
+                    val surgeAmount = fareEstimate.totalEstimate * (fareEstimate.surgeFactor - 1.0)
+                    FareSummaryItem("Surge", surgeAmount, currencyFormat)
+                }
             }
         } else {
             // Fallback to mock data if no booking data available
             FareSummaryItem("Base fare", 1.50, currencyFormat)
         }
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -437,7 +673,8 @@ private fun FareSummaryItem(
 @Composable
 private fun RateDriverSection(
     uiState: RatingUiState,
-    onRatingChange: (Int) -> Unit
+    onRatingChange: (Int) -> Unit,
+    onMessageToggle: (String) -> Unit
 ) {
     val driverUser = uiState.driverUser
     val driverStats = uiState.driverRatingStats
@@ -489,7 +726,7 @@ private fun RateDriverSection(
                         "${vehicleInfo.make} ${vehicleInfo.model}"
                     }
                     vehicleInfo?.make?.isNotEmpty() == true -> vehicleInfo.make
-                    else -> "Vehicle"
+                    else -> "Bao-bao Driver"
                 }
                 
                 Text(
@@ -634,6 +871,14 @@ private fun RateDriverSection(
                     .padding(top = 8.dp),
                 textAlign = TextAlign.Center
             )
+
+            // Add personalized messages section
+            Spacer(modifier = Modifier.height(20.dp))
+            PersonalizedMessagesSection(
+                selectedMessages = uiState.personalizedMessages,
+                isRatingDriver = true,
+                onMessageToggle = onMessageToggle
+            )
         }
     }
 }
@@ -748,34 +993,10 @@ private fun CommentSection(
 }
 
 @Composable
-private fun StarRatingRow(
-    rating: Int,
-    onRatingChange: (Int) -> Unit,
-    size: androidx.compose.ui.unit.Dp
-) {
-    LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        items(5) { index ->
-            val starIndex = index + 1
-            val isFilled = starIndex <= rating
-
-            Icon(
-                imageVector = if (isFilled) Icons.Default.Star else Icons.Default.Star,
-                contentDescription = "Star $starIndex",
-                tint = if (isFilled) Color(0xFFFFD700) else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .size(size)
-                    .clickable { onRatingChange(starIndex) }
-            )
-        }
-    }
-}
-
-@Composable
 private fun RatePassengerSection(
     uiState: RatingUiState,
-    onRatingChange: (Int) -> Unit
+    onRatingChange: (Int) -> Unit,
+    onMessageToggle: (String) -> Unit
 ) {
     val passengerUser = uiState.passengerUser
     val passengerStats = uiState.passengerRatingStats
@@ -924,6 +1145,13 @@ private fun RatePassengerSection(
                     .fillMaxWidth()
                     .padding(top = 8.dp),
                 textAlign = TextAlign.Center
+            )
+            // Add personalized messages section
+            Spacer(modifier = Modifier.height(20.dp))
+            PersonalizedMessagesSection(
+                selectedMessages = uiState.personalizedMessages,
+                isRatingDriver = false,
+                onMessageToggle = onMessageToggle
             )
         }
     }

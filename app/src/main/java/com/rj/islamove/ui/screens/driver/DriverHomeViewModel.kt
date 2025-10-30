@@ -830,7 +830,7 @@ class DriverHomeViewModel @Inject constructor(
 
                 for (request in requests) {
                     // Verify the request is in INITIAL phase with PENDING status
-                    if (!request.isInInitialPhase(currentTime) ||
+                    if (request.isExpired(currentTime) ||
                         request.status != DriverRequestStatus.PENDING) {
                         d("DriverHomeVM", "Filtering out non-initial request: ${request.requestId}")
                         continue
@@ -1386,16 +1386,28 @@ class DriverHomeViewModel @Inject constructor(
      */
     fun declineRideRequest(request: DriverRequest) {
         viewModelScope.launch {
-            matchingRepository.declineRequest(request.requestId, request.driverId)
-                .onSuccess {
-                    // Request will be auto-removed by the observer
-                    d("DriverHomeVM", "Successfully declined request: ${request.requestId}")
+            _uiState.update { it.copy(isLoading = true) }
+
+            val result = matchingRepository.declineRideRequest(
+                requestId = request.requestId,
+                driverId = request.driverId
+            )
+
+            result.fold(
+                onSuccess = {
+                    android.util.Log.d("DriverHomeVM", "✅ Declined request ${request.requestId}")
+                    _uiState.update { it.copy(isLoading = false) }
+                },
+                onFailure = { error ->
+                    android.util.Log.e("DriverHomeVM", "❌ Failed to decline", error)
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            errorMessage = "Failed to decline: ${error.message}"
+                        )
+                    }
                 }
-                .onFailure { exception ->
-                    _uiState.value = _uiState.value.copy(
-                        errorMessage = "Failed to decline request: ${exception.message}"
-                    )
-                }
+            )
         }
     }
 

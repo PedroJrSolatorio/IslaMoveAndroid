@@ -545,7 +545,6 @@ private fun DashboardContent(
                     request = request,
                     isLoading = uiState.isLoading,
                     currentTimeMillis = uiState.currentTimeMillis,
-                    requestPhase = "Active",
                     zoneBoundaryRepository = zoneBoundaryRepository,
                     onAcceptRequest = { req -> viewModel.acceptRideRequest(req) },
                     onDeclineRequest = { req -> viewModel.declineRideRequest(req) }
@@ -1304,7 +1303,6 @@ private fun MapContent(
                             request = request,
                             isLoading = uiState.isLoading,
                             currentTimeMillis = uiState.currentTimeMillis,
-                            requestPhase = "Active",
                             zoneBoundaryRepository = zoneBoundaryRepository,
                             onAcceptRequest = { req -> viewModel.acceptRideRequest(req) },
                             onDeclineRequest = { req -> viewModel.declineRideRequest(req) }
@@ -1685,7 +1683,6 @@ private fun IncomingRequestsCardWithRating(
         requests = listOf(request),
         isLoading = isLoading,
         currentTimeMillis = currentTimeMillis,
-        requestPhase = requestPhase,
         zoneBoundaryRepository = zoneBoundaryRepository,
         passengerRating = if (isRatingLoading) null else passengerRating, // Don't show rating while loading
         isRatingLoading = isRatingLoading,
@@ -1699,9 +1696,8 @@ private fun IncomingRequestsCard(
     requests: List<DriverRequest>,
     isLoading: Boolean,
     currentTimeMillis: Long,
-    requestPhase: String = "Active",
     zoneBoundaryRepository: ZoneBoundaryRepository? = null,
-    passengerRating: Double? = null, // Will receive actual rating from Firebase, null while loading
+    passengerRating: Double? = null,
     isRatingLoading: Boolean = false,
     onAcceptRequest: (DriverRequest) -> Unit,
     onDeclineRequest: (DriverRequest) -> Unit
@@ -1713,7 +1709,7 @@ private fun IncomingRequestsCard(
 
     // Filter out expired requests in real-time
     val validRequests = requests.filter { request ->
-        request.getPhase(currentTimeMillis) != RequestPhase.EXPIRED
+        !request.isExpired(currentTimeMillis)
     }
 
     if (validRequests.isEmpty()) {
@@ -1737,24 +1733,17 @@ private fun IncomingRequestsCard(
         Column(
             modifier = Modifier.padding(20.dp)
         ) {
-            val phase = requests.first().getPhase(currentTimeMillis)
-            val phaseText = when (phase) {
-                com.rj.islamove.data.repository.RequestPhase.INITIAL -> "Active"
-                com.rj.islamove.data.repository.RequestPhase.SECOND_CHANCE -> "Second Chance"
-                else -> "Expired"
-            }
-
+            // Simple header - no phase text
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "$phaseText Ride Request",
+                    text = "Ride Request",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (phase == com.rj.islamove.data.repository.RequestPhase.INITIAL)
-                        IslamovePrimary else MaterialTheme.colorScheme.secondary
+                    color = IslamovePrimary
                 )
 
                 // Passenger Rating
@@ -1766,7 +1755,7 @@ private fun IncomingRequestsCard(
                         Icon(
                             imageVector = Icons.Default.Star,
                             contentDescription = "Rating",
-                            tint = Color(0xFFFFC107), // Yellow
+                            tint = Color(0xFFFFC107),
                             modifier = Modifier.size(18.dp)
                         )
                         Text(
@@ -1776,11 +1765,10 @@ private fun IncomingRequestsCard(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     } else if (isRatingLoading) {
-                        // Show loading indicator for rating
                         Icon(
                             imageVector = Icons.Default.Star,
                             contentDescription = "Loading rating",
-                            tint = Color(0xFFCCCCCC), // Gray color while loading
+                            tint = Color(0xFFCCCCCC),
                             modifier = Modifier.size(18.dp)
                         )
                         Text(
@@ -1794,9 +1782,6 @@ private fun IncomingRequestsCard(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-
-            // Show the first request (in real app, might show all or prioritize)
-            val request = requests.first()
 
             // Trip details
             Row(
@@ -2011,7 +1996,7 @@ private fun IncomingRequestsCard(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // Discount Badge (if passenger has discount)
+            // Discount Badge
             if (request.passengerDiscountPercentage != null) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -2075,7 +2060,7 @@ private fun IncomingRequestsCard(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // Passenger Comment (if provided)
+            // Passenger Comment
             if (request.specialInstructions.isNotBlank()) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -2183,31 +2168,20 @@ private fun IncomingRequestsCard(
                 }
             }
 
-            // Timer indicator (showing time left to respond) - handles both initial and second chance phases
+            // Simple timer indicator (30 seconds only)
             val timeLeft = request.getTimeRemaining(currentTimeMillis)
-            val requestPhase = request.getPhase(currentTimeMillis)
-            val maxTime = if (requestPhase == com.rj.islamove.data.repository.RequestPhase.INITIAL) 30f else 180f
 
             if (timeLeft > 0) {
                 Spacer(modifier = Modifier.height(12.dp))
                 LinearProgressIndicator(
-                    progress = { (timeLeft / maxTime).coerceIn(0f, 1f) },
+                    progress = { (timeLeft / 30f).coerceIn(0f, 1f) },
                     modifier = Modifier.fillMaxWidth(),
-                    color = if (requestPhase == com.rj.islamove.data.repository.RequestPhase.INITIAL)
-                        IslamovePrimary else MaterialTheme.colorScheme.secondary
+                    color = IslamovePrimary
                 )
                 Text(
-                    text = when (requestPhase) {
-                        com.rj.islamove.data.repository.RequestPhase.INITIAL ->
-                            "Expires in ${timeLeft}s"
-                        com.rj.islamove.data.repository.RequestPhase.SECOND_CHANCE ->
-                            if (timeLeft > 60) "Second chance: ${timeLeft / 60}m ${timeLeft % 60}s remaining"
-                            else "Second chance: ${timeLeft}s remaining"
-                        else -> "Expired"
-                    },
+                    text = "Expires in ${timeLeft}s",
                     fontSize = 12.sp,
-                    color = if (requestPhase == com.rj.islamove.data.repository.RequestPhase.INITIAL)
-                        IslamovePrimary else MaterialTheme.colorScheme.secondary,
+                    color = IslamovePrimary,
                     modifier = Modifier.align(Alignment.CenterHorizontally)
                 )
             }

@@ -1984,7 +1984,7 @@ fun MapboxPlaceDetailsCard(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        text = calculatedFare,
+                        text = if (baseFareValue > 0.0) calculatedFare else "No Fare Set",
                         style = MaterialTheme.typography.headlineLarge,
                         fontWeight = FontWeight.Bold,
                         color = Color.Black,

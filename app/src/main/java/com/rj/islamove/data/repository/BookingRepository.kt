@@ -502,8 +502,7 @@ class BookingRepository @Inject constructor(
                 // Check all requests for this driver
                 driverSnapshot.children.forEach { requestSnapshot ->
                     val request = requestSnapshot.getValue(DriverRequest::class.java)
-                    if (request?.bookingId == bookingId && 
-                        (request.status == DriverRequestStatus.PENDING || request.status == DriverRequestStatus.SECOND_CHANCE)) {
+                    if (request?.bookingId == bookingId && request.status == DriverRequestStatus.PENDING) {
                         
                         // Mark as cancelled (passenger cancelled)
                         requestSnapshot.ref.child("status").setValue(DriverRequestStatus.CANCELLED.name)
