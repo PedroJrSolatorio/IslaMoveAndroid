@@ -1889,7 +1889,7 @@ private fun IncomingRequestsCard(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    request.companions.forEachIndexed { index, companion ->
+                    request.companions.forEach { companion ->
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1925,10 +1925,10 @@ private fun IncomingRequestsCard(
                                     Column {
                                         Text(
                                             text = when (companion.type) {
-                                                CompanionType.STUDENT -> "Student ${index + 1}"
-                                                CompanionType.SENIOR -> "Senior ${index + 1}"
-                                                CompanionType.CHILD -> "Child ${index + 1}"
-                                                else -> "Companion ${index + 1}"
+                                                CompanionType.STUDENT -> "Student"
+                                                CompanionType.SENIOR -> "Senior"
+                                                CompanionType.CHILD -> "Child"
+                                                else -> "Regular"
                                             },
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.Medium
@@ -1942,6 +1942,7 @@ private fun IncomingRequestsCard(
                                         }
                                     }
                                 }
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     text = "₱${kotlin.math.floor(companion.fare).toInt()}",
                                     fontSize = 13.sp,

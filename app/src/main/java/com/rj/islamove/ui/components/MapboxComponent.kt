@@ -1901,34 +1901,39 @@ fun MapboxPlaceDetailsCard(
         estimatedFare?.replace("₱", "")?.replace(",", "")?.toDoubleOrNull() ?: 0.0
     }
 
-    // Calculate fare correctly
-    val calculatedFare by remember {
-        derivedStateOf {
-            // Main passenger uses the DISPLAYED fare (already includes their discount from estimatedFare)
-            val passengerFare = baseFareValue
-
-            // Companions use base fare with their own discounts applied
-            // But we need the ORIGINAL base fare before passenger discount
-            val originalBaseFare = if (discountPercentage != null && discountPercentage > 0) {
-                // Reverse calculate: if displayed fare is after discount, find original
-                baseFareValue / (1 - (discountPercentage / 100.0))
-            } else {
-                baseFareValue
-            }
-
-            val companionFaresTotal = companions.sumOf { companionType ->
-                val companionDiscount = when (companionType) {
-                    CompanionType.STUDENT, CompanionType.SENIOR -> 0.20
-                    CompanionType.CHILD -> 0.50
-                    CompanionType.REGULAR -> 0.0
-                    else -> 0.0
-                }
-                originalBaseFare * (1 - companionDiscount)
-            }
-
-            val totalFare = passengerFare + companionFaresTotal
-            "₱${String.format("%.0f", totalFare)}"
+    // Calculate the ORIGINAL base fare (before passenger discount)
+    val originalBaseFare = remember(baseFareValue, discountPercentage) {
+        if (discountPercentage != null && discountPercentage > 0) {
+            // Reverse calculate: if displayed fare is after discount, find original
+            baseFareValue / (1 - (discountPercentage / 100.0))
+        } else {
+            baseFareValue
         }
+    }
+
+    // Calculate individual companion fares based on original base fare
+    val companionFares = remember(companions, originalBaseFare) {
+        companions.map { companionType ->
+            val companionDiscount = when (companionType) {
+                CompanionType.STUDENT, CompanionType.SENIOR -> 0.20
+                CompanionType.CHILD -> 0.50
+                CompanionType.REGULAR -> 0.0
+                else -> 0.0
+            }
+            originalBaseFare * (1 - companionDiscount)
+        }
+    }
+
+    // Calculate total fare (will recompose when companions change)
+    val calculatedFare = remember(baseFareValue, companionFares) {
+        // Main passenger uses the DISPLAYED fare (already includes their discount)
+        val passengerFare = baseFareValue
+
+        // Sum up companion fares
+        val companionFaresTotal = companionFares.sum()
+
+        val totalFare = passengerFare + companionFaresTotal
+        "₱${String.format("%.0f", totalFare)}"
     }
 
     Card(
@@ -2288,6 +2293,7 @@ fun MapboxPlaceDetailsCard(
 
                     items(companions.size) { index ->
                         val companionType = companions[index]
+                        val companionFare = companionFares.getOrNull(index) ?: 0.0
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -2305,7 +2311,8 @@ fun MapboxPlaceDetailsCard(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Row(
-                                    verticalAlignment = Alignment.CenterVertically
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
                                 ) {
                                     Icon(
                                         Icons.Default.Person,
@@ -2314,7 +2321,6 @@ fun MapboxPlaceDetailsCard(
                                             CompanionType.STUDENT, CompanionType.SENIOR -> Color(
                                                 0xFF4CAF50
                                             )
-
                                             CompanionType.CHILD -> Color(0xFF2196F3)
                                             CompanionType.REGULAR -> Color(0xFF757575)
                                             else -> Color.Gray
@@ -2346,6 +2352,20 @@ fun MapboxPlaceDetailsCard(
                                         )
                                     }
                                 }
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                // Companion fare display
+                                Text(
+                                    text = "₱${kotlin.math.floor(companionFare).toInt()}",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = when (companionType) {
+                                        CompanionType.STUDENT, CompanionType.SENIOR -> Color(0xFF4CAF50)
+                                        CompanionType.CHILD -> Color(0xFF2196F3)
+                                        else -> Color(0xFF757575)
+                                    }
+                                )
+
                                 IconButton(
                                     onClick = {
                                         companions =
