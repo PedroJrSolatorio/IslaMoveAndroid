@@ -1876,88 +1876,125 @@ private fun IncomingRequestsCard(
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
-            // Companion Breakdown
+            // Companion Breakdown (Collapsible)
             if (request.companions.isNotEmpty()) {
+                var showCompanions by remember { mutableStateOf(false) }
+
                 Column(
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = "COMPANIONS (${request.companions.size})",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    request.companions.forEach { companion ->
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = when (companion.type) {
-                                    CompanionType.STUDENT, CompanionType.SENIOR -> Color(0xFFE8F5E8)
-                                    CompanionType.CHILD -> Color(0xFFE3F2FD)
-                                    else -> Color(0xFFF5F5F5)
-                                }
-                            ),
-                            shape = RoundedCornerShape(8.dp)
+                    // Companion summary button
+                    OutlinedButton(
+                        onClick = { showCompanions = !showCompanions },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = Color(0xFF1976D2)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(
-                                modifier = Modifier.padding(12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+                                Icon(
+                                    Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = Color(0xFF1976D2),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "${request.companions.size} Companion${if (request.companions.size > 1) "s" else ""}",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                            Icon(
+                                if (showCompanions) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                contentDescription = if (showCompanions) "Hide companions" else "Show companions",
+                                tint = Color(0xFF1976D2)
+                            )
+                        }
+                    }
+
+                    // Companion list (only shown when expanded)
+                    if (showCompanions) {
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        request.companions.forEach { companion ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = when (companion.type) {
+                                        CompanionType.STUDENT, CompanionType.SENIOR -> Color(0xFFE8F5E8)
+                                        CompanionType.CHILD -> Color(0xFFE3F2FD)
+                                        else -> Color(0xFFF5F5F5)
+                                    }
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
                                 Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(
-                                        Icons.Default.Person,
-                                        contentDescription = null,
-                                        tint = when (companion.type) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Person,
+                                            contentDescription = null,
+                                            tint = when (companion.type) {
+                                                CompanionType.STUDENT, CompanionType.SENIOR -> Color(0xFF4CAF50)
+                                                CompanionType.CHILD -> Color(0xFF2196F3)
+                                                else -> Color.Gray
+                                            },
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column {
+                                            Text(
+                                                text = when (companion.type) {
+                                                    CompanionType.STUDENT -> "Student"
+                                                    CompanionType.SENIOR -> "Senior"
+                                                    CompanionType.CHILD -> "Child"
+                                                    else -> "Regular"
+                                                },
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                            if (companion.discountPercentage > 0) {
+                                                Text(
+                                                    text = "${companion.discountPercentage}% discount",
+                                                    fontSize = 10.sp,
+                                                    color = Color.Gray
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "₱${kotlin.math.floor(companion.fare).toInt()}",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = when (companion.type) {
                                             CompanionType.STUDENT, CompanionType.SENIOR -> Color(0xFF4CAF50)
                                             CompanionType.CHILD -> Color(0xFF2196F3)
                                             else -> Color.Gray
-                                        },
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Column {
-                                        Text(
-                                            text = when (companion.type) {
-                                                CompanionType.STUDENT -> "Student"
-                                                CompanionType.SENIOR -> "Senior"
-                                                CompanionType.CHILD -> "Child"
-                                                else -> "Regular"
-                                            },
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                        if (companion.discountPercentage > 0) {
-                                            Text(
-                                                text = "${companion.discountPercentage}% discount",
-                                                fontSize = 10.sp,
-                                                color = Color.Gray
-                                            )
                                         }
-                                    }
+                                    )
                                 }
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "₱${kotlin.math.floor(companion.fare).toInt()}",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = when (companion.type) {
-                                        CompanionType.STUDENT, CompanionType.SENIOR -> Color(0xFF4CAF50)
-                                        CompanionType.CHILD -> Color(0xFF2196F3)
-                                        else -> Color.Gray
-                                    }
-                                )
                             }
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
             }
 
             // Fare Breakdown Button (expandable)
@@ -2393,23 +2430,58 @@ private fun RideCardWithActions(
                 }
 
                 // Fare with checkmark if active
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text(
-                        text = "₱${String.format("%.2f", booking.fareEstimate.totalEstimate)}",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = IslamovePrimary
-                    )
-                    if (isActive) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = "Active",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "₱${String.format("%.2f", booking.fareEstimate.totalEstimate)}",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = IslamovePrimary
                         )
+                        if (isActive) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = "Active",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    // Total Passengers indicator
+                    if (booking.totalPassengers > 1) {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = IslamovePrimary.copy(alpha = 0.1f)
+                            ),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = "Total Passengers",
+                                    tint = IslamovePrimary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = "${booking.totalPassengers} passengers",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = IslamovePrimary,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
                     }
                 }
             }
