@@ -65,7 +65,19 @@ fun CreateAccountScreen(
     var selectedGender by rememberSaveable { mutableStateOf<String?>(null) }
     var address by rememberSaveable { mutableStateOf("") }
     var idDocumentUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var driverLicenseUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var sjmodaUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var orUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var crUri by rememberSaveable { mutableStateOf<Uri?>(null) }
     var showDocumentPicker by rememberSaveable { mutableStateOf(false) }
+    var showLicensePicker by rememberSaveable { mutableStateOf(false) }
+    var showSjmodaPicker by rememberSaveable { mutableStateOf(false) }
+    var showOrPicker by rememberSaveable { mutableStateOf(false) }
+    var showCrPicker by rememberSaveable { mutableStateOf(false) }
+    var cameraLicenseUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var cameraSjmodaUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var cameraOrUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var cameraCrUri by rememberSaveable { mutableStateOf<Uri?>(null) }
     var ageError by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
@@ -79,7 +91,8 @@ fun CreateAccountScreen(
     val allFieldsFilled = remember(
         firstName, lastName, email, phoneNumber, password,
         selectedUserType, dateOfBirth, selectedGender, address,
-        idDocumentUri, ageError, termsAccepted, privacyAccepted, phoneNumberError
+        idDocumentUri, driverLicenseUri, sjmodaUri, orUri, crUri,
+        ageError, termsAccepted, privacyAccepted, phoneNumberError
     ) {
         firstName.isNotEmpty() &&
                 lastName.isNotEmpty() &&
@@ -92,6 +105,7 @@ fun CreateAccountScreen(
                 selectedGender != null &&
                 address.isNotEmpty() &&
                 (selectedUserType != "PASSENGER" || idDocumentUri != null) &&
+                (selectedUserType != "DRIVER" || (driverLicenseUri != null && sjmodaUri != null && orUri != null && crUri != null)) &&
                 ageError == null &&
                 phoneNumberError == null &&
                 termsAccepted &&
@@ -541,21 +555,589 @@ fun CreateAccountScreen(
             }
 
             if (selectedUserType == "DRIVER") {
+                // Driver's License Upload
                 Text(
-                    text = "Required Documents",
+                    text = "Driver's License",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
                 )
 
+                val licenseLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.GetContent()
+                ) { uri ->
+                    if (uri != null) {
+                        driverLicenseUri = uri
+                    }
+                }
+
+                val cameraLicenseLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.TakePicture()
+                ) { success ->
+                    if (success && cameraLicenseUri != null) {
+                        driverLicenseUri = cameraLicenseUri
+                    }
+                }
+
+                val cameraLicensePermissionLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.RequestPermission()
+                ) { granted ->
+                    if (granted) {
+                        val uri = createImageUri()
+                        cameraLicenseUri = uri
+                        cameraLicenseLauncher.launch(uri)
+                    }
+                }
+
+                Button(
+                    onClick = { showLicensePicker = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (driverLicenseUri != null) Color(0xFF4CAF50) else IslamovePrimary
+                    )
+                ) {
+                    Icon(
+                        if (driverLicenseUri != null) Icons.Default.CheckCircle else Icons.Default.Upload,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        if (driverLicenseUri != null) "Driver's License Uploaded" else "Upload Driver's License"
+                    )
+                }
+
+                if (driverLicenseUri != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(
+                                1.dp,
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                                RoundedCornerShape(12.dp)
+                            )
+                    ) {
+                        AsyncImage(
+                            model = driverLicenseUri,
+                            contentDescription = "Driver's License Preview",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                }
+
+                if (showLicensePicker) {
+                    AlertDialog(
+                        onDismissRequest = { showLicensePicker = false },
+                        title = {
+                            Text(
+                                text = "Upload Driver's License",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        text = {
+                            Column {
+                                Text("Choose how you'd like to upload your Driver's License:")
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            showLicensePicker = false
+                                            cameraLicensePermissionLauncher.launch(android.Manifest.permission.CAMERA)
+                                        }
+                                        .padding(vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.CameraAlt,
+                                        contentDescription = null,
+                                        tint = IslamovePrimary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Text(
+                                        text = "Take a photo",
+                                        fontSize = 16.sp
+                                    )
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            showLicensePicker = false
+                                            licenseLauncher.launch("image/*")
+                                        }
+                                        .padding(vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Photo,
+                                        contentDescription = null,
+                                        tint = IslamovePrimary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Text(
+                                        text = "Choose from gallery",
+                                        fontSize = 16.sp
+                                    )
+                                }
+                            }
+                        },
+                        confirmButton = {},
+                        dismissButton = {
+                            TextButton(onClick = { showLicensePicker = false }) {
+                                Text("Cancel")
+                            }
+                        }
+                    )
+                }
+
+                // SJMODA Certification Upload
                 Text(
-                    text = "Driver's License, SJMODA Certification, and OR/CR of bao-bao vehicle (will be requested after registration)",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 8.dp),
-                    lineHeight = 16.sp
+                    text = "SJMODA Certification",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
                 )
+
+                val sjmodaLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.GetContent()
+                ) { uri ->
+                    if (uri != null) {
+                        sjmodaUri = uri
+                    }
+                }
+
+                val cameraSjmodaLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.TakePicture()
+                ) { success ->
+                    if (success && cameraSjmodaUri != null) {
+                        sjmodaUri = cameraSjmodaUri
+                    }
+                }
+
+                val cameraSjmodaPermissionLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.RequestPermission()
+                ) { granted ->
+                    if (granted) {
+                        val uri = createImageUri()
+                        cameraSjmodaUri = uri
+                        cameraSjmodaLauncher.launch(uri)
+                    }
+                }
+
+                Button(
+                    onClick = { showSjmodaPicker = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (sjmodaUri != null) Color(0xFF4CAF50) else IslamovePrimary
+                    )
+                ) {
+                    Icon(
+                        if (sjmodaUri != null) Icons.Default.CheckCircle else Icons.Default.Upload,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        if (sjmodaUri != null) "SJMODA Certification Uploaded" else "Upload SJMODA Certification"
+                    )
+                }
+
+                if (sjmodaUri != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(
+                                1.dp,
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                                RoundedCornerShape(12.dp)
+                            )
+                    ) {
+                        AsyncImage(
+                            model = sjmodaUri,
+                            contentDescription = "SJMODA Certification Preview",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                }
+
+                if (showSjmodaPicker) {
+                    AlertDialog(
+                        onDismissRequest = { showSjmodaPicker = false },
+                        title = {
+                            Text(
+                                text = "Upload SJMODA Certification",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        text = {
+                            Column {
+                                Text("Choose how you'd like to upload your SJMODA Certification:")
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            showSjmodaPicker = false
+                                            cameraSjmodaPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+                                        }
+                                        .padding(vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.CameraAlt,
+                                        contentDescription = null,
+                                        tint = IslamovePrimary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Text(
+                                        text = "Take a photo",
+                                        fontSize = 16.sp
+                                    )
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            showSjmodaPicker = false
+                                            sjmodaLauncher.launch("image/*")
+                                        }
+                                        .padding(vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Photo,
+                                        contentDescription = null,
+                                        tint = IslamovePrimary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Text(
+                                        text = "Choose from gallery",
+                                        fontSize = 16.sp
+                                    )
+                                }
+                            }
+                        },
+                        confirmButton = {},
+                        dismissButton = {
+                            TextButton(onClick = { showSjmodaPicker = false }) {
+                                Text("Cancel")
+                            }
+                        }
+                    )
+                }
+
+                // Official Receipt (OR) Upload
+                Text(
+                    text = "Official Receipt (OR)",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
+                )
+
+                val orLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.GetContent()
+                ) { uri ->
+                    if (uri != null) {
+                        orUri = uri
+                    }
+                }
+
+                val cameraOrLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.TakePicture()
+                ) { success ->
+                    if (success && cameraOrUri != null) {
+                        orUri = cameraOrUri
+                    }
+                }
+
+                val cameraOrPermissionLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.RequestPermission()
+                ) { granted ->
+                    if (granted) {
+                        val uri = createImageUri()
+                        cameraOrUri = uri
+                        cameraOrLauncher.launch(uri)
+                    }
+                }
+
+                Button(
+                    onClick = { showOrPicker = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (orUri != null) Color(0xFF4CAF50) else IslamovePrimary
+                    )
+                ) {
+                    Icon(
+                        if (orUri != null) Icons.Default.CheckCircle else Icons.Default.Upload,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        if (orUri != null) "Official Receipt Uploaded" else "Upload Official Receipt"
+                    )
+                }
+
+                if (orUri != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(
+                                1.dp,
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                                RoundedCornerShape(12.dp)
+                            )
+                    ) {
+                        AsyncImage(
+                            model = orUri,
+                            contentDescription = "Official Receipt Preview",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                }
+
+                if (showOrPicker) {
+                    AlertDialog(
+                        onDismissRequest = { showOrPicker = false },
+                        title = {
+                            Text(
+                                text = "Upload Official Receipt",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        text = {
+                            Column {
+                                Text("Choose how you'd like to upload your Official Receipt:")
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            showOrPicker = false
+                                            cameraOrPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+                                        }
+                                        .padding(vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.CameraAlt,
+                                        contentDescription = null,
+                                        tint = IslamovePrimary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Text(
+                                        text = "Take a photo",
+                                        fontSize = 16.sp
+                                    )
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            showOrPicker = false
+                                            orLauncher.launch("image/*")
+                                        }
+                                        .padding(vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Photo,
+                                        contentDescription = null,
+                                        tint = IslamovePrimary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Text(
+                                        text = "Choose from gallery",
+                                        fontSize = 16.sp
+                                    )
+                                }
+                            }
+                        },
+                        confirmButton = {},
+                        dismissButton = {
+                            TextButton(onClick = { showOrPicker = false }) {
+                                Text("Cancel")
+                            }
+                        }
+                    )
+                }
+
+                // Certificate of Registration (CR) Upload
+                Text(
+                    text = "Certificate of Registration (CR)",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
+                )
+
+                val crLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.GetContent()
+                ) { uri ->
+                    if (uri != null) {
+                        crUri = uri
+                    }
+                }
+
+                val cameraCrLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.TakePicture()
+                ) { success ->
+                    if (success && cameraCrUri != null) {
+                        crUri = cameraCrUri
+                    }
+                }
+
+                val cameraCrPermissionLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.RequestPermission()
+                ) { granted ->
+                    if (granted) {
+                        val uri = createImageUri()
+                        cameraCrUri = uri
+                        cameraCrLauncher.launch(uri)
+                    }
+                }
+
+                Button(
+                    onClick = { showCrPicker = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (crUri != null) Color(0xFF4CAF50) else IslamovePrimary
+                    )
+                ) {
+                    Icon(
+                        if (crUri != null) Icons.Default.CheckCircle else Icons.Default.Upload,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        if (crUri != null) "Certificate of Registration Uploaded" else "Upload Certificate of Registration"
+                    )
+                }
+
+                if (crUri != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(
+                                1.dp,
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                                RoundedCornerShape(12.dp)
+                            )
+                    ) {
+                        AsyncImage(
+                            model = crUri,
+                            contentDescription = "Certificate of Registration Preview",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                }
+
+                if (showCrPicker) {
+                    AlertDialog(
+                        onDismissRequest = { showCrPicker = false },
+                        title = {
+                            Text(
+                                text = "Upload Certificate of Registration",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        text = {
+                            Column {
+                                Text("Choose how you'd like to upload your Certificate of Registration:")
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            showCrPicker = false
+                                            cameraCrPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+                                        }
+                                        .padding(vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.CameraAlt,
+                                        contentDescription = null,
+                                        tint = IslamovePrimary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Text(
+                                        text = "Take a photo",
+                                        fontSize = 16.sp
+                                    )
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            showCrPicker = false
+                                            crLauncher.launch("image/*")
+                                        }
+                                        .padding(vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Photo,
+                                        contentDescription = null,
+                                        tint = IslamovePrimary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Text(
+                                        text = "Choose from gallery",
+                                        fontSize = 16.sp
+                                    )
+                                }
+                            }
+                        },
+                        confirmButton = {},
+                        dismissButton = {
+                            TextButton(onClick = { showCrPicker = false }) {
+                                Text("Cancel")
+                            }
+                        }
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -732,6 +1314,10 @@ fun CreateAccountScreen(
                     if (selectedGender == null) Text("• Gender", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (address.isEmpty()) Text("• Address", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (selectedUserType == "PASSENGER" && idDocumentUri == null) Text("• Valid ID upload", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (selectedUserType == "DRIVER" && driverLicenseUri == null) Text("• Driver's License upload", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (selectedUserType == "DRIVER" && sjmodaUri == null) Text("• SJMODA Certification upload", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (selectedUserType == "DRIVER" && orUri == null) Text("• Official Receipt upload", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (selectedUserType == "DRIVER" && crUri == null) Text("• Certificate of Registration upload", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (ageError != null) Text("• Must be 12+ years old", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (!termsAccepted) Text("• Accept Terms and Conditions", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (!privacyAccepted) Text("• Accept Privacy Policy", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -758,7 +1344,11 @@ fun CreateAccountScreen(
                     dateOfBirth = dateOfBirth,
                     gender = selectedGender,
                     address = address,
-                    idDocumentUri = if (selectedUserType == "PASSENGER") idDocumentUri else null
+                    idDocumentUri = if (selectedUserType == "PASSENGER") idDocumentUri else null,
+                    driverLicenseUri = if (selectedUserType == "DRIVER") driverLicenseUri else null,
+                    sjmodaUri = if (selectedUserType == "DRIVER") sjmodaUri else null,
+                    orUri = if (selectedUserType == "DRIVER") orUri else null,
+                    crUri = if (selectedUserType == "DRIVER") crUri else null
                 )
             },
             modifier = Modifier.fillMaxWidth(),

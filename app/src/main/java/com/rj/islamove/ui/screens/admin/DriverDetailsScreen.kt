@@ -304,8 +304,7 @@ private fun DocumentsSection(
                 "license" to "Driver's License",
                 "vehicle_registration" to "Certificate of Registration (CR)",
                 "insurance" to "SJMODA Certification",
-                "vehicle_inspection" to "Official Receipt (OR)",
-                "profile_photo" to "Profile Photo"
+                "vehicle_inspection" to "Official Receipt (OR)"
             )
 
             documentTypes.forEach { (docType, title) ->
@@ -325,8 +324,7 @@ private fun DocumentsSection(
                 "Driver's License",
                 "Certificate of Registration (CR)",
                 "SJMODA Certification",
-                "Official Receipt (OR)",
-                "Profile Photo"
+                "Official Receipt (OR)"
             )
 
             defaultDocs.forEach { title ->
@@ -352,10 +350,17 @@ private fun DriverStatusDisplay(
 
     // Check if all required documents are approved
     val allDocumentsApproved = driverData?.documents?.let { docs ->
-        val requiredDocTypes = listOf("license", "vehicle_registration", "insurance", "vehicle_inspection", "profile_photo")
-        requiredDocTypes.all { docType ->
+        val requiredDocTypes = listOf("license", "vehicle_registration", "insurance", "vehicle_inspection")
+        // Check if all required documents exist and are approved
+        val hasAllDocs = requiredDocTypes.all { docType ->
+            docs.containsKey(docType) && docs[docType]?.images?.isNotEmpty() == true
+        }
+
+        val allApproved = requiredDocTypes.all { docType ->
             docs[docType]?.status == DocumentStatus.APPROVED
         }
+
+        hasAllDocs && allApproved
     } ?: false
 
     when (driverData?.verificationStatus) {
@@ -433,8 +438,27 @@ private fun DriverStatusDisplay(
                 }
                 if (!allDocumentsApproved) {
                     Spacer(modifier = Modifier.height(8.dp))
+
+                    // Show which documents are missing or not approved
+                    val requiredDocTypes = listOf("license", "vehicle_registration", "insurance", "vehicle_inspection")
+                    val documentNames = mapOf(
+                        "license" to "Driver's License",
+                        "vehicle_registration" to "Certificate of Registration",
+                        "insurance" to "SJMODA Certification",
+                        "vehicle_inspection" to "Official Receipt"
+                    )
+
+                    val missingOrPending = requiredDocTypes.filter { docType ->
+                        val doc = driverData?.documents?.get(docType)
+                        doc == null || doc.images.isEmpty() || doc.status != DocumentStatus.APPROVED
+                    }.mapNotNull { documentNames[it] }
+
                     Text(
-                        text = "⚠️ All documents must be approved before approving the driver application",
+                        text = if (missingOrPending.isNotEmpty()) {
+                            "⚠️ Missing or pending: ${missingOrPending.joinToString(", ")}"
+                        } else {
+                            "⚠️ All documents must be approved before approving the driver application"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                         textAlign = TextAlign.Center,
@@ -480,8 +504,27 @@ private fun DriverStatusDisplay(
 
                 if (!allDocumentsApproved) {
                     Spacer(modifier = Modifier.height(8.dp))
+
+                    // Show which documents are missing or not approved
+                    val requiredDocTypes = listOf("license", "vehicle_registration", "insurance", "vehicle_inspection")
+                    val documentNames = mapOf(
+                        "license" to "Driver's License",
+                        "vehicle_registration" to "Certificate of Registration",
+                        "insurance" to "SJMODA Certification",
+                        "vehicle_inspection" to "Official Receipt"
+                    )
+
+                    val missingOrPending = requiredDocTypes.filter { docType ->
+                        val doc = driverData?.documents?.get(docType)
+                        doc == null || doc.images.isEmpty() || doc.status != DocumentStatus.APPROVED
+                    }.mapNotNull { documentNames[it] }
+
                     Text(
-                        text = "⚠️ All documents must be approved before approving the driver application",
+                        text = if (missingOrPending.isNotEmpty()) {
+                            "⚠️ Missing or pending: ${missingOrPending.joinToString(", ")}"
+                        } else {
+                            "⚠️ All documents must be approved before approving the driver application"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                         textAlign = TextAlign.Center,

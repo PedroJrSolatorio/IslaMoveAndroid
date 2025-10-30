@@ -164,21 +164,6 @@ fun DriverDocumentsScreen(
                     status = documents["vehicle_registration"]?.status ?: DocumentStatus.PENDING,
                     rejectionReason = documents["vehicle_registration"]?.rejectionReason,
                     icon = Icons.Default.Check
-                ),
-                DocumentType(
-                    id = "profile_photo",
-                    title = "Profile Photo",
-                    description = when (documents["profile_photo"]?.status) {
-                        DocumentStatus.APPROVED -> "Approved"
-                        DocumentStatus.REJECTED -> "Rejected"
-                        DocumentStatus.PENDING_REVIEW -> "Under Review"
-                        else -> "Pending"
-                    },
-                    isRequired = true,
-                    isUploaded = documents["profile_photo"]?.images?.isNotEmpty() == true,
-                    status = documents["profile_photo"]?.status ?: DocumentStatus.PENDING,
-                    rejectionReason = documents["profile_photo"]?.rejectionReason,
-                    icon = Icons.Default.Person
                 )
             )
         }
@@ -205,7 +190,7 @@ fun DriverDocumentsScreen(
             .background(Color(0xFFF5F5F5))
     ) {
         // Header white space
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         // Top App Bar
         TopAppBar(
@@ -230,7 +215,7 @@ fun DriverDocumentsScreen(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 80.dp, bottom = 120.dp),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 40.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Show error message if any
@@ -672,73 +657,6 @@ private fun ModernDocumentItem(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun DocumentImageItem(
-    image: DocumentImage,
-    onRemove: () -> Unit,
-    canRemove: Boolean
-) {
-    Box {
-        Card(
-            modifier = Modifier.size(80.dp),
-            shape = RoundedCornerShape(8.dp)
-        ) {
-            AsyncImage(
-                model = image.url,
-                contentDescription = image.description,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
-
-        if (canRemove) {
-            Card(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(x = 4.dp, y = (-4).dp)
-                    .size(20.dp)
-                    .clickable { onRemove() },
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.error
-                ),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "×",
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-
-        if (image.description.isNotEmpty()) {
-            Card(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(4.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color.Black.copy(alpha = 0.7f)
-                )
-            ) {
-                Text(
-                    text = image.description,
-                    color = Color.White,
-                    fontSize = 8.sp,
-                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                )
-            }
-        }
-
-        // Footer white space
-        Spacer(modifier = Modifier.height(32.dp))
     }
 }
 

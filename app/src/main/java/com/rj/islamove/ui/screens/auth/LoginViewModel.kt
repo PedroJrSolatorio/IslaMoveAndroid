@@ -101,29 +101,6 @@ class LoginViewModel @Inject constructor(
                 }
         }
     }
-    
-    fun createAccount(email: String, password: String, displayName: String = "") {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
-
-            authRepository.createUserWithEmail(
-                email = email,
-                password = password,
-                displayName = displayName,
-                userType = UserType.PASSENGER // Default, user will select later
-            ).onSuccess { user ->
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    needsUserTypeSelection = true // New users need to select type
-                )
-            }.onFailure { exception ->
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    errorMessage = exception.message ?: "Account creation failed"
-                )
-            }
-        }
-    }
 
     fun createAccountWithRole(
         email: String,
@@ -134,12 +111,16 @@ class LoginViewModel @Inject constructor(
         dateOfBirth: String,
         gender: String?,
         address: String,
-        idDocumentUri: Uri? = null
+        idDocumentUri: Uri? = null,
+        driverLicenseUri: Uri? = null,
+        sjmodaUri: Uri? = null,
+        orUri: Uri? = null,
+        crUri: Uri? = null
     ) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
 
-            // Upload ID document to Cloudinary if provided
+            // Upload passenger ID document to Cloudinary if provided
             var documentUrl: String? = null
             if (idDocumentUri != null) {
                 cloudinaryRepository.uploadImage(
@@ -151,9 +132,85 @@ class LoginViewModel @Inject constructor(
                 }.onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        errorMessage = "Failed to upload document: ${exception.message}"
+                        errorMessage = "Failed to upload ID document: ${exception.message}"
                     )
                     return@launch
+                }
+            }
+
+            // Upload driver documents to Cloudinary if provided
+            var licenseUrl: String? = null
+            var sjmodaUrl: String? = null
+            var orUrl: String? = null
+            var crUrl: String? = null
+
+            if (userType == UserType.DRIVER) {
+                // Upload Driver's License
+                if (driverLicenseUri != null) {
+                    cloudinaryRepository.uploadImage(
+                        context = context,
+                        imageUri = driverLicenseUri,
+                        folder = "driver_documents/license"
+                    ).onSuccess { url ->
+                        licenseUrl = url
+                    }.onFailure { exception ->
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            errorMessage = "Failed to upload Driver's License: ${exception.message}"
+                        )
+                        return@launch
+                    }
+                }
+
+                // Upload SJMODA Certification
+                if (sjmodaUri != null) {
+                    cloudinaryRepository.uploadImage(
+                        context = context,
+                        imageUri = sjmodaUri,
+                        folder = "driver_documents/insurance"
+                    ).onSuccess { url ->
+                        sjmodaUrl = url
+                    }.onFailure { exception ->
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            errorMessage = "Failed to upload SJMODA Certification: ${exception.message}"
+                        )
+                        return@launch
+                    }
+                }
+
+                // Upload Official Receipt
+                if (orUri != null) {
+                    cloudinaryRepository.uploadImage(
+                        context = context,
+                        imageUri = orUri,
+                        folder = "driver_documents/vehicle_inspection"
+                    ).onSuccess { url ->
+                        orUrl = url
+                    }.onFailure { exception ->
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            errorMessage = "Failed to upload Official Receipt: ${exception.message}"
+                        )
+                        return@launch
+                    }
+                }
+
+                // Upload Certificate of Registration
+                if (crUri != null) {
+                    cloudinaryRepository.uploadImage(
+                        context = context,
+                        imageUri = crUri,
+                        folder = "driver_documents/vehicle_registration"
+                    ).onSuccess { url ->
+                        crUrl = url
+                    }.onFailure { exception ->
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            errorMessage = "Failed to upload Certificate of Registration: ${exception.message}"
+                        )
+                        return@launch
+                    }
                 }
             }
 
@@ -166,11 +223,15 @@ class LoginViewModel @Inject constructor(
                 dateOfBirth = dateOfBirth,
                 gender = gender,
                 address = address,
-                idDocumentUrl = documentUrl
+                idDocumentUrl = documentUrl,
+                driverLicenseUrl = licenseUrl,
+                sjmodaUrl = sjmodaUrl,
+                orUrl = orUrl,
+                crUrl = crUrl
             ).onSuccess { user ->
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    isSuccess = true // Direct success, no need for user type selection
+                    isSuccess = true
                 )
             }.onFailure { exception ->
                 _uiState.value = _uiState.value.copy(
@@ -178,69 +239,6 @@ class LoginViewModel @Inject constructor(
                     errorMessage = exception.message ?: "Account creation failed"
                 )
             }
-        }
-    }
-    
-    fun signInWithGoogle(idToken: String) {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
-
-            authRepository.signInWithGoogle(idToken)
-                .onSuccess { user ->
-                    // Check if user data exists in Firestore
-                    authRepository.getUserData(user.uid)
-                        .onSuccess { userData ->
-                            // Check for existing sessions (skip for admins)
-                            if (userData.userType != UserType.ADMIN) {
-                                authRepository.checkExistingSession(user.uid)
-                                    .onSuccess { hasOtherSession ->
-                                        if (hasOtherSession) {
-                                            // Show multi-device alert
-                                            _uiState.value = _uiState.value.copy(
-                                                isLoading = false,
-                                                showMultiDeviceAlert = true,
-                                                pendingUserId = user.uid
-                                            )
-                                        } else {
-                                            // No other session, proceed normally
-                                            _uiState.value = _uiState.value.copy(
-                                                isLoading = false,
-                                                isSuccess = true,
-                                                userExists = true
-                                            )
-                                        }
-                                    }
-                                    .onFailure {
-                                        // If session check fails, proceed anyway
-                                        _uiState.value = _uiState.value.copy(
-                                            isLoading = false,
-                                            isSuccess = true,
-                                            userExists = true
-                                        )
-                                    }
-                            } else {
-                                // Admin user - allow multiple devices
-                                _uiState.value = _uiState.value.copy(
-                                    isLoading = false,
-                                    isSuccess = true,
-                                    userExists = true
-                                )
-                            }
-                        }
-                        .onFailure {
-                            // New Google user, needs user type selection
-                            _uiState.value = _uiState.value.copy(
-                                isLoading = false,
-                                needsUserTypeSelection = true
-                            )
-                        }
-                }
-                .onFailure { exception ->
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        errorMessage = exception.message ?: "Google sign in failed"
-                    )
-                }
         }
     }
     

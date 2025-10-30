@@ -27,6 +27,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import android.provider.Settings
 import android.content.Context
+import com.rj.islamove.data.models.DocumentImage
+import com.rj.islamove.data.models.DriverDocument
 import dagger.hilt.android.qualifiers.ApplicationContext
 
 @Singleton
@@ -192,121 +194,7 @@ class AuthRepository @Inject constructor(
     }
     
     fun getCurrentUser(): FirebaseUser? = firebaseAuth.currentUser
-    
-    fun isUserLoggedIn(): Boolean = getCurrentUser() != null
-    
-    suspend fun sendOtp(
-        phoneNumber: String,
-        activity: Activity,
-        callbacks: PhoneAuthProvider.OnVerificationStateChangedCallbacks
-    ) {
-        val options = PhoneAuthOptions.newBuilder(firebaseAuth)
-            .setPhoneNumber(phoneNumber)
-            .setTimeout(60L, TimeUnit.SECONDS)
-            .setActivity(activity)
-            .setCallbacks(callbacks)
-            .build()
-        
-        PhoneAuthProvider.verifyPhoneNumber(options)
-    }
-    
-    suspend fun verifyOtp(otp: String): Result<FirebaseUser> {
-        return try {
-            val verificationId = this.verificationId
-                ?: return Result.failure(Exception("Verification ID is null"))
 
-            val credential = PhoneAuthProvider.getCredential(verificationId, otp)
-            val authResult = firebaseAuth.signInWithCredential(credential).await()
-            val user = authResult.user
-
-            if (user != null) {
-                // Check if user account is active and not deleted
-                val accountStatus = isUserAccountActive(user.uid)
-                if (accountStatus.isFailure || !accountStatus.getOrDefault(false)) {
-                    // Sign out the user if account is inactive/deleted
-                    firebaseAuth.signOut()
-                    return Result.failure(Exception("Account is disabled or deleted. Please contact support."))
-                }
-
-                // Check if user exists in Firestore
-                val userDoc = firestore.collection("users").document(user.uid).get().await()
-                var userData: User? = null
-                if (userDoc.exists()) {
-                    userData = userDoc.toObject(User::class.java)
-                } else {
-                    // Create new user document
-                    val newUser = User(
-                        uid = user.uid,
-                        phoneNumber = user.phoneNumber ?: "",
-                        displayName = user.displayName ?: "",
-                        userType = UserType.PASSENGER,
-                        createdAt = System.currentTimeMillis(),
-                        updatedAt = System.currentTimeMillis()
-                    )
-                    firestore.collection("users").document(user.uid).set(newUser).await()
-                    userData = newUser
-                }
-
-                // For OTP, we'll create the session directly and let the caller handle multi-device logic
-                // This is because OTP verification is typically used in a different flow
-                createSession(user.uid)
-
-                Result.success(user)
-            } else {
-                Result.failure(Exception("Authentication failed"))
-            }
-        } catch (e: FirebaseAuthInvalidCredentialsException) {
-            Result.failure(Exception("Invalid OTP"))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-    
-    suspend fun signInWithGoogle(idToken: String): Result<FirebaseUser> {
-        return try {
-            val credential = GoogleAuthProvider.getCredential(idToken, null)
-            val authResult = firebaseAuth.signInWithCredential(credential).await()
-            val user = authResult.user
-
-            if (user != null) {
-                // Check if user account is active and not deleted
-                val accountStatus = isUserAccountActive(user.uid)
-                if (accountStatus.isFailure || !accountStatus.getOrDefault(false)) {
-                    // Sign out the user if account is inactive/deleted
-                    firebaseAuth.signOut()
-                    return Result.failure(Exception("Account is disabled or deleted. Please contact support."))
-                }
-
-                // Check if user exists in Firestore, if not create new user
-                val userDoc = firestore.collection("users").document(user.uid).get().await()
-                if (!userDoc.exists()) {
-                    val newUser = User(
-                        uid = user.uid,
-                        email = user.email,
-                        displayName = user.displayName ?: "",
-                        profileImageUrl = user.photoUrl?.toString(),
-                        userType = UserType.PASSENGER,
-                        createdAt = System.currentTimeMillis(),
-                        updatedAt = System.currentTimeMillis()
-                    )
-                    firestore.collection("users").document(user.uid).set(newUser).await()
-                }
-
-                // Create session for this device
-                createSession(user.uid)
-
-                // Update FCM token for notifications
-                fcmTokenService.updateUserFCMToken()
-
-                Result.success(user)
-            } else {
-                Result.failure(Exception("Google authentication failed"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-    
     /**
      * FR-2.1.4: Email authentication - Sign in existing user
      */
@@ -365,7 +253,11 @@ class AuthRepository @Inject constructor(
         dateOfBirth: String? = null,
         gender: String? = null,
         address: String? = null,
-        idDocumentUrl: String? = null
+        idDocumentUrl: String? = null,
+        driverLicenseUrl: String? = null,
+        sjmodaUrl: String? = null,
+        orUrl: String? = null,
+        crUrl: String? = null
     ): Result<FirebaseUser> {
         return try {
             val authResult = firebaseAuth.createUserWithEmailAndPassword(email, password).await()
@@ -376,7 +268,64 @@ class AuthRepository @Inject constructor(
                     .setDisplayName(displayName)
                     .build()
                 user.updateProfile(profileUpdates).await()
-                
+
+                // Prepare driver documents map if user is a driver
+                val driverDocuments: Map<String, DriverDocument> = if (userType == UserType.DRIVER) {
+                    mutableMapOf<String, DriverDocument>().apply {
+                        if (driverLicenseUrl != null) {
+                            put("license", DriverDocument(
+                                images = listOf(
+                                    DocumentImage(
+                                        url = driverLicenseUrl,
+                                        description = "Driver's License",
+                                        uploadedAt = System.currentTimeMillis()
+                                    )
+                                ),
+                                status = DocumentStatus.PENDING_REVIEW,
+                                uploadedAt = System.currentTimeMillis()
+                            ))
+                        }
+
+                        if (sjmodaUrl != null) {
+                            put("insurance", DriverDocument(
+                                images = listOf(DocumentImage(
+                                    url = sjmodaUrl,
+                                    description = "SJMODA Certification",
+                                    uploadedAt = System.currentTimeMillis()
+                                )),
+                                status = DocumentStatus.PENDING_REVIEW,
+                                uploadedAt = System.currentTimeMillis()
+                            ))
+                        }
+
+                        if (orUrl != null) {
+                            put("vehicle_inspection", DriverDocument(
+                                images = listOf(DocumentImage(
+                                    url = orUrl,
+                                    description = "Official Receipt (OR)",
+                                    uploadedAt = System.currentTimeMillis()
+                                )),
+                                status = DocumentStatus.PENDING_REVIEW,
+                                uploadedAt = System.currentTimeMillis()
+                            ))
+                        }
+
+                        if (crUrl != null) {
+                            put("vehicle_registration", DriverDocument(
+                                images = listOf(DocumentImage(
+                                    url = crUrl,
+                                    description = "Certificate of Registration (CR)",
+                                    uploadedAt = System.currentTimeMillis()
+                                )),
+                                status = DocumentStatus.PENDING_REVIEW,
+                                uploadedAt = System.currentTimeMillis()
+                            ))
+                        }
+                    }
+                } else {
+                    emptyMap()
+                }
+
                 // Create user document in Firestore with proper role
                 val newUser = User(
                     uid = user.uid,
@@ -390,7 +339,10 @@ class AuthRepository @Inject constructor(
                     updatedAt = System.currentTimeMillis(),
                     // Initialize driver data if user is a driver
                     driverData = if (userType == UserType.DRIVER) {
-                        DriverData(verificationStatus = VerificationStatus.PENDING)
+                        DriverData(
+                            verificationStatus = VerificationStatus.PENDING,
+                            documents = driverDocuments
+                        )
                     } else null,
                     // Initialize common user data
                     dateOfBirth = dateOfBirth,
@@ -407,10 +359,10 @@ class AuthRepository @Inject constructor(
                     } else null
                 )
                 firestore.collection("users").document(user.uid).set(newUser).await()
-                
+
                 // Send email verification
                 user.sendEmailVerification().await()
-                
+
                 Result.success(user)
             } else {
                 Result.failure(Exception("User creation failed"))
@@ -484,31 +436,6 @@ class AuthRepository @Inject constructor(
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
-        }
-    }
-    
-    // Callback class for OTP verification
-    inner class OtpVerificationCallbacks(
-        private val onVerificationCompleted: (PhoneAuthCredential) -> Unit,
-        private val onVerificationFailed: (FirebaseException) -> Unit,
-        private val onCodeSent: (String, PhoneAuthProvider.ForceResendingToken?) -> Unit
-    ) : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
-        
-        override fun onVerificationCompleted(credential: PhoneAuthCredential) {
-            onVerificationCompleted.invoke(credential)
-        }
-        
-        override fun onVerificationFailed(e: FirebaseException) {
-            onVerificationFailed.invoke(e)
-        }
-        
-        override fun onCodeSent(
-            verificationId: String,
-            token: PhoneAuthProvider.ForceResendingToken
-        ) {
-            this@AuthRepository.verificationId = verificationId
-            this@AuthRepository.resendToken = token
-            onCodeSent.invoke(verificationId, token)
         }
     }
 }

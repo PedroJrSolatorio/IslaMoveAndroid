@@ -71,7 +71,7 @@ class DriverDetailsViewModel @Inject constructor(
                 // First, check if all documents are approved
                 val driver = _uiState.value.driver
                 val allDocumentsApproved = driver?.driverData?.documents?.let { docs ->
-                    val requiredDocTypes = listOf("license", "vehicle_registration", "insurance", "vehicle_inspection", "profile_photo")
+                    val requiredDocTypes = listOf("license", "vehicle_registration", "insurance", "vehicle_inspection")
                     requiredDocTypes.all { docType ->
                         docs[docType]?.status == DocumentStatus.APPROVED
                     }
