@@ -152,6 +152,7 @@ fun HelpSupportScreen(
                         onClick = {
                             if (commentText.isNotBlank()) {
                                 viewModel.submitSupportTicket(commentText)
+                                commentText = ""
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
