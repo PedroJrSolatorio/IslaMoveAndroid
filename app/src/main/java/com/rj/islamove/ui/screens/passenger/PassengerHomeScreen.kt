@@ -49,13 +49,17 @@ import androidx.compose.material3.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.google.firebase.auth.EmailAuthProvider
 import com.rj.islamove.utils.Point
 import com.rj.islamove.data.models.BookingLocation
 import com.rj.islamove.data.models.BookingStatus
@@ -2256,6 +2260,73 @@ private fun ProfileContent(
             android.util.Log.e("ProfileUpdate", "Failed to refresh user data", e)
         }
     }
+
+    // Listen for email verification and update Firestore
+    DisposableEffect(Unit) {
+        var isActive = true
+
+        val checkEmailVerification: () -> Unit = {
+            val currentUser = FirebaseAuth.getInstance().currentUser
+            if (currentUser != null && isActive) {
+                currentUser.reload().addOnCompleteListener { task ->
+                    if (task.isSuccessful && isActive) {
+                        val verifiedEmail = currentUser.email
+                        val isVerified = currentUser.isEmailVerified
+
+                        if (verifiedEmail != null) {
+                            val firestore = FirebaseFirestore.getInstance()
+                            firestore.collection("users").document(currentUser.uid)
+                                .get()
+                                .addOnSuccessListener { document ->
+                                    if (isActive) {
+                                        val firestoreEmail = document.getString("email")
+                                        val pendingEmail = document.getString("pendingEmail")
+
+                                        if (verifiedEmail != firestoreEmail && verifiedEmail == pendingEmail) {
+                                            android.util.Log.d("ProfileContent", "Email verified! Updating Firestore: $verifiedEmail")
+
+                                            firestore.collection("users").document(currentUser.uid)
+                                                .update(mapOf(
+                                                    "email" to verifiedEmail,
+                                                    "emailVerified" to isVerified,
+                                                    "pendingEmail" to null,
+                                                    "pendingEmailTimestamp" to null,
+                                                    "updatedAt" to System.currentTimeMillis()
+                                                ))
+                                                .addOnSuccessListener {
+                                                    android.util.Log.d("ProfileContent", "Firestore email updated successfully")
+                                                    viewModel.refreshUserData()
+                                                }
+                                        }
+                                    }
+                                }
+                        }
+                    }
+                }
+            }
+        }
+
+        checkEmailVerification()
+
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        val runnable = object : Runnable {
+            var checkCount = 0
+            override fun run() {
+                if (isActive && checkCount < 36) {
+                    checkCount++
+                    checkEmailVerification()
+                    handler.postDelayed(this, 5000)
+                }
+            }
+        }
+        handler.postDelayed(runnable, 5000)
+
+        onDispose {
+            isActive = false
+            handler.removeCallbacks(runnable)
+            android.util.Log.d("ProfileContent", "Email verification listener disposed")
+        }
+    }
     
     // Create a function to create temporary file URI for camera
     fun createImageUri(): Uri {
@@ -2351,7 +2422,7 @@ private fun ProfileContent(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.White),
-        contentPadding = PaddingValues(bottom = 120.dp)
+        contentPadding = PaddingValues(bottom = 80.dp)
     ) {
         item {
         // Header
@@ -2579,7 +2650,7 @@ private fun ProfileContent(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(bottom = 12.dp)
             )
-            
+
             // Email
             ProfileMenuItem(
                 icon = Icons.Default.Email,
@@ -2814,33 +2885,211 @@ private fun ProfileContent(
         )
     }
 
-    // Email view dialog (Read-only)
+    // Email view dialog
     if (showEmailDialog) {
+        var editingEmail by remember { mutableStateOf(FirebaseAuth.getInstance().currentUser?.email ?: "") }
+        var currentPassword by remember { mutableStateOf("") }
+        var passwordVisible by remember { mutableStateOf(false) }
+        var emailError by remember { mutableStateOf<String?>(null) }
+
         AlertDialog(
-            onDismissRequest = { showEmailDialog = false },
-            title = { Text("Email Address") },
+            onDismissRequest = {
+                showEmailDialog = false
+                currentPassword = ""
+                emailError = null
+                updateMessage = null
+            },
+            title = {
+                Text(
+                    text = "Change Email Address",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
             text = {
                 Column {
                     Text(
-                        text = FirebaseAuth.getInstance().currentUser?.email ?: "Not provided",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = "Email address cannot be changed for authentication security.",
+                        text = "For security, please enter your current password to change your email address.",
                         fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 4.dp)
+                        modifier = Modifier.padding(bottom = 16.dp)
                     )
+
+                    OutlinedTextField(
+                        value = editingEmail,
+                        onValueChange = {
+                            editingEmail = it.trim()
+                            emailError = null
+                            updateMessage = null
+                        },
+                        label = { Text("New Email Address") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        isError = emailError != null
+                    )
+
+                    if (emailError != null) {
+                        Text(
+                            text = emailError!!,
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = currentPassword,
+                        onValueChange = {
+                            currentPassword = it
+                            updateMessage = null
+                        },
+                        label = { Text("Current Password") },
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        trailingIcon = {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(
+                                    imageVector = if (passwordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
+                                    contentDescription = if (passwordVisible) "Hide password" else "Show password"
+                                )
+                            }
+                        }
+                    )
+
+                    updateMessage?.let { message ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = message,
+                            color = if (message.startsWith("Error") || message.contains("Incorrect") || message.contains("failed"))
+                                MaterialTheme.colorScheme.error
+                            else
+                                MaterialTheme.colorScheme.primary,
+                            fontSize = 14.sp
+                        )
+                    }
+
+                    if (updateMessage?.contains("Verification email") == true) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Check your inbox or spam emails and click the verification link.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontStyle = FontStyle.Italic
+                        )
+                    }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showEmailDialog = false }) {
-                    Text("OK")
+                Button(
+                    onClick = {
+                        // Validate email format
+                        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(editingEmail).matches()) {
+                            emailError = "Please enter a valid email address"
+                            return@Button
+                        }
+
+                        val currentEmail = FirebaseAuth.getInstance().currentUser?.email
+                        if (editingEmail == currentEmail) {
+                            emailError = "New email is the same as current email"
+                            return@Button
+                        }
+
+                        if (currentPassword.isBlank()) {
+                            updateMessage = "Please enter your current password"
+                            return@Button
+                        }
+
+                        val user = FirebaseAuth.getInstance().currentUser
+                        if (user != null && currentEmail != null) {
+                            isUpdating = true
+                            // Step 1: Re-authenticate user
+                            val credential = EmailAuthProvider.getCredential(currentEmail, currentPassword)
+
+                            user.reauthenticate(credential)
+                                .addOnSuccessListener {
+                                    // Step 2: Send verification email
+                                    user.verifyBeforeUpdateEmail(editingEmail)
+                                        .addOnSuccessListener {
+                                            // Step 3: Store PENDING email in Firestore
+                                            val firestore = FirebaseFirestore.getInstance()
+                                            val userDoc = firestore.collection("users").document(user.uid)
+
+                                            val updates = mapOf(
+                                                "pendingEmail" to editingEmail,
+                                                "pendingEmailTimestamp" to System.currentTimeMillis()
+                                            )
+
+                                            userDoc.update(updates)
+                                                .addOnSuccessListener {
+                                                    updateMessage = "Verification email sent to $editingEmail."
+                                                    currentPassword = ""
+                                                    isUpdating = false
+                                                    android.util.Log.d("ProfileUpdate", "Verification email sent, pending: $editingEmail")
+                                                }
+                                                .addOnFailureListener { e ->
+                                                    updateMessage = "Verification email sent, but failed to save: ${e.message}"
+                                                    isUpdating = false
+                                                    android.util.Log.e("ProfileUpdate", "Firestore update failed", e)
+                                                }
+                                        }
+                                        .addOnFailureListener { e ->
+                                            updateMessage = when {
+                                                e.message?.contains("email-already-in-use") == true ->
+                                                    "This email is already in use by another account"
+                                                e.message?.contains("invalid-email") == true ->
+                                                    "Invalid email format"
+                                                e.message?.contains("requires-recent-login") == true ->
+                                                    "Please log out and log back in, then try again"
+                                                else -> "Error: ${e.message}"
+                                            }
+                                            isUpdating = false
+                                            android.util.Log.e("ProfileUpdate", "Email verification failed", e)
+                                        }
+                                }
+                                .addOnFailureListener { e ->
+                                    updateMessage = when {
+                                        e.message?.contains("wrong-password") == true ->
+                                            "Incorrect password. Please try again."
+                                        e.message?.contains("too-many-requests") == true ->
+                                            "Too many failed attempts. Please try again later."
+                                        else -> "Authentication failed: ${e.message}"
+                                    }
+                                    isUpdating = false
+                                    android.util.Log.e("ProfileUpdate", "Re-authentication failed", e)
+                                }
+                        } else {
+                            updateMessage = "User not authenticated"
+                            isUpdating = false
+                        }
+                    },
+                    enabled = !isUpdating
+                ) {
+                    if (isUpdating) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White
+                        )
+                    } else {
+                        Text("Send Verification")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showEmailDialog = false
+                        currentPassword = ""
+                        emailError = null
+                        updateMessage = null
+                    }
+                ) {
+                    Text("Cancel")
                 }
             }
         )
