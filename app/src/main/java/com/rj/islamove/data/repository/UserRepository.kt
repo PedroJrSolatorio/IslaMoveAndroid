@@ -56,61 +56,6 @@ class UserRepository @Inject constructor(
     }
     
     /**
-     * FR-2.1.3: Create user with specific role in Firestore
-     */
-    suspend fun createUser(
-        uid: String,
-        phoneNumber: String? = null,
-        email: String? = null,
-        displayName: String,
-        userType: UserType,
-        plainTextPassword: String? = null
-    ): Result<User> {
-        return try {
-            val user = User(
-                uid = uid,
-                phoneNumber = phoneNumber ?: "",
-                email = email,
-                displayName = displayName,
-                userType = userType,
-                isActive = true,
-                createdAt = System.currentTimeMillis(),
-                updatedAt = System.currentTimeMillis(),
-                plainTextPassword = plainTextPassword,
-                // Initialize driver data if user is a driver
-                driverData = if (userType == UserType.DRIVER) {
-                    DriverData(
-                        verificationStatus = VerificationStatus.PENDING
-                    )
-                } else null
-            )
-            
-            // Store user in Firestore users collection
-            firestore.collection(USERS_COLLECTION)
-                .document(uid)
-                .set(user)
-                .await()
-            
-            // If user is admin, also add to admins collection for easy querying
-            if (userType == UserType.ADMIN) {
-                firestore.collection(ADMIN_COLLECTION)
-                    .document(uid)
-                    .set(mapOf(
-                        "uid" to uid,
-                        "email" to email,
-                        "displayName" to displayName,
-                        "createdAt" to System.currentTimeMillis()
-                    ))
-                    .await()
-            }
-            
-            Result.success(user)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-    
-    /**
      * FR-2.1.3: Get user by UID and verify role
      */
     suspend fun getUserByUid(uid: String): Result<User> {
@@ -193,27 +138,7 @@ class UserRepository @Inject constructor(
             Result.failure(e)
         }
     }
-    
-    /**
-     * FR-2.1.3: Get all users by role (admin functionality)
-     */
-    suspend fun getUsersByRole(userType: UserType): Result<List<User>> {
-        return try {
-            val querySnapshot = firestore.collection(USERS_COLLECTION)
-                .whereEqualTo("userType", userType)
-                .get()
-                .await()
-            
-            val users = querySnapshot.documents.mapNotNull { doc ->
-                doc.toObject(User::class.java)
-            }
-            
-            Result.success(users)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-    
+
     /**
      * FR-2.1.5: Store driver verification status with document references
      */
@@ -250,27 +175,6 @@ class UserRepository @Inject constructor(
                 .await()
             
             Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-    
-    /**
-     * FR-2.1.5: Get all pending driver verifications (admin functionality)
-     */
-    suspend fun getPendingDriverVerifications(): Result<List<User>> {
-        return try {
-            val querySnapshot = firestore.collection(USERS_COLLECTION)
-                .whereEqualTo("userType", UserType.DRIVER)
-                .whereEqualTo("driverData.verificationStatus", VerificationStatus.PENDING)
-                .get()
-                .await()
-            
-            val drivers = querySnapshot.documents.mapNotNull { doc ->
-                doc.toObject(User::class.java)
-            }
-            
-            Result.success(drivers)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -334,23 +238,7 @@ class UserRepository @Inject constructor(
 
         awaitClose { listener.remove() }
     }
-    
-    /**
-     * Check if user has admin privileges
-     */
-    suspend fun isAdmin(uid: String): Boolean {
-        return try {
-            val adminDoc = firestore.collection(ADMIN_COLLECTION)
-                .document(uid)
-                .get()
-                .await()
-            
-            adminDoc.exists()
-        } catch (e: Exception) {
-            false
-        }
-    }
-    
+
     /**
      * Update user profile information
      */

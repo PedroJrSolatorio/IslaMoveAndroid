@@ -186,71 +186,11 @@ class MapboxBoundariesService @Inject constructor(
         }
     }
 
-    suspend fun getBoundaryGeometry(
-        featureId: String,
-        tileset: String = ADMIN_TILESET + "2"
-    ): Result<ServiceAreaBoundary> = withContext(Dispatchers.IO) {
-        try {
-            // For MVP, we'll return a placeholder boundary
-            // In production, you would need to:
-            // 1. Use Mapbox Boundaries Lookup API to get the geometry
-            // 2. Or use vector tiles to fetch the boundary polygon
-
-            Log.d(TAG, "Getting boundary geometry for feature: $featureId")
-
-            // Placeholder implementation - would need actual Mapbox Boundaries API integration
-            val placeholderBoundary = ServiceAreaBoundary(
-                points = listOf(
-                    BoundaryPoint(15.7886, 121.0748), // San Jose, Nueva Ecija approximate boundary
-                    BoundaryPoint(15.7886, 121.0948),
-                    BoundaryPoint(15.8086, 121.0948),
-                    BoundaryPoint(15.8086, 121.0748),
-                    BoundaryPoint(15.7886, 121.0748)
-                ),
-                fillColor = "#4CAF5080",
-                strokeColor = "#4CAF50",
-                strokeWidth = 2.0
-            )
-
-            Result.success(placeholderBoundary)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error getting boundary geometry", e)
-            Result.failure(e)
-        }
-    }
-
     private fun getMapboxAccessToken(): String {
         // In production, this should come from BuildConfig or secure storage
         val token = "pk.eyJ1IjoiamhhenBlcjExMiIsImEiOiJjbWYxeGdiemUyYXB6MmpzZGdoODhnYTM0In0.ZOWrbtXWV8eT0tEkfa-GYQ"
         Log.d(TAG, "Using Mapbox access token: ${token.take(20)}...")
         return token
-    }
-
-    fun convertGeometryToBoundary(geometry: Geometry): ServiceAreaBoundary? {
-        return when (geometry) {
-            is Polygon -> {
-                val coordinates = geometry.coordinates()
-                if (coordinates.isNotEmpty()) {
-                    val points = coordinates[0].map { point ->
-                        BoundaryPoint(
-                            latitude = point.latitude(),
-                            longitude = point.longitude()
-                        )
-                    }
-                    ServiceAreaBoundary(
-                        points = points,
-                        fillColor = "#4CAF5080",
-                        strokeColor = "#4CAF50",
-                        strokeWidth = 2.0
-                    )
-                } else null
-            }
-            else -> null
-        }
-    }
-
-    fun getBoundariesTilesetUrl(layer: BoundaryLayer, accessToken: String): String {
-        return "mapbox://${layer.tileset}"
     }
 
     /**
@@ -261,44 +201,5 @@ class MapboxBoundariesService @Inject constructor(
         // For free tier, we'll use a publicly available tileset for Philippines admin boundaries
         // This provides city/municipality and barangay level boundaries
         return "mapbox://mapbox.boundaries-adm3-v3"
-    }
-
-    /**
-     * Get the style layer configuration for displaying barangay boundaries
-     */
-    fun getBarangayBoundaryLayerStyle(): Map<String, Any> {
-        return mapOf(
-            "id" to BARANGAY_BOUNDARIES_LAYER_ID,
-            "type" to "line",
-            "source" to BARANGAY_BOUNDARIES_SOURCE_ID,
-            "source-layer" to "boundaries_admin_3",
-            "filter" to listOf("==", listOf("get", "iso_3166_1"), "PH"),
-            "layout" to mapOf(
-                "line-cap" to "round",
-                "line-join" to "round"
-            ),
-            "paint" to mapOf(
-                "line-color" to "#666666",
-                "line-width" to listOf(
-                    "interpolate",
-                    listOf("linear"),
-                    listOf("zoom"),
-                    10, 0.5,
-                    15, 1.0,
-                    20, 2.0
-                ),
-                "line-opacity" to 0.7
-            )
-        )
-    }
-
-    /**
-     * Get the style source configuration for barangay boundaries
-     */
-    fun getBarangayBoundarySourceConfig(): Map<String, Any> {
-        return mapOf(
-            "type" to "vector",
-            "url" to getPhilippinesAdminBoundariesUrl()
-        )
     }
 }

@@ -36,7 +36,7 @@ fun AdminHomeScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(start = 16.dp, end = 16.dp, top = 80.dp, bottom = 80.dp)
+            .padding(start = 16.dp, end = 16.dp, top = 60.dp, bottom = 36.dp)
     ) {
         // Header
         AdminHeader(onNavigateToProfile = onNavigateToProfile)
