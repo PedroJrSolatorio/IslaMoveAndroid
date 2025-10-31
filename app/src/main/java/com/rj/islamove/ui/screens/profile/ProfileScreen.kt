@@ -555,7 +555,7 @@ fun ProfileScreen(
                         ProfileMenuItem(
                             icon = Icons.Default.Email,
                             title = "Email",
-                            subtitle = uiState.user?.email ?: "Not provided",
+                            subtitle = FirebaseAuth.getInstance().currentUser?.email ?: uiState.user?.email ?: "Not provided",
                             onClick = { showEmailDialog = true }
                         )
 
