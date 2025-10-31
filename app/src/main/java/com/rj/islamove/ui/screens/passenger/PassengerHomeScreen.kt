@@ -2861,19 +2861,27 @@ private fun ProfileContent(
                 Column {
                     OutlinedTextField(
                         value = editingPhone,
-                        onValueChange = { editingPhone = it },
+                        onValueChange = { input ->
+                            // Allow only digits and optional leading "+"
+                            val sanitized = input.filterIndexed { index, c ->
+                                c.isDigit() || (index == 0 && c == '+')
+                            }
+                            editingPhone = sanitized
+
+                            // Validate Philippine phone numbers
+                            updateMessage = when {
+                                editingPhone.isEmpty() -> null
+                                editingPhone.matches(Regex("^09\\d{9}$")) -> null
+                                editingPhone.matches(Regex("^\\+639\\d{9}$")) -> null
+                                editingPhone.length < 11 -> "Phone number must be at least 11 digits"
+                                editingPhone.length < 12 -> null // don't show error while typing
+                                else -> "Invalid phone number. Use 09XXXXXXXXX or +639XXXXXXXXX"
+                            }
+                        },
                         label = { Text("Phone Number") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = "Enter your phone number in any format",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
                     updateMessage?.let { message ->
@@ -2889,9 +2897,24 @@ private fun ProfileContent(
             confirmButton = {
                 Button(
                     onClick = {
+                        val phoneToSave = editingPhone.trim()
+
+                        // Validation: Check if phone number meets minimum length requirement
+                        if (phoneToSave.length < 11) {
+                            updateMessage = "Phone number must be at least 11 digits"
+                            return@Button
+                        }
+
+                        // Additional validation for Philippine phone formats
+                        val isValidFormat = phoneToSave.matches(Regex("^09\\d{9}$")) ||
+                                phoneToSave.matches(Regex("^\\+639\\d{9}$"))
+
+                        if (!isValidFormat) {
+                            updateMessage = "Invalid phone number. Use 09XXXXXXXXX or +639XXXXXXXXX"
+                            return@Button
+                        }
+
                         if (editingPhone.isNotBlank()) {
-                            // Save the phone number exactly as entered by the user (no auto-formatting)
-                            val phoneToSave = editingPhone.trim()
                             isUpdating = true
                             updateMessage = null
 

@@ -271,7 +271,7 @@ fun CreateAccountScreen(
                         phoneNumber.isEmpty() -> null
                         phoneNumber.matches(Regex("^09\\d{9}$")) -> null
                         phoneNumber.matches(Regex("^\\+639\\d{9}$")) -> null
-                        phoneNumber.length < 12 -> null // don't show error yet while typing
+                        phoneNumber.length < 11 -> "Phone number must be at least 11 digits"
                         else -> "Invalid phone number. Use 09XXXXXXXXX or +639XXXXXXXXX"
                     }
                 },
