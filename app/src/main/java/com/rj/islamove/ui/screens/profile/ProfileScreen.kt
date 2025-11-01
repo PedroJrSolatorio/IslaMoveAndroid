@@ -359,7 +359,7 @@ fun ProfileScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.White),
-                contentPadding = PaddingValues(top = 16.dp, bottom = 80.dp)
+                contentPadding = PaddingValues(top = 40.dp, bottom = 80.dp)
             ) {
                 item {
 

@@ -2425,20 +2425,20 @@ private fun ProfileContent(
         contentPadding = PaddingValues(bottom = 80.dp)
     ) {
         item {
-        // Header
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Account",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        }
+//        // Header
+//        Row(
+//            modifier = Modifier
+//                .fillMaxWidth()
+//                .padding(16.dp),
+//            verticalAlignment = Alignment.CenterVertically
+//        ) {
+//            Text(
+//                text = "Account",
+//                fontSize = 20.sp,
+//                fontWeight = FontWeight.Medium,
+//                color = MaterialTheme.colorScheme.onSurface
+//            )
+//        }
         
         // User profile section
         Column(
