@@ -23,6 +23,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.rj.islamove.data.models.BookingStatus
 import com.rj.islamove.ui.components.ReportDriverModal
+import com.rj.islamove.data.models.CompanionType
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -179,74 +180,24 @@ fun TripDetailsScreen(
                             modifier = Modifier.padding(16.dp)
                         ) {
                             // Pickup
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.Top
-                            ) {
-                                Icon(
-                                    Icons.Default.MyLocation,
-                                    contentDescription = "Pickup",
-                                    tint = Color(0xFF4CAF50),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column(
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text(
-                                        text = "Pickup",
-                                        fontSize = 12.sp,
-                                        color = Color(0xFF666666),
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Text(
-                                        text = booking.pickupLocation.address,
-                                        fontSize = 14.sp,
-                                        color = Color.Black
-                                    )
-                                    Text(
-                                        text = "📍 ${String.format("%.6f", booking.pickupLocation.coordinates.latitude)}, ${String.format("%.6f", booking.pickupLocation.coordinates.longitude)}",
-                                        fontSize = 12.sp,
-                                        color = Color(0xFF666666)
-                                    )
-                                }
-                            }
+                            RouteDetailRow(
+                                icon = Icons.Default.MyLocation,
+                                label = "Pickup",
+                                address = booking.pickupLocation.address,
+                                coordinates = "📍 ${String.format("%.6f", booking.pickupLocation.coordinates.latitude)}, ${String.format("%.6f", booking.pickupLocation.coordinates.longitude)}",
+                                tint = Color(0xFF4CAF50)
+                            )
 
                             Spacer(modifier = Modifier.height(12.dp))
 
                             // Destination
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.Top
-                            ) {
-                                Icon(
-                                    Icons.Default.Place,
-                                    contentDescription = "Destination",
-                                    tint = Color(0xFFF44336),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column(
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text(
-                                        text = "Destination",
-                                        fontSize = 12.sp,
-                                        color = Color(0xFF666666),
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Text(
-                                        text = booking.destination.address,
-                                        fontSize = 14.sp,
-                                        color = Color.Black
-                                    )
-                                    Text(
-                                        text = "📍 ${String.format("%.6f", booking.destination.coordinates.latitude)}, ${String.format("%.6f", booking.destination.coordinates.longitude)}",
-                                        fontSize = 12.sp,
-                                        color = Color(0xFF666666)
-                                    )
-                                }
-                            }
+                            RouteDetailRow(
+                                icon = Icons.Default.Place,
+                                label = "Destination",
+                                address = booking.destination.address,
+                                coordinates = "📍 ${String.format("%.6f", booking.destination.coordinates.latitude)}, ${String.format("%.6f", booking.destination.coordinates.longitude)}",
+                                tint = Color(0xFFF44336)
+                            )
                         }
                     }
                 }
@@ -317,7 +268,7 @@ fun TripDetailsScreen(
                                             color = Color.Black
                                         )
 
-                                        if (driver.driverData?.rating != null && driver.driverData?.rating!! > 0) {
+                                        if (driver.driverData?.rating != null && driver.driverData.rating > 0) {
                                             Row(
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
@@ -329,13 +280,13 @@ fun TripDetailsScreen(
                                                 )
                                                 Spacer(modifier = Modifier.width(4.dp))
                                                 Text(
-                                                    text = String.format("%.1f", driver.driverData?.rating ?: 0.0),
+                                                    text = String.format("%.1f", driver.driverData.rating),
                                                     fontSize = 14.sp,
                                                     color = Color(0xFF666666)
                                                 )
-                                                if (driver.driverData?.totalTrips != null && driver.driverData?.totalTrips!! > 0) {
+                                                if (driver.driverData.totalTrips != null && driver.driverData.totalTrips > 0) {
                                                     Text(
-                                                        text = " • ${driver.driverData?.totalTrips} trips",
+                                                        text = " • ${driver.driverData.totalTrips} trips",
                                                         fontSize = 14.sp,
                                                         color = Color(0xFF666666)
                                                     )
@@ -369,17 +320,29 @@ fun TripDetailsScreen(
                                 // Vehicle information (if available)
                                 if (driver.driverData?.vehicleData != null) {
                                     Spacer(modifier = Modifier.height(8.dp))
-                                    val vehicle = driver.driverData?.vehicleData!!
+                                    val vehicle = driver.driverData.vehicleData
+
+                                    // Only show year if it's a valid year (greater than 0)
+                                    val vehicleInfo = buildString {
+                                        if (vehicle.year > 0) {
+                                            append("${vehicle.year} ")
+                                        }
+                                        append("${vehicle.make} ${vehicle.model}")
+                                    }
+
                                     Text(
-                                        text = "${vehicle.year} ${vehicle.make} ${vehicle.model}",
+                                        text = vehicleInfo,
                                         fontSize = 14.sp,
                                         color = Color(0xFF666666)
                                     )
-                                    Text(
-                                        text = vehicle.plateNumber,
-                                        fontSize = 14.sp,
-                                        color = Color(0xFF666666)
-                                    )
+
+                                    if (vehicle.plateNumber.isNotBlank()) {
+                                        Text(
+                                            text = vehicle.plateNumber,
+                                            fontSize = 14.sp,
+                                            color = Color(0xFF666666)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -407,42 +370,73 @@ fun TripDetailsScreen(
                             modifier = Modifier.padding(16.dp)
                         ) {
                             // Date and Time
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Default.Schedule,
-                                    contentDescription = "Date/Time",
-                                    tint = Color(0xFF666666),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column {
-                                    Text(
-                                        text = "Date & Time",
-                                        fontSize = 12.sp,
-                                        color = Color(0xFF666666)
-                                    )
-                                    Text(
-                                        text = SimpleDateFormat("MMM dd, yyyy 'at' h:mm a", Locale.getDefault())
-                                            .format(Date(booking.requestTime)),
-                                        fontSize = 14.sp,
-                                        color = Color.Black
-                                    )
-                                }
-                            }
+                            TripDetailRow(
+                                icon = Icons.Default.Schedule,
+                                label = "Date & Time",
+                                value = SimpleDateFormat("MMM dd, yyyy 'at' h:mm a", Locale.getDefault())
+                                    .format(Date(booking.requestTime))
+                            )
 
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            // Fare
+                            // Distance
+                            TripDetailRow(
+                                icon = Icons.Default.Route,
+                                label = "Distance",
+                                value = "${String.format("%.1f", booking.fareEstimate.estimatedDistance)} mi"
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Duration
+                            TripDetailRow(
+                                icon = Icons.Default.Schedule,
+                                label = "Duration",
+                                value = "${booking.fareEstimate.estimatedDuration} min"
+                            )
+
+                            // Completion Time
+                            if (booking.completionTime != null) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                TripDetailRow(
+                                    icon = Icons.Default.CheckCircle,
+                                    label = "Completed",
+                                    value = SimpleDateFormat("MMM dd, yyyy 'at' h:mm a", Locale.getDefault())
+                                        .format(Date(booking.completionTime!!))
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Fare Details (New Section)
+                Column {
+                    Text(
+                        text = "Fare & Payment",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.Black
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF9F9F9)),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            // Total Fare
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
                                     Icons.Default.Payment,
-                                    contentDescription = "Fare",
+                                    contentDescription = "Total Fare",
                                     tint = Color(0xFF666666),
                                     modifier = Modifier.size(16.dp)
                                 )
@@ -455,42 +449,131 @@ fun TripDetailsScreen(
                                     )
                                     Text(
                                         text = "₱${kotlin.math.floor(booking.actualFare ?: booking.fareEstimate.totalEstimate).toInt()}",
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Medium,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
                                         color = Color.Black
                                     )
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(8.dp))
+                            // Fare Breakdown (if available)
+                            if (booking.fareEstimate.fareBreakdown.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Divider(color = Color(0xFFE0E0E0), thickness = 1.dp)
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = "Fare Breakdown:",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.Black
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = booking.fareEstimate.fareBreakdown,
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF666666)
+                                )
+                            }
+                        }
+                    }
+                }
 
-                            // Special Instructions (if any)
-                            if (booking.specialInstructions.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.Top
-                                ) {
-                                    Icon(
-                                        Icons.Default.Note,
-                                        contentDescription = "Instructions",
-                                        tint = Color(0xFF666666),
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Column {
-                                        Text(
-                                            text = "Special Instructions",
-                                            fontSize = 12.sp,
-                                            color = Color(0xFF666666)
+                // Companion Information (if companions exist)
+                if (booking.companions.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Column {
+                        Text(
+                            text = "Companions (${booking.totalPassengers - 1} total)",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.Black
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF9F9F9)),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp)
+                            ) {
+                                booking.companions.forEachIndexed { index, companion ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = when (companion.type) {
+                                                CompanionType.STUDENT -> Icons.Default.School
+                                                CompanionType.SENIOR -> Icons.Default.Elderly
+                                                CompanionType.CHILD -> Icons.Default.ChildFriendly
+                                                CompanionType.REGULAR -> Icons.Default.Person
+                                            },
+                                            contentDescription = companion.type.name,
+                                            tint = Color(0xFF2196F3),
+                                            modifier = Modifier.size(20.dp)
                                         )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = companion.type.name.lowercase().replaceFirstChar { it.uppercase() } +
+                                                        (if (companion.discountPercentage > 0) " (${companion.discountPercentage}% Off)" else ""),
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = Color.Black
+                                            )
+                                        }
                                         Text(
-                                            text = booking.specialInstructions.ifBlank { "None" },
+                                            text = "₱${kotlin.math.floor(companion.fare).toInt()}",
                                             fontSize = 14.sp,
-                                            color = Color.Black
+                                            fontWeight = FontWeight.Medium,
+                                            color = if (companion.discountPercentage > 0) Color(0xFF4CAF50) else Color.Black
                                         )
                                     }
+                                    if (index < booking.companions.size - 1) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                    }
                                 }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                // Special Instructions (moved to bottom, after main details)
+                if (booking.specialInstructions.isNotBlank()) {
+                    Column {
+                        Text(
+                            text = "Special Instructions",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.Black
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBE0)), // Light yellow background for notice
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Icon(
+                                    Icons.Default.Note,
+                                    contentDescription = "Instructions",
+                                    tint = Color(0xFFFFA000), // Orange icon
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = booking.specialInstructions,
+                                    fontSize = 14.sp,
+                                    color = Color.Black
+                                )
                             }
                         }
                     }
@@ -511,5 +594,71 @@ fun TripDetailsScreen(
                 showReportModal = false
             }
         )
+    }
+}
+
+// Helper composable for consistent detail rows (Trip Information)
+@Composable
+private fun TripDetailRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            icon,
+            contentDescription = label,
+            tint = Color(0xFF666666),
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Column {
+            Text(
+                text = label,
+                fontSize = 12.sp,
+                color = Color(0xFF666666)
+            )
+            Text(
+                text = value,
+                fontSize = 14.sp,
+                color = Color.Black
+            )
+        }
+    }
+}
+
+// Helper composable for consistent route detail rows
+@Composable
+private fun RouteDetailRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, address: String, coordinates: String, tint: Color) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top
+    ) {
+        Icon(
+            icon,
+            contentDescription = label,
+            tint = tint,
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Column(
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(
+                text = label,
+                fontSize = 12.sp,
+                color = Color(0xFF666666),
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = address,
+                fontSize = 14.sp,
+                color = Color.Black
+            )
+            Text(
+                text = coordinates,
+                fontSize = 12.sp,
+                color = Color(0xFF666666)
+            )
+        }
     }
 }

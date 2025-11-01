@@ -2422,7 +2422,7 @@ private fun ProfileContent(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.White),
-        contentPadding = PaddingValues(bottom = 80.dp)
+        contentPadding = PaddingValues(top = 8.dp, bottom = 80.dp)
     ) {
         item {
 //        // Header
