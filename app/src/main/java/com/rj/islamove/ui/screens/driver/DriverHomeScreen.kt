@@ -38,6 +38,8 @@ import android.content.Intent
 import android.net.Uri
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.rj.islamove.utils.Point as UtilsPoint
@@ -933,6 +935,24 @@ private fun MapContent(
     // This prevents the layout from switching back to 100% when transitioning between rides (e.g., after rating)
     val hasActivePassengers = uiState.currentBooking != null || uiState.queuedBookings.isNotEmpty()
 
+    // Track which requests should show overlay (hide after 30 seconds)
+    val overlayVisibilityMap = remember { mutableStateMapOf<String, Boolean>() }
+
+    // Check if any request should show overlay
+    val shouldShowOverlay = uiState.incomingRequests.any { request ->
+        val elapsed = uiState.currentTimeMillis - request.requestTime
+        val isWithin30Seconds = elapsed < 30_000 // 30 seconds
+
+        // Update visibility map
+        if (isWithin30Seconds) {
+            overlayVisibilityMap[request.requestId] = true
+        } else {
+            overlayVisibilityMap[request.requestId] = false
+        }
+
+        overlayVisibilityMap[request.requestId] == true
+    }
+
     // Log the state for debugging
     android.util.Log.e("MapContent", "🎨 RENDERING MapContent:")
     android.util.Log.e("MapContent", "   - currentBooking: ${uiState.currentBooking?.id}")
@@ -981,8 +1001,8 @@ private fun MapContent(
                     )
                 }
 
-                // Overlay new ride requests on top of the map
-                if (uiState.incomingRequests.isNotEmpty()) {
+                // Overlay new ride requests on top of the map (only within 30 seconds)
+                if (shouldShowOverlay) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -1050,6 +1070,9 @@ private fun MapContent(
 
                                     Spacer(modifier = Modifier.height(12.dp))
 
+                                    // State for expandable companions section
+                                    var showCompanionDetails by remember { mutableStateOf(false) }
+
                                     // Show first request details in the overlay
                                     uiState.incomingRequests.firstOrNull()?.let { request ->
                                         Text(
@@ -1067,6 +1090,135 @@ private fun MapContent(
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
+
+                                        // Show fare details
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "Fare: ₱${String.format("%.2f", request.fareEstimate.totalEstimate)}",
+                                                fontSize = 15.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+
+                                            // Clickable companions indicator
+                                            if (request.companions.isNotEmpty() || request.specialInstructions.isNotBlank()) {
+                                                Row(
+                                                    modifier = Modifier.clickable {
+                                                        showCompanionDetails = !showCompanionDetails
+                                                    },
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                ) {
+                                                    if (request.companions.isNotEmpty()) {
+                                                        Text(
+                                                            text = "👥 +${request.companions.size}",
+                                                            fontSize = 13.sp,
+                                                            fontWeight = FontWeight.Medium,
+                                                            color = MaterialTheme.colorScheme.onSurface
+                                                        )
+                                                    }
+                                                    if (request.specialInstructions.isNotBlank()) {
+                                                        Text(
+                                                            text = "📝",
+                                                            fontSize = 13.sp
+                                                        )
+                                                    }
+                                                    Text(
+                                                        text = if (showCompanionDetails) "▲" else "▼",
+                                                        fontSize = 10.sp,
+                                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        // Expandable companion details
+                                        AnimatedVisibility(
+                                            visible = showCompanionDetails,
+                                            enter = expandVertically() + fadeIn(),
+                                            exit = shrinkVertically() + fadeOut()
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .heightIn(max = 150.dp) // Add max height constraint
+                                                    .verticalScroll(rememberScrollState()) // Make it scrollable
+                                                    .background(
+                                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                                        RoundedCornerShape(8.dp)
+                                                    )
+                                                    .padding(8.dp)
+                                            ) {
+                                                // Show special instructions/notes if available
+                                                if (request.specialInstructions.isNotBlank()) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = "📝",
+                                                            fontSize = 12.sp
+                                                        )
+                                                        Text(
+                                                            text = request.specialInstructions,
+                                                            fontSize = 12.sp,
+                                                            color = MaterialTheme.colorScheme.onSurface,
+                                                            fontStyle = FontStyle.Italic,
+                                                            maxLines = 2,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                    }
+
+                                                    if (request.companions.isNotEmpty()) {
+                                                        Spacer(modifier = Modifier.height(6.dp))
+                                                        Divider(
+                                                            modifier = Modifier.padding(vertical = 2.dp),
+                                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
+                                                        )
+                                                    }
+                                                }
+
+                                                // Show companions list
+                                                if (request.companions.isNotEmpty()) {
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                    Text(
+                                                        text = "Companions (${request.companions.size}):",
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Medium,
+                                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                                                    )
+                                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                                    request.companions.forEachIndexed { index, companion ->
+                                                        Row(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .padding(vertical = 2.dp),
+                                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Text(
+                                                                text = "${index + 1}. ${companion.type.name}",
+                                                                fontSize = 11.sp,
+                                                                color = MaterialTheme.colorScheme.onSurface
+                                                            )
+                                                            Text(
+                                                                text = "₱${String.format("%.2f", companion.fare)}",
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.Medium,
+                                                                color = MaterialTheme.colorScheme.primary
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
                                         Spacer(modifier = Modifier.height(8.dp))
 
                                         // Quick action buttons

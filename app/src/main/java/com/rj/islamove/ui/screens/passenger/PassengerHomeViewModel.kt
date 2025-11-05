@@ -398,21 +398,34 @@ class PassengerHomeViewModel @Inject constructor(
     fun searchLocations(query: String) {
         viewModelScope.launch {
             try {
-                // Search both regular locations AND zone boundaries
+                Log.d("PassengerHomeViewModel", "🔍 Starting search for: '$query'")
+
+                // Search zone boundaries
+                val zoneBoundaries = bookingRepository.searchZoneBoundaries(query)
+                Log.d("PassengerHomeViewModel", "📍 Zone boundaries found: ${zoneBoundaries.size}")
+                zoneBoundaries.forEach { Log.d("PassengerHomeViewModel", "  - ${it.address}") }
+
+                // Search regular locations
                 val regularLocationsResult = bookingRepository.searchLocations(query)
-                val regularLocations: List<BookingLocation> = regularLocationsResult.getOrElse { emptyList() }
+                Log.d("PassengerHomeViewModel", "🗺️ Regular search result: ${regularLocationsResult.isSuccess}")
 
-                val zoneBoundaries: List<BookingLocation> = bookingRepository.searchZoneBoundaries(query)
-
-                // Combine results, prioritizing zone boundaries
-                val combinedResults: List<BookingLocation> = (zoneBoundaries + regularLocations)
-                    .distinctBy { it.address }
-
-                _uiState.update { currentState ->
-                    currentState.copy(locationSuggestions = combinedResults)
+                val regularLocations = if (regularLocationsResult.isSuccess) {
+                    val locations = regularLocationsResult.getOrNull() ?: emptyList()
+                    Log.d("PassengerHomeViewModel", "✅ Regular locations found: ${locations.size}")
+                    locations.forEach { Log.d("PassengerHomeViewModel", "  - ${it.address}") }
+                    locations
+                } else {
+                    Log.e("PassengerHomeViewModel", "❌ Regular search failed: ${regularLocationsResult.exceptionOrNull()?.message}")
+                    emptyList()
                 }
+
+                // Combine
+                val combinedResults = (zoneBoundaries + regularLocations).distinctBy { it.address }
+                Log.d("PassengerHomeViewModel", "🎯 Total combined results: ${combinedResults.size}")
+
+                _uiState.update { it.copy(locationSuggestions = combinedResults) }
             } catch (e: Exception) {
-                Log.e("PassengerHomeViewModel", "Error searching locations", e)
+                Log.e("PassengerHomeViewModel", "💥 Search error", e)
             }
         }
     }

@@ -800,27 +800,50 @@ class BookingRepository @Inject constructor(
      */
     suspend fun searchLocations(query: String): Result<List<BookingLocation>> {
         return try {
+            Log.d("BookingRepository", "🔍 Starting search for: '$query'")
+
             // Try Google Maps geocoding first for better search results
             val googleMapsResult = mapboxRepository.searchLocations(query)
-            
+
             if (googleMapsResult.isSuccess) {
-                val googleMapsResults = googleMapsResult.getOrNull()!!
-                val bookingLocations = googleMapsResults.map { searchResult ->
-                    BookingLocation(
-                        address = searchResult.shortAddress,
-                        coordinates = searchResult.coordinates,
-                        placeName = searchResult.name,
-                        placeType = searchResult.placeType
-                    )
+                val googleMapsResults = googleMapsResult.getOrNull() ?: emptyList()
+                Log.d("BookingRepository", "🗺️ Google Maps returned ${googleMapsResults.size} results")
+
+                if (googleMapsResults.isNotEmpty()) {
+                    val bookingLocations = googleMapsResults.map { searchResult ->
+                        BookingLocation(
+                            address = searchResult.shortAddress,
+                            coordinates = searchResult.coordinates,
+                            placeName = searchResult.name,
+                            placeType = searchResult.placeType
+                        )
+                    }
+                    Log.d("BookingRepository", "✅ Returning ${bookingLocations.size} Google Maps results")
+                    return Result.success(bookingLocations)
+                } else {
+                    Log.w("BookingRepository", "⚠️ Google Maps returned empty list, trying fallback")
                 }
-                Result.success(bookingLocations)
             } else {
-                // Fallback to San Jose municipal data
-                sanJoseLocationRepository.searchLocations(query)
+                Log.w("BookingRepository", "⚠️ Google Maps search failed: ${googleMapsResult.exceptionOrNull()?.message}, trying fallback")
             }
+
+            // Fallback to San Jose municipal data
+            Log.d("BookingRepository", "📍 Using San Jose municipal data fallback")
+            val fallbackResult = sanJoseLocationRepository.searchLocations(query)
+            Log.d("BookingRepository", "📍 Fallback returned: ${fallbackResult.isSuccess}, size: ${fallbackResult.getOrNull()?.size ?: 0}")
+
+            fallbackResult
+
         } catch (e: Exception) {
+            Log.e("BookingRepository", "❌ Search error: ${e.message}", e)
             // Final fallback to municipal data
-            sanJoseLocationRepository.searchLocations(query)
+            try {
+                Log.d("BookingRepository", "🔄 Exception fallback to municipal data")
+                sanJoseLocationRepository.searchLocations(query)
+            } catch (fallbackError: Exception) {
+                Log.e("BookingRepository", "💥 Fallback search also failed: ${fallbackError.message}", fallbackError)
+                Result.success(emptyList()) // Return empty list instead of failure
+            }
         }
     }
     
