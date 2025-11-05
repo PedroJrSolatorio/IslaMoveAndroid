@@ -290,7 +290,7 @@ class AuthRepository @Inject constructor(
                             put("insurance", DriverDocument(
                                 images = listOf(DocumentImage(
                                     url = sjmodaUrl,
-                                    description = "SJMODA Certification",
+                                    description = "Franchise Certificate",
                                     uploadedAt = System.currentTimeMillis()
                                 )),
                                 status = DocumentStatus.PENDING_REVIEW,

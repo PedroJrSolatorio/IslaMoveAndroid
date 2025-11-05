@@ -16,7 +16,7 @@ fun SplashScreen(
     onNavigateToOnboarding: () -> Unit,
     onNavigateToLogin: () -> Unit,
     onNavigateToHome: (String) -> Unit,
-    onNavigateToUserTypeSelection: () -> Unit,
+//    onNavigateToUserTypeSelection: () -> Unit,
     viewModel: SplashViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -31,9 +31,9 @@ fun SplashScreen(
                 !uiState.isUserLoggedIn -> {
                     onNavigateToLogin()
                 }
-                uiState.needsUserTypeSelection -> {
-                    onNavigateToUserTypeSelection()
-                }
+//                uiState.needsUserTypeSelection -> {
+//                    onNavigateToUserTypeSelection()
+//                }
                 uiState.userType != null -> {
                     onNavigateToHome(uiState.userType!!.name)
                 }

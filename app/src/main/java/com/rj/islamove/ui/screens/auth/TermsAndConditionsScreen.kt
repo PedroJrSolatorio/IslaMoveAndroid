@@ -216,9 +216,9 @@ fun TermsAndConditionsScreen(
             SectionTitle("15. Contact Information")
             SectionContent(
                 "For questions about these Terms and Conditions, please contact us at:\n" +
-                        "Email: rjsolatorio@gmail.com\n" +
-                        "Phone: 09089848952\n" +
-                        "Address: Sta. Cruz"
+                        "Email: islamoveapp@gmail.com\n" +
+//                        "Phone: 09089848952\n" +
+                        "Address: Sta. Cruz, San Jose, PDI"
             )
 
             Spacer(modifier = Modifier.height(32.dp))

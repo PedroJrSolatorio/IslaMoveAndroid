@@ -1,5 +1,7 @@
 package com.rj.islamove.data.repository
 
+import android.util.Log
+import com.cloudinary.Coordinates
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.GeoPoint
@@ -40,6 +42,11 @@ class BookingRepository @Inject constructor(
 
     private val fareCache = mutableMapOf<FareCacheKey, FareEstimate>()
     private val maxFareCacheSize = 50
+
+    private val db = FirebaseFirestore.getInstance()
+    private var cachedZones: List<BookingLocation>? = null
+    private var cacheTimestamp: Long = 0
+    private val CACHE_DURATION = 24 * 60 * 60 * 1000L // 24 hours
 
     /**
      * Migration helper: Convert legacy booking distances from km to meters
@@ -116,7 +123,39 @@ class BookingRepository @Inject constructor(
         
         return calculateFareEstimate(pickup, dest, vehicleCategory)
     }
-    
+
+    suspend fun searchZoneBoundaries(query: String): List<BookingLocation> {
+        if (cachedZones == null || System.currentTimeMillis() - cacheTimestamp > CACHE_DURATION) {
+            try {
+                val snapshot = db.collection("zone_boundaries").get().await()
+                cachedZones = snapshot.documents.mapNotNull { doc ->
+                    val name = doc.getString("name") ?: return@mapNotNull null
+                    val points = doc.get("points") as? List<Map<String, Any>> ?: return@mapNotNull null
+                    val latitudes = points.mapNotNull { it["latitude"] as? Double }
+                    val longitudes = points.mapNotNull { it["longitude"] as? Double }
+                    if (latitudes.isEmpty() || longitudes.isEmpty()) return@mapNotNull null
+                    val centerLat = latitudes.average()
+                    val centerLng = longitudes.average()
+                    BookingLocation(
+                        address = name,
+                        coordinates = GeoPoint(centerLat, centerLng)
+                    )
+                }
+                cacheTimestamp = System.currentTimeMillis()
+            } catch (e: Exception) {
+                Log.e("BookingRepository", "Error loading zone boundaries", e)
+                if (cachedZones == null) return emptyList()
+            }
+        }
+        return cachedZones?.filter { it.address.contains(query, ignoreCase = true) } ?: emptyList()
+    }
+
+    suspend fun refreshZoneBoundariesCache() {
+        cachedZones = null
+        cacheTimestamp = 0
+        searchZoneBoundaries("") // Trigger reload
+    }
+
     /**
      * Calculate fare estimate using San Jose Municipal Fare Matrix only
      */

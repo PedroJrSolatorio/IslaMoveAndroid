@@ -150,11 +150,11 @@ fun IslamoveNavigation(
                         popUpTo(Screen.Splash.route) { inclusive = true }
                     }
                 },
-                onNavigateToUserTypeSelection = {
-                    navController.navigate(Screen.UserTypeSelection.route) {
-                        popUpTo(Screen.Splash.route) { inclusive = true }
-                    }
-                }
+//                onNavigateToUserTypeSelection = {
+//                    navController.navigate(Screen.UserTypeSelection.route) {
+//                        popUpTo(Screen.Splash.route) { inclusive = true }
+//                    }
+//                }
             )
         }
 
@@ -176,12 +176,12 @@ fun IslamoveNavigation(
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }
                 },
-                onNeedsUserTypeSelection = {
-                    // New user needs to select user type
-                    navController.navigate(Screen.UserTypeSelection.route) {
-                        popUpTo(Screen.Login.route) { inclusive = true }
-                    }
-                },
+//                onNeedsUserTypeSelection = {
+//                    // New user needs to select user type
+//                    navController.navigate(Screen.UserTypeSelection.route) {
+//                        popUpTo(Screen.Login.route) { inclusive = true }
+//                    }
+//                },
                 onNavigateToCreateAccount = {
                     navController.navigate(Screen.CreateAccount.route)
                 }

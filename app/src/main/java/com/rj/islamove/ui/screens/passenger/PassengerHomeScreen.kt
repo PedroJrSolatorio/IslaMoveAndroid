@@ -417,12 +417,19 @@ private fun DriverFoundCard(
                         color = Color.Black
                     )
 
-                    val vehicleInfo = driver?.driverData?.vehicleData?.let { vehicle ->
-                        "${vehicle.make} ${vehicle.model} ${vehicle.color}"
-                    } ?: "Vehicle Info"
-
-                    Text(
-                        text = vehicleInfo,
+                    driver?.driverData?.vehicleData?.let { vehicle ->
+                        Text(
+                            text = "Color: ${vehicle.color}",
+                            fontSize = 14.sp,
+                            color = Color.Gray
+                        )
+                        Text(
+                            text = "Plate Number: ${vehicle.plateNumber}",
+                            fontSize = 14.sp,
+                            color = Color.Gray
+                        )
+                    } ?: Text(
+                        text = "Vehicle Info",
                         fontSize = 14.sp,
                         color = Color.Gray
                     )
@@ -1333,11 +1340,13 @@ private fun MapsContent(
                                         .fillMaxWidth()
                                         .clickable {
                                             viewModel.setDestination(location)
-                                            // Convert to MapboxPlaceDetails for POI selection
                                             val placeDetails = MapboxPlaceDetails(
                                                 id = "suggestion_${System.currentTimeMillis()}",
                                                 name = location.address,
-                                                point = MapboxPoint.fromLngLat(location.coordinates.longitude, location.coordinates.latitude),
+                                                point = MapboxPoint.fromLngLat(
+                                                    location.coordinates.longitude,
+                                                    location.coordinates.latitude
+                                                ),
                                                 address = location.address,
                                                 rating = null,
                                                 userRatingsTotal = null,
@@ -1359,11 +1368,18 @@ private fun MapsContent(
                                         modifier = Modifier.size(20.dp)
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
-                                    Text(
-                                        text = location.address,
-                                        fontSize = 14.sp,
-                                        modifier = Modifier.weight(1f)
-                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = location.address,
+                                            fontSize = 14.sp
+                                        )
+                                        // Optional: Add "Service Zone" label
+                                        // Text(
+                                        //     text = "Service Zone",
+                                        //     fontSize = 12.sp,
+                                        //     color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        // )
+                                    }
                                     Icon(
                                         Icons.Default.ArrowForward,
                                         contentDescription = null,
@@ -1480,67 +1496,6 @@ private fun MapsContent(
 
 
                         Spacer(modifier = Modifier.weight(1f))
-                    }
-
-                    // Book ride button (when destination is selected)
-                    if (searchText.isNotEmpty()) {
-                        Button(
-                            onClick = {
-                                // Try to find the exact location from suggestions first
-                                val matchingSuggestion = uiState.locationSuggestions.find {
-                                    it.address.contains(searchText, ignoreCase = true)
-                                }
-
-                                val searchDestination = if (matchingSuggestion != null) {
-                                    // Use the actual coordinates from the matching suggestion
-                                    MapboxPlaceDetails(
-                                        id = "suggestion_destination_${System.currentTimeMillis()}",
-                                        name = searchText,
-                                        point = MapboxPoint.fromLngLat(
-                                            matchingSuggestion.coordinates.longitude,
-                                            matchingSuggestion.coordinates.latitude
-                                        ),
-                                        address = matchingSuggestion.address,
-                                        rating = null,
-                                        userRatingsTotal = null,
-                                        types = listOf("destination"),
-                                        phoneNumber = null,
-                                        websiteUri = null,
-                                        isOpen = null,
-                                        openingHours = null
-                                    )
-                                } else {
-                                    // Fallback to default coordinates
-                                    MapboxPlaceDetails(
-                                        id = "search_destination_${System.currentTimeMillis()}",
-                                        name = searchText,
-                                        point = MapboxPoint.fromLngLat(125.5760264, 10.0195507), // Default to San Jose center
-                                        address = searchText,
-                                        rating = null,
-                                        userRatingsTotal = null,
-                                        types = listOf("destination"),
-                                        phoneNumber = null,
-                                        websiteUri = null,
-                                        isOpen = null,
-                                        openingHours = null
-                                    )
-                                }
-                                onSelectedPlaceForBookingChange(searchDestination)
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 8.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = IslamovePrimary
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text(
-                                "Book Ride",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
                     }
                     } // Close inner Column
                 } // Close outer Column

@@ -173,7 +173,7 @@ class LoginViewModel @Inject constructor(
                     }.onFailure { exception ->
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
-                            errorMessage = "Failed to upload SJMODA Certification: ${exception.message}"
+                            errorMessage = "Failed to upload Franchise Certificate: ${exception.message}"
                         )
                         return@launch
                     }

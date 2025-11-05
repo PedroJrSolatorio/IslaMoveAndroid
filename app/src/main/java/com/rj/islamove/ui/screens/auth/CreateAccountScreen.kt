@@ -703,7 +703,7 @@ fun CreateAccountScreen(
 
                 // SJMODA Certification Upload
                 Text(
-                    text = "SJMODA Certification",
+                    text = "Franchise Certificate",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -750,7 +750,7 @@ fun CreateAccountScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        if (sjmodaUri != null) "SJMODA Certification Uploaded" else "Upload SJMODA Certification"
+                        if (sjmodaUri != null) "Franchise Certificate Uploaded" else "Upload Franchise Certificate"
                     )
                 }
 
@@ -769,7 +769,7 @@ fun CreateAccountScreen(
                     ) {
                         AsyncImage(
                             model = sjmodaUri,
-                            contentDescription = "SJMODA Certification Preview",
+                            contentDescription = "Franchise Certificate Preview",
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Fit
                         )
@@ -781,14 +781,14 @@ fun CreateAccountScreen(
                         onDismissRequest = { showSjmodaPicker = false },
                         title = {
                             Text(
-                                text = "Upload SJMODA Certification",
+                                text = "Upload Franchise Certificate",
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         },
                         text = {
                             Column {
-                                Text("Choose how you'd like to upload your SJMODA Certification:")
+                                Text("Choose how you'd like to upload your Franchise Certificate:")
                                 Spacer(modifier = Modifier.height(16.dp))
 
                                 Row(
@@ -1315,7 +1315,7 @@ fun CreateAccountScreen(
                     if (address.isEmpty()) Text("• Address", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (selectedUserType == "PASSENGER" && idDocumentUri == null) Text("• Valid ID upload", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (selectedUserType == "DRIVER" && driverLicenseUri == null) Text("• Driver's License upload", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (selectedUserType == "DRIVER" && sjmodaUri == null) Text("• SJMODA Certification upload", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (selectedUserType == "DRIVER" && sjmodaUri == null) Text("• Franchise Certificate upload", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (selectedUserType == "DRIVER" && orUri == null) Text("• Official Receipt upload", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (selectedUserType == "DRIVER" && crUri == null) Text("• Certificate of Registration upload", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (ageError != null) Text("• Must be 12+ years old", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)

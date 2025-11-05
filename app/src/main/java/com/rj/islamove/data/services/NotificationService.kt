@@ -250,7 +250,7 @@ class NotificationService @Inject constructor(
             val documentDisplayName = when (documentType) {
                 "license" -> "Driver's License"
                 "vehicle_registration" -> "Certificate of Registration (CR)"
-                "insurance" -> "SJMODA Certification"
+                "insurance" -> "Franchise Certificate"
                 "vehicle_inspection" -> "Official Receipt (OR)"
                 "profile_photo" -> "Profile Photo"
                 else -> documentType.replace("_", " ").split(" ").joinToString(" ") {
@@ -518,22 +518,23 @@ class NotificationService @Inject constructor(
             Log.d(TAG, "✅ Stored ride cancellation notification for driver: $driverId")
             Log.d(TAG, "📨 Direct FCM notification sent to driver's device tokens")
 
-            try {
-                val context = com.rj.islamove.IslamoveApplication.instance
-                // Check if current user is a driver by checking Firebase Auth or shared preferences
-                val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-                if (currentUser != null) {
-                    showImmediateTopCancellationNotification(
-                        context = context,
-                        title = "🚨 Passenger Cancelled Ride",
-                        body = if (reason.isNotBlank()) "The passenger cancelled: $reason" else "The passenger cancelled the ride.",
-                        cancelledBy = "passenger",
-                        reason = reason
-                    )
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to show local notification", e)
-            }
+            // this will be sent to passenger since this is local notification, so it is incorrect notification
+//            try {
+//                val context = com.rj.islamove.IslamoveApplication.instance
+//                // Check if current user is a driver by checking Firebase Auth or shared preferences
+//                val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+//                if (currentUser != null) {
+//                    showImmediateTopCancellationNotification(
+//                        context = context,
+//                        title = "🚨 Passenger Cancelled Ride",
+//                        body = if (reason.isNotBlank()) "The passenger cancelled: $reason" else "The passenger cancelled the ride.",
+//                        cancelledBy = "passenger",
+//                        reason = reason
+//                    )
+//                }
+//            } catch (e: Exception) {
+//                Log.w(TAG, "Failed to show local notification", e)
+//            }
 
             Result.success(Unit)
 

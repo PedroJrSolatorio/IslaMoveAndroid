@@ -1,5 +1,8 @@
 package com.rj.islamove.ui.screens.help
 
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -11,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -225,6 +229,42 @@ fun HelpSupportScreen(
                         text = "Version: 1.0.0",
                         fontSize = 14.sp,
                         color = Color(0xFF666666)
+                    )
+                }
+            }
+
+            // Contact Admin Section
+            val context = LocalContext.current
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFFE3F2FD) // light blue background
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Need more help?",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "islamoveapp@gmail.com",
+                        fontSize = 14.sp,
+                        color = Color(0xFF1565C0),
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.clickable {
+                            val intent = Intent(Intent.ACTION_SENDTO).apply {
+                                data = Uri.parse("mailto:islamoveapp@gmail.com")
+                                putExtra(Intent.EXTRA_SUBJECT, "Islamove Support Request")
+                            }
+                            context.startActivity(intent)
+                        }
                     )
                 }
             }

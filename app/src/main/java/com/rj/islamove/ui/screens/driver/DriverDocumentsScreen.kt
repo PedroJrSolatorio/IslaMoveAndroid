@@ -122,7 +122,7 @@ fun DriverDocumentsScreen(
                 ),
                 DocumentType(
                     id = "insurance",
-                    title = "SJMODA Certification",
+                    title = "Franchise Certificate",
                     description = when (documents["insurance"]?.status) {
                         DocumentStatus.APPROVED -> "Approved"
                         DocumentStatus.REJECTED -> "Rejected"

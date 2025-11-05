@@ -89,7 +89,7 @@ fun PrivacyPolicyScreen(
                         "• Senior Citizen ID (for senior discounts)\n\n" +
                         "For Drivers:\n" +
                         "• Driver's License\n" +
-                        "• SJMODA Certification\n" +
+                        "• Franchise Certificate\n" +
                         "• OR/CR (Official Receipt/Certificate of Registration) of bao-bao vehicle\n" +
                         "• Vehicle information"
             )
@@ -297,8 +297,8 @@ fun PrivacyPolicyScreen(
                 "For privacy-related questions or to exercise your data rights:\n\n" +
 //                        "Data Protection Officer\n" +
                         "IslaMove Administrator\n" +
-                        "Email: rjsolatorio@gmail.com\n" +
-                        "Phone: 09089848952\n" +
+                        "Email: islamoveapp@gmail.com\n" +
+//                        "Phone: 09089848952\n" +
                         "Address: Sta. Cruz\n\n" +
                         "National Privacy Commission:\n" +
                         "Website: www.privacy.gov.ph\n" +

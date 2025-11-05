@@ -28,7 +28,7 @@ import com.rj.islamove.R
 @Composable
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
-    onNeedsUserTypeSelection: () -> Unit,
+//    onNeedsUserTypeSelection: () -> Unit,
     onNavigateToCreateAccount: () -> Unit,
     viewModel: LoginViewModel = hiltViewModel()
 ) {
@@ -41,7 +41,7 @@ fun LoginScreen(
     LaunchedEffect(uiState.isSuccess, uiState.needsUserTypeSelection) {
         when {
             uiState.isSuccess -> onLoginSuccess()
-            uiState.needsUserTypeSelection -> onNeedsUserTypeSelection()
+//            uiState.needsUserTypeSelection -> onNeedsUserTypeSelection()
         }
     }
     

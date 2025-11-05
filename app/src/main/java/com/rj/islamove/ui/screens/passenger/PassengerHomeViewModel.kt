@@ -225,6 +225,11 @@ class PassengerHomeViewModel @Inject constructor(
 
         // Pre-load zone boundaries to ensure they're cached before booking
         preloadZoneBoundaries()
+
+        viewModelScope.launch {
+            // Preload zone boundaries cache
+            bookingRepository.searchZoneBoundaries("")
+        }
     }
 
     override fun onCleared() {
@@ -391,58 +396,23 @@ class PassengerHomeViewModel @Inject constructor(
      * Search for locations based on query - prioritize local San Jose locations
      */
     fun searchLocations(query: String) {
-        if (query.isBlank()) {
-            _uiState.value = _uiState.value.copy(locationSuggestions = emptyList())
-            return
-        }
-
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isSearching = true)
+            try {
+                // Search both regular locations AND zone boundaries
+                val regularLocationsResult = bookingRepository.searchLocations(query)
+                val regularLocations: List<BookingLocation> = regularLocationsResult.getOrElse { emptyList() }
 
-            // First priority: Admin-configured destinations
-            val adminDestinations = getAdminDestinationSuggestions(query)
+                val zoneBoundaries: List<BookingLocation> = bookingRepository.searchZoneBoundaries(query)
 
-            if (adminDestinations.isNotEmpty()) {
-                // If we have admin destination matches, use them exclusively
-                _uiState.value = _uiState.value.copy(
-                    locationSuggestions = adminDestinations,
-                    isSearching = false
-                )
-            } else {
-                // Second priority: search for local San Jose locations
-                val localSuggestions = getLocalLocationSuggestions(query)
+                // Combine results, prioritizing zone boundaries
+                val combinedResults: List<BookingLocation> = (zoneBoundaries + regularLocations)
+                    .distinctBy { it.address }
 
-                if (localSuggestions.isNotEmpty()) {
-                    // If we have local matches, use them exclusively
-                    _uiState.value = _uiState.value.copy(
-                        locationSuggestions = localSuggestions,
-                        isSearching = false
-                    )
-                } else {
-                    // Only fall back to external search if no local matches found
-                    // But constrain results to San Jose area
-                    val constrainedQuery = "$query, San Jose, Dinagat Islands"
-
-                    bookingRepository.searchLocations(constrainedQuery)
-                        .onSuccess { locations ->
-                            // Filter results to only include locations within Dinagat Islands
-                            val validLocations = locations.filter { location ->
-                                isWithinDinagatIslands(location.coordinates)
-                            }
-
-                            _uiState.value = _uiState.value.copy(
-                                locationSuggestions = validLocations,
-                                isSearching = false
-                            )
-                        }
-                        .onFailure { exception ->
-                            _uiState.value = _uiState.value.copy(
-                                locationSuggestions = emptyList(),
-                                isSearching = false,
-                                errorMessage = "No locations found in San Jose, Dinagat Islands"
-                            )
-                        }
+                _uiState.update { currentState ->
+                    currentState.copy(locationSuggestions = combinedResults)
                 }
+            } catch (e: Exception) {
+                Log.e("PassengerHomeViewModel", "Error searching locations", e)
             }
         }
     }
