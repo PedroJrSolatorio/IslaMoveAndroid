@@ -53,6 +53,10 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.lazy.LazyColumn
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.tasks.await
 
 /**
  * State for smooth navigation camera updates
@@ -1936,6 +1940,57 @@ fun MapboxPlaceDetailsCard(
         "₱${String.format("%.0f", totalFare)}"
     }
 
+    // State for cancellation blocking
+    var isBlocked by remember { mutableStateOf(false) }
+    var timeRemainingText by remember { mutableStateOf("") }
+    var showBlockedDialog by remember { mutableStateOf(false) }
+
+    // Check cancellation status on launch
+    LaunchedEffect(Unit) {
+        val userId = FirebaseAuth.getInstance().currentUser?.uid
+        if (userId != null) {
+            try {
+                val db = FirebaseFirestore.getInstance()
+                val userDoc = db.collection("users").document(userId).get().await()
+                val preferences = userDoc.get("preferences") as? Map<*, *>
+                val cancellationCount = (preferences?.get("cancellationCount") as? Long)?.toInt() ?: 0
+                val lastCancellationTimestamp = preferences?.get("lastCancellationTimestamp") as? Long // Changed to Long
+
+                if (cancellationCount >= 3 && lastCancellationTimestamp != null) {
+                    val currentTime = System.currentTimeMillis()
+                    val timeDiff = currentTime - lastCancellationTimestamp // Now using Long directly
+                    val twelveHoursInMillis = 12 * 60 * 60 * 1000L
+
+                    if (timeDiff < twelveHoursInMillis) {
+                        isBlocked = true
+                        val timeRemaining = twelveHoursInMillis - timeDiff
+                        val hoursRemaining = timeRemaining / (1000 * 60 * 60)
+                        val minutesRemaining = (timeRemaining / (1000 * 60)) % 60
+                        timeRemainingText = "$hoursRemaining hour${if (hoursRemaining > 1L) "s" else ""} and $minutesRemaining minute${if (minutesRemaining > 1L) "s" else ""}"
+
+                        Log.d("MapboxPlaceDetailsCard", "🚫 User blocked - Cancellations: $cancellationCount, Time remaining: $timeRemainingText")
+                    } else {
+                        // Reset the count after 12 hours
+                        db.collection("users").document(userId).update(
+                            mapOf(
+                                "preferences.cancellationCount" to 0,
+                                "preferences.lastCancellationTimestamp" to FieldValue.delete()
+                            )
+                        ).await()
+                        isBlocked = false
+                        Log.d("MapboxPlaceDetailsCard", "✅ 12 hours passed - Cancellation count reset")
+                    }
+                } else {
+                    isBlocked = false
+                    Log.d("MapboxPlaceDetailsCard", "✅ User not blocked - Cancellations: $cancellationCount")
+                }
+            } catch (e: Exception) {
+                Log.e("MapboxPlaceDetailsCard", "Error checking cancellation status", e)
+                isBlocked = false // Don't block on error
+            }
+        }
+    }
+
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -2454,6 +2509,21 @@ fun MapboxPlaceDetailsCard(
 
             // Action Buttons - changes based on mode
             item {
+                // Show blocked dialog if user tries to book while blocked
+                if (showBlockedDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showBlockedDialog = false },
+                        title = { Text("Booking Temporarily Blocked") },
+                        text = {
+                            Text("You have reached the maximum number of cancellations (3). You can book again in $timeRemainingText.")
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { showBlockedDialog = false }) {
+                                Text("OK")
+                            }
+                        }
+                    )
+                }
                 when {
                     // Home Location - Show "Book" and "Remove Home" buttons
                     isHomeLocation && onRemoveHome != null -> {
@@ -2464,15 +2534,19 @@ fun MapboxPlaceDetailsCard(
                             // Book Ride button
                             Button(
                                 onClick = {
-                                    val bookingLocation = BookingLocation(
-                                        address = placeDetails.address ?: placeDetails.name,
-                                        coordinates = com.google.firebase.firestore.GeoPoint(
-                                            placeDetails.point.latitude(),
-                                            placeDetails.point.longitude()
-                                        ),
-                                        placeId = placeDetails.id
-                                    )
-                                    onBookRide(bookingLocation, passengerComment, companions)
+                                    if (isBlocked) {
+                                        showBlockedDialog = true
+                                    } else {
+                                        val bookingLocation = BookingLocation(
+                                            address = placeDetails.address ?: placeDetails.name,
+                                            coordinates = com.google.firebase.firestore.GeoPoint(
+                                                placeDetails.point.latitude(),
+                                                placeDetails.point.longitude()
+                                            ),
+                                            placeId = placeDetails.id
+                                        )
+                                        onBookRide(bookingLocation, passengerComment, companions)
+                                    }
                                 },
                                 enabled = companions.size <= 4, // Disable if more than 4 companions
                                 modifier = Modifier
@@ -2480,11 +2554,11 @@ fun MapboxPlaceDetailsCard(
                                     .height(50.dp),
                                 shape = RoundedCornerShape(25.dp),
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF1976D2)
+                                    containerColor = if (isBlocked) Color.Gray else Color(0xFF1976D2)
                                 )
                             ) {
                                 Text(
-                                    text = "Book",
+                                    text = if (isBlocked) "Booking is Blocked" else "Book",
                                     color = Color.White,
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 16.sp
@@ -2530,15 +2604,19 @@ fun MapboxPlaceDetailsCard(
                             // Book Ride button
                             Button(
                                 onClick = {
-                                    val bookingLocation = BookingLocation(
-                                        address = placeDetails.address ?: placeDetails.name,
-                                        coordinates = com.google.firebase.firestore.GeoPoint(
-                                            placeDetails.point.latitude(),
-                                            placeDetails.point.longitude()
-                                        ),
-                                        placeId = placeDetails.id
-                                    )
-                                    onBookRide(bookingLocation, passengerComment, companions)
+                                    if (isBlocked) {
+                                        showBlockedDialog = true
+                                    } else {
+                                        val bookingLocation = BookingLocation(
+                                            address = placeDetails.address ?: placeDetails.name,
+                                            coordinates = com.google.firebase.firestore.GeoPoint(
+                                                placeDetails.point.latitude(),
+                                                placeDetails.point.longitude()
+                                            ),
+                                            placeId = placeDetails.id
+                                        )
+                                        onBookRide(bookingLocation, passengerComment, companions)
+                                    }
                                 },
                                 enabled = companions.size <= 4, // Disable if more than 4 companions
                                 modifier = Modifier
@@ -2546,11 +2624,11 @@ fun MapboxPlaceDetailsCard(
                                     .height(50.dp),
                                 shape = RoundedCornerShape(25.dp),
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF1976D2)
+                                    containerColor = if (isBlocked) Color.Gray else Color(0xFF1976D2)
                                 )
                             ) {
                                 Text(
-                                    text = "Book",
+                                    text = if (isBlocked) "Booking Blocked" else "Book",
                                     color = Color.White,
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 16.sp
@@ -2627,15 +2705,19 @@ fun MapboxPlaceDetailsCard(
                     else -> {
                         Button(
                             onClick = {
-                                val bookingLocation = BookingLocation(
-                                    address = placeDetails.address ?: placeDetails.name,
-                                    coordinates = com.google.firebase.firestore.GeoPoint(
-                                        placeDetails.point.latitude(),
-                                        placeDetails.point.longitude()
-                                    ),
-                                    placeId = placeDetails.id
-                                )
-                                onBookRide(bookingLocation, passengerComment, companions)
+                                if (isBlocked) {
+                                    showBlockedDialog = true
+                                } else {
+                                    val bookingLocation = BookingLocation(
+                                        address = placeDetails.address ?: placeDetails.name,
+                                        coordinates = com.google.firebase.firestore.GeoPoint(
+                                            placeDetails.point.latitude(),
+                                            placeDetails.point.longitude()
+                                        ),
+                                        placeId = placeDetails.id
+                                    )
+                                    onBookRide(bookingLocation, passengerComment, companions)
+                                }
                             },
                             enabled = companions.size <= 4, // Disable if more than 4 companions
                             modifier = Modifier
@@ -2643,11 +2725,11 @@ fun MapboxPlaceDetailsCard(
                                 .height(50.dp),
                             shape = RoundedCornerShape(25.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF1976D2)
+                                containerColor = if (isBlocked) Color.Gray else Color(0xFF1976D2)
                             )
                         ) {
                             Text(
-                                text = "Book Ride",
+                                text = if (isBlocked) "Booking Blocked" else "Book Ride",
                                 color = Color.White,
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 16.sp
