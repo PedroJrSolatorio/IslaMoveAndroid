@@ -2308,25 +2308,59 @@ class PassengerHomeViewModel @Inject constructor(
     /**
      * Set home location from map selection
      */
-    fun setHomeLocationFromMap(latLng: MapboxPoint) {
+//    fun setHomeLocationFromMap(latLng: MapboxPoint) {
+//        viewModelScope.launch {
+//            // Try to get a more detailed address using reverse geocoding
+//            val locationResult = try {
+//                val geoPoint = GeoPoint(latLng.latitude(), latLng.longitude())
+//                mapboxRepository.reverseGeocode(geoPoint)
+//                    .getOrNull()
+//            } catch (e: Exception) {
+//                Log.e("PassengerHomeViewModel", "Failed to reverse geocode location", e)
+//                null
+//            }
+//
+//            val homeAddress = BookingLocation(
+//                address = locationResult?.fullAddress ?: "Selected Home Location",
+//                coordinates = GeoPoint(latLng.latitude(), latLng.longitude())
+//            )
+//
+//            saveHomeAddress(homeAddress)
+//            _uiState.value = _uiState.value.copy(isSelectingHomeLocation = false)
+//        }
+//    }
+
+    fun setHomeLocationFromMap(point: MapboxPoint) {
         viewModelScope.launch {
-            // Try to get a more detailed address using reverse geocoding
-            val locationResult = try {
-                val geoPoint = GeoPoint(latLng.latitude(), latLng.longitude())
-                mapboxRepository.reverseGeocode(geoPoint)
-                    .getOrNull()
+            try {
+                val geoPoint = GeoPoint(point.latitude(), point.longitude())
+
+                // Get zone boundary name first
+                val zoneBoundaryName = BoundaryFareUtils.determineBoundary(
+                    geoPoint,
+                    zoneBoundaryRepository
+                )
+
+                // Use zone boundary name if available, otherwise use coordinates
+                val address = zoneBoundaryName
+                    ?: "Lat: ${String.format("%.6f", point.latitude())}, Lng: ${String.format("%.6f", point.longitude())}"
+
+                val homeLocation = BookingLocation(
+                    address = address,
+                    coordinates = geoPoint,
+                    placeType = "Home",
+                    placeName = zoneBoundaryName // Save zone boundary name here
+                )
+
+                saveHomeAddress(homeLocation)
+                _uiState.value = _uiState.value.copy(
+                    isSelectingHomeLocation = false,
+                    homeAddress = homeLocation
+                )
+                Log.d("PassengerViewModel", "Home location set: $address (Zone: $zoneBoundaryName)")
             } catch (e: Exception) {
-                Log.e("PassengerHomeViewModel", "Failed to reverse geocode location", e)
-                null
+                Log.e("PassengerViewModel", "Error setting home location", e)
             }
-
-            val homeAddress = BookingLocation(
-                address = locationResult?.fullAddress ?: "Selected Home Location",
-                coordinates = GeoPoint(latLng.latitude(), latLng.longitude())
-            )
-
-            saveHomeAddress(homeAddress)
-            _uiState.value = _uiState.value.copy(isSelectingHomeLocation = false)
         }
     }
 
@@ -2370,26 +2404,60 @@ class PassengerHomeViewModel @Inject constructor(
     /**
      * Set favorite location from map selection
      */
-    fun setFavoriteLocationFromMap(latLng: MapboxPoint) {
+//    fun setFavoriteLocationFromMap(latLng: MapboxPoint) {
+//        viewModelScope.launch {
+//            // Try to get a more detailed address using reverse geocoding
+//            val locationResult = try {
+//                val geoPoint = GeoPoint(latLng.latitude(), latLng.longitude())
+//                mapboxRepository.reverseGeocode(geoPoint)
+//                    .getOrNull()
+//            } catch (e: Exception) {
+//                Log.e("PassengerHomeViewModel", "Failed to reverse geocode location", e)
+//                null
+//            }
+//
+//            val favoriteLocation = BookingLocation(
+//                address = locationResult?.fullAddress ?: "Favorite Location",
+//                coordinates = GeoPoint(latLng.latitude(), latLng.longitude())
+//            )
+//
+//            // Add to saved places
+//            saveFavoritePlace(favoriteLocation)
+//            _uiState.value = _uiState.value.copy(isSelectingFavoriteLocation = false)
+//        }
+//    }
+
+    fun setFavoriteLocationFromMap(point: MapboxPoint) {
         viewModelScope.launch {
-            // Try to get a more detailed address using reverse geocoding
-            val locationResult = try {
-                val geoPoint = GeoPoint(latLng.latitude(), latLng.longitude())
-                mapboxRepository.reverseGeocode(geoPoint)
-                    .getOrNull()
+            try {
+                val geoPoint = GeoPoint(point.latitude(), point.longitude())
+
+                // Get zone boundary name first
+                val zoneBoundaryName = BoundaryFareUtils.determineBoundary(
+                    geoPoint,
+                    zoneBoundaryRepository
+                )
+
+                // Use zone boundary name if available, otherwise use coordinates
+                val address = zoneBoundaryName
+                    ?: "Lat: ${String.format("%.6f", point.latitude())}, Lng: ${String.format("%.6f", point.longitude())}"
+
+                val favoriteLocation = BookingLocation(
+                    address = address,
+                    coordinates = geoPoint,
+                    placeType = "Favorite_${System.currentTimeMillis()}",
+                    placeName = zoneBoundaryName // Save zone boundary name here
+                )
+
+                saveFavoritePlace(favoriteLocation)
+                _uiState.value = _uiState.value.copy(
+                    isSelectingFavoriteLocation = false
+                )
+                loadSavedPlaces() // Reload to show the new favorite
+                Log.d("PassengerViewModel", "Favorite location set: $address (Zone: $zoneBoundaryName)")
             } catch (e: Exception) {
-                Log.e("PassengerHomeViewModel", "Failed to reverse geocode location", e)
-                null
+                Log.e("PassengerViewModel", "Error setting favorite location", e)
             }
-
-            val favoriteLocation = BookingLocation(
-                address = locationResult?.fullAddress ?: "Favorite Location",
-                coordinates = GeoPoint(latLng.latitude(), latLng.longitude())
-            )
-
-            // Add to saved places
-            saveFavoritePlace(favoriteLocation)
-            _uiState.value = _uiState.value.copy(isSelectingFavoriteLocation = false)
         }
     }
 
