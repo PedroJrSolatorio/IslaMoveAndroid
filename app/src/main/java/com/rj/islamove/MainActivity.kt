@@ -14,6 +14,7 @@ import com.rj.islamove.data.repository.DriverRepository
 import com.rj.islamove.data.services.SessionMonitorService
 import com.rj.islamove.data.services.AuthService
 import com.rj.islamove.ui.navigation.IslamoveNavigation
+import com.rj.islamove.ui.navigation.Screen
 import com.rj.islamove.ui.theme.IslamoveTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -36,6 +37,7 @@ class MainActivity : ComponentActivity() {
     lateinit var authService: AuthService
 
     private var logoutJob: Job? = null
+    private var wasForceLoggedOut = false
 
     companion object {
         private const val TAG = "MainActivity"
@@ -44,7 +46,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        Log.d(TAG, "onCreate called")
+        Log.d(TAG, "onCreate called, wasForceLoggedOut: $wasForceLoggedOut")
 
         try {
             enableEdgeToEdge()
@@ -53,8 +55,13 @@ class MainActivity : ComponentActivity() {
             authService.addForceLogoutListener {
                 lifecycleScope.launch {
                     try {
-                        Log.d(TAG, "Force logout triggered, stopping monitoring and restarting")
+                        Log.d(TAG, "Force logout triggered, stopping monitoring")
                         sessionMonitorService.stopSessionMonitoring()
+
+                        // Set flag to prevent auto-login on recreate
+                        wasForceLoggedOut = true
+
+                        // Recreate activity to reset navigation state
                         recreate()
                     } catch (e: Exception) {
                         Log.e(TAG, "Error during force logout", e)
@@ -68,7 +75,14 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
                     ) {
-                        IslamoveNavigation()
+                        // Start from Login screen if force logged out, otherwise Splash
+                        val startDestination = if (wasForceLoggedOut) {
+                            Screen.Login.route
+                        } else {
+                            Screen.Splash.route
+                        }
+
+                        IslamoveNavigation(startDestination = startDestination)
                     }
                 }
             }
@@ -83,6 +97,13 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         try {
             Log.d(TAG, "onStart called")
+
+            // Don't start session monitoring if we were force logged out
+            if (wasForceLoggedOut) {
+                Log.d(TAG, "Skipping session monitoring - force logged out")
+                wasForceLoggedOut = false // Reset flag
+                return
+            }
 
             // Start session monitoring when activity starts (becomes visible)
             val currentUser = auth.currentUser
@@ -115,7 +136,7 @@ class MainActivity : ComponentActivity() {
             logoutJob?.cancel()
 
             // Only set driver offline when activity is actually destroyed (app terminated)
-            if (isFinishing) {
+            if (isFinishing && !wasForceLoggedOut) {
                 handleAppTerminated()
             }
         } catch (e: Exception) {
