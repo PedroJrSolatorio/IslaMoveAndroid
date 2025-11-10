@@ -388,6 +388,83 @@ private fun DashboardContent(
     onNavigateToMissedRequests: () -> Unit,
     zoneBoundaryRepository: ZoneBoundaryRepository
 ) {
+    // Add state to track completed trips for today and this week
+    val todayTrips = remember { mutableStateOf<List<Booking>>(emptyList()) }
+    val weekTrips = remember { mutableStateOf<List<Booking>>(emptyList()) }
+    val isLoadingEarnings = remember { mutableStateOf(false) }
+
+    // Calculate date ranges for today and this week
+    val todayRange = remember {
+        val startOfDay = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val endOfDay = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 23)
+            set(Calendar.MINUTE, 59)
+            set(Calendar.SECOND, 59)
+            set(Calendar.MILLISECOND, 999)
+        }
+        DateRange(startOfDay.timeInMillis, endOfDay.timeInMillis, "Today")
+    }
+
+    val weekRange = remember {
+        val startOfWeek = Calendar.getInstance().apply {
+            set(Calendar.DAY_OF_WEEK, Calendar.SUNDAY)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val endOfWeek = Calendar.getInstance().apply {
+            set(Calendar.DAY_OF_WEEK, Calendar.SUNDAY)
+            add(Calendar.DAY_OF_WEEK, 6)
+            set(Calendar.HOUR_OF_DAY, 23)
+            set(Calendar.MINUTE, 59)
+            set(Calendar.SECOND, 59)
+            set(Calendar.MILLISECOND, 999)
+        }
+        DateRange(startOfWeek.timeInMillis, endOfWeek.timeInMillis, "This Week")
+    }
+
+    // Load earnings when screen is displayed or when currentBooking changes (indicating a trip might have completed)
+    LaunchedEffect(uiState.currentBooking?.id) {
+        isLoadingEarnings.value = true
+
+        // Load today's trips
+        viewModel.getDriverCompletedTrips(todayRange).fold(
+            onSuccess = { trips ->
+                todayTrips.value = trips
+            },
+            onFailure = { error ->
+                android.util.Log.e("DashboardContent", "Failed to load today's trips", error)
+            }
+        )
+
+        // Load this week's trips
+        viewModel.getDriverCompletedTrips(weekRange).fold(
+            onSuccess = { trips ->
+                weekTrips.value = trips
+            },
+            onFailure = { error ->
+                android.util.Log.e("DashboardContent", "Failed to load week's trips", error)
+            }
+        )
+
+        isLoadingEarnings.value = false
+    }
+
+    // Calculate earnings from the loaded trips
+    val todayEarnings = remember(todayTrips.value) {
+        viewModel.calculateEarningsForDateRange(todayTrips.value)
+    }
+
+    val weeklyEarnings = remember(weekTrips.value) {
+        viewModel.calculateEarningsForDateRange(weekTrips.value)
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 120.dp),
@@ -501,12 +578,20 @@ private fun DashboardContent(
                                     fontSize = 12.sp,
                                     color = Color.White
                                 )
-                                Text(
-                                    text = "₱${kotlin.math.floor(uiState.todayEarnings).toInt()}",
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
+                                if (isLoadingEarnings.value) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Text(
+                                        text = "₱${kotlin.math.floor(todayEarnings).toInt()}",
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
                             }
                         }
 
@@ -522,12 +607,20 @@ private fun DashboardContent(
                                     fontSize = 12.sp,
                                     color = Color.White
                                 )
-                                Text(
-                                    text = "₱${kotlin.math.floor(uiState.weeklyEarnings).toInt()}",
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
+                                if (isLoadingEarnings.value) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Text(
+                                        text = "₱${kotlin.math.floor(weeklyEarnings).toInt()}",
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
                             }
                         }
                     }
