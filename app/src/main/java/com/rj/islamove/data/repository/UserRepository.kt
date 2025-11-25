@@ -631,19 +631,23 @@ class UserRepository @Inject constructor(
         driverUid: String,
         documentType: String,
         imageUri: Uri,
-        imageDescription: String = ""
+        imageDescription: String = "",
+        isRegistration: Boolean = false,
+        tempUserId: String? = null
     ): Result<String> {
         return try {
-            // Upload to Cloudinary
+            // ✅ Upload to registration_temp/{tempUserId} when re-uploading
             val uploadResult = cloudinaryRepository.uploadImage(
                 context = context,
                 imageUri = imageUri,
-                folder = "driver_documents",
-                publicId = "${driverUid}_${documentType}_${imageDescription}_${System.currentTimeMillis()}"
+                folder = documentType,
+                publicId = null,
+                tempUserId = if (isRegistration) tempUserId else null
             )
 
             uploadResult.fold(
                 onSuccess = { imageUrl ->
+                    // ALWAYS update Firestore (removed the isRegistration check)
                     // Get existing document or create new one
                     val existingUser = getUserByUid(driverUid).getOrNull()
                     val existingDocument = existingUser?.driverData?.documents?.get(documentType)
@@ -655,19 +659,7 @@ class UserRepository @Inject constructor(
                     )
 
                     val updatedImages = if (existingDocument != null) {
-                        // Check for duplicate images by URL or description
-                        val existingImages = existingDocument.images.toMutableList()
-
-                        // Remove any existing image with the same description or similar URL pattern
-                        existingImages.removeAll { existingImage ->
-                            // Check if images have same description (indicating user selected same file)
-                            existingImage.description == newImage.description ||
-                            // Check if URLs are similar (same file uploaded multiple times)
-                            Companion.extractFilePattern(existingImage.url) == Companion.extractFilePattern(newImage.url)
-                        }
-
-                        // Add the new image
-                        existingImages + newImage
+                        listOf(newImage)
                     } else {
                         listOf(newImage)
                     }
@@ -695,6 +687,7 @@ class UserRepository @Inject constructor(
                 }
             )
         } catch (e: Exception) {
+            Log.e("UserRepository", "Failed to upload driver document", e)
             Result.failure(e)
         }
     }
@@ -1006,18 +999,22 @@ class UserRepository @Inject constructor(
         studentUid: String,
         imageUri: Uri,
         studentIdNumber: String = "",
-        school: String = ""
+        school: String = "",
+        isRegistration: Boolean = false,
+        tempUserId: String? = null
     ): Result<String> {
         return try {
-            // Upload to Cloudinary
+            // Upload to registration_temp/{tempUserId} when re-uploading
             val imageUrl = cloudinaryRepository.uploadImage(
                 context = context,
                 imageUri = imageUri,
-                folder = "student_documents",
-                publicId = "student_${studentUid}_${System.currentTimeMillis()}"
+                folder = "passenger_id",
+                publicId = null,
+                tempUserId = if (isRegistration) tempUserId else null
             ).getOrThrow()
 
-            // Update student document in Firestore
+            // ALWAYS update Firestore (removed the isRegistration check)
+            // The difference is: re-uploads go to temp storage, but we still save the URL
             val updates = mapOf(
                 "studentDocument.studentIdUrl" to imageUrl,
                 "studentDocument.studentIdNumber" to studentIdNumber,
@@ -1035,6 +1032,7 @@ class UserRepository @Inject constructor(
 
             Result.success(imageUrl)
         } catch (e: Exception) {
+            Log.e("UserRepository", "Failed to upload student document", e)
             Result.failure(e)
         }
     }

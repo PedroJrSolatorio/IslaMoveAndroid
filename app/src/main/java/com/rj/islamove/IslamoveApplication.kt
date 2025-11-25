@@ -4,7 +4,9 @@ import android.app.Application
 import android.util.Log
 import com.google.firebase.FirebaseApp
 import com.google.firebase.database.FirebaseDatabase
+import com.rj.islamove.data.repository.CloudinaryDirectRepository
 import dagger.hilt.android.HiltAndroidApp
+import javax.inject.Inject
 
 @HiltAndroidApp
 class IslamoveApplication : Application() {
@@ -14,6 +16,9 @@ class IslamoveApplication : Application() {
             private set
         private const val TAG = "IslamoveApplication"
     }
+
+    @Inject
+    lateinit var cloudinaryDirectRepository: CloudinaryDirectRepository
 
     override fun onCreate() {
         super.onCreate()
@@ -34,6 +39,11 @@ class IslamoveApplication : Application() {
             Log.d(TAG, "Enabling Firebase persistence...")
             FirebaseDatabase.getInstance().setPersistenceEnabled(true)
             Log.d(TAG, "Firebase persistence enabled successfully")
+
+            // Initialize Cloudinary for direct uploads
+            Log.d(TAG, "Initializing Cloudinary...")
+            cloudinaryDirectRepository.initialize(this)
+            Log.d(TAG, "Cloudinary initialized successfully")
 
             Log.d(TAG, "Application onCreate completed successfully")
         } catch (e: Exception) {

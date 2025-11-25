@@ -78,6 +78,7 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.*
 import com.rj.islamove.R
+import kotlinx.coroutines.delay
 
 // Extension function to find Activity from Context
 fun android.content.Context.findActivity(): android.app.Activity? {
@@ -2106,6 +2107,7 @@ private fun ProfileContent(
     // Force refresh user data when ProfileContent is first composed
     LaunchedEffect(Unit) {
         android.util.Log.d("ProfileContent", "ProfileContent LaunchedEffect - calling refreshUserData")
+        viewModel.clearMessages()
         viewModel.refreshUserData()
     }
 
@@ -2145,15 +2147,13 @@ private fun ProfileContent(
 
     // Upload image to Cloudinary using ViewModel
     fun uploadImageToCloudinary(uri: Uri) {
-        try {
-            isUploading = true
-            android.util.Log.d("ProfileImage", "Starting Cloudinary upload")
-            viewModel.uploadProfileImage(uri)
-            isUploading = false
-        } catch (e: Exception) {
-            android.util.Log.e("ProfileImage", "Upload failed", e)
-            isUploading = false
-        }
+        isUploading = true
+        android.util.Log.d("ProfileImage", "Starting Cloudinary upload, isUploading set to true")
+
+        viewModel.uploadProfileImage(uri)
+
+        // Don't set isUploading = false here!
+        // Wait for the actual upload to complete via a callback or state observation
     }
 
     // Function to upload image using ViewModel
@@ -2161,11 +2161,36 @@ private fun ProfileContent(
         val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
         if (currentUser == null) {
             android.util.Log.e("ProfileImage", "User not authenticated")
+            isUploading = false
             return
         }
 
         // Upload to Cloudinary using ViewModel
         uploadImageToCloudinary(uri)
+    }
+
+    // ADD: Observe upload completion from ViewModel state
+    LaunchedEffect(uiState.currentUser?.profileImageUrl, uiState.currentUser?.updatedAt) {
+        if (isUploading) {
+            // Check if the profile image URL has been updated
+            val newImageUrl = uiState.currentUser?.profileImageUrl
+            if (!newImageUrl.isNullOrEmpty() && newImageUrl != profileImageUri.toString()) {
+                android.util.Log.d("ProfileImage", "Upload completed successfully, isUploading set to false")
+                isUploading = false
+                showImagePicker = false // Close the dialog automatically
+            }
+        }
+    }
+
+    // ADD: Timeout mechanism to prevent stuck uploading state
+    LaunchedEffect(isUploading) {
+        if (isUploading) {
+            delay(30000) // 30 second timeout
+            if (isUploading) {
+                android.util.Log.w("ProfileImage", "Upload timeout - resetting isUploading state")
+                isUploading = false
+            }
+        }
     }
 
     // Load saved profile image on startup and refresh user data
@@ -2299,7 +2324,7 @@ private fun ProfileContent(
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
-        if (success && cameraImageUri != null) {
+        if (success && cameraImageUri != null && !isUploading) {
             // Photo was taken successfully, use the camera URI
             profileImageUri = cameraImageUri
             android.util.Log.d("ProfileImage", "Camera photo taken successfully: $cameraImageUri")
@@ -2314,11 +2339,13 @@ private fun ProfileContent(
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
-        if (uri != null) {
+        if (uri != null && !isUploading) {
             profileImageUri = uri
             android.util.Log.d("ProfileImage", "Gallery image selected: $uri")
             // Save locally
             saveImageLocally(uri)
+        } else if (isUploading) {
+            android.util.Log.w("ProfileImage", "Upload already in progress, ignoring new selection")
         }
     }
     
@@ -2326,11 +2353,13 @@ private fun ProfileContent(
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) {
+        if (granted && !isUploading) {
             val uri = createImageUri()
             cameraImageUri = uri // Store the URI for later use
             android.util.Log.d("ProfileImage", "Camera URI created: $uri")
             cameraLauncher.launch(uri)
+        } else if (isUploading) {
+            android.util.Log.w("ProfileImage", "Upload already in progress, camera not launched")
         } else {
             android.util.Log.e("ProfileImage", "Camera permission denied")
         }
@@ -2404,7 +2433,12 @@ private fun ProfileContent(
         ) {
             // Profile picture with edit badge - clickable
             Box(
-                modifier = Modifier.clickable { showImagePicker = true }
+                modifier = Modifier.clickable {
+                    // Prevent opening image picker while an upload is in progress
+                    if (!isUploading) {
+                        showImagePicker = true
+                    }
+                }
             ) {
                 Box(
                     modifier = Modifier
@@ -2767,9 +2801,13 @@ private fun ProfileContent(
     }
     
     // Image picker dialog
-    if (showImagePicker) {
+    if (showImagePicker && !isUploading) {
         AlertDialog(
-            onDismissRequest = { showImagePicker = false },
+            onDismissRequest = {
+                if (!isUploading) {
+                    showImagePicker = false
+                }
+            },
             title = {
                 Text(
                     text = "Change Profile Picture",
@@ -2786,7 +2824,7 @@ private fun ProfileContent(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { 
+                            .clickable(enabled = !isUploading) {
                                 showImagePicker = false
                                 cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
                             }
@@ -2794,7 +2832,7 @@ private fun ProfileContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            Icons.Default.LocationOn,
+                            Icons.Default.CameraAlt,
                             contentDescription = null,
                             tint = IslamovePrimary,
                             modifier = Modifier.size(24.dp)
@@ -2802,7 +2840,8 @@ private fun ProfileContent(
                         Spacer(modifier = Modifier.width(16.dp))
                         Text(
                             text = "Take a photo",
-                            fontSize = 16.sp
+                            fontSize = 16.sp,
+                            color = if (isUploading) Color.Gray else Color.Unspecified
                         )
                     }
                     
@@ -2810,7 +2849,7 @@ private fun ProfileContent(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { 
+                            .clickable(enabled = !isUploading) {
                                 showImagePicker = false
                                 galleryLauncher.launch("image/*")
                             }
@@ -2818,7 +2857,7 @@ private fun ProfileContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            Icons.Default.Star,
+                            Icons.Default.Photo,
                             contentDescription = null,
                             tint = IslamovePrimary,
                             modifier = Modifier.size(24.dp)
@@ -2826,14 +2865,42 @@ private fun ProfileContent(
                         Spacer(modifier = Modifier.width(16.dp))
                         Text(
                             text = "Choose from gallery",
-                            fontSize = 16.sp
+                            fontSize = 16.sp,
+                            color = if (isUploading) Color.Gray else Color.Unspecified
                         )
+                    }
+
+                    // Show uploading indicator
+                    if (isUploading) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Uploading...",
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showImagePicker = false }) {
-                    Text("Cancel")
+                TextButton(onClick = {
+                    if (!isUploading) {
+                        showImagePicker = false
+                    }
+                },
+                    enabled = !isUploading
+                ) {
+                    Text(if (isUploading) "Uploading..." else "Cancel")
                 }
             },
             dismissButton = null

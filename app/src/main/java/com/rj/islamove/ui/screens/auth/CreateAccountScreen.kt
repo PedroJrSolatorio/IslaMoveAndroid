@@ -1,6 +1,7 @@
 package com.rj.islamove.ui.screens.auth
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.border
@@ -110,6 +111,11 @@ fun CreateAccountScreen(
                 phoneNumberError == null &&
                 termsAccepted &&
                 privacyAccepted
+    }
+
+    BackHandler(enabled = uiState.isLoading) {
+        // Show dialog instead of allowing navigation
+        // Do nothing - this blocks the back button
     }
 
     LaunchedEffect(uiState.isSuccess) {

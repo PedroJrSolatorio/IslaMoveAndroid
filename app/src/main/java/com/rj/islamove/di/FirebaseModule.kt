@@ -24,9 +24,12 @@ import dagger.hilt.components.SingletonComponent
 import okhttp3.OkHttpClient
 import javax.inject.Singleton
 import com.rj.islamove.BuildConfig
+import com.rj.islamove.data.repository.CloudinaryDirectRepository
+import com.rj.islamove.data.repository.CloudinaryRepository
 import com.rj.islamove.data.repository.PassengerReportRepository
 import com.rj.islamove.data.repository.PassengerReportRepositoryImpl
 import dagger.Binds
+import java.util.concurrent.TimeUnit
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -122,7 +125,12 @@ object FirebaseModule {
     @Provides
     @Singleton
     fun provideOkHttpClient(): OkHttpClient {
-        return OkHttpClient.Builder().build()
+        return OkHttpClient.Builder()
+            .connectTimeout(120, TimeUnit.SECONDS)  // 2 minutes for cold starts
+            .readTimeout(120, TimeUnit.SECONDS)     // 2 minutes
+            .writeTimeout(120, TimeUnit.SECONDS)    // 2 minutes
+            .callTimeout(120, TimeUnit.SECONDS)     // Overall call timeout
+            .build()
     }
 
     @Provides
@@ -135,6 +143,22 @@ object FirebaseModule {
     @Singleton
     fun provideSupportCommentRepository(firestore: FirebaseFirestore): SupportCommentRepository {
         return SupportCommentRepository(firestore)
+    }
+
+    @Provides
+    @Singleton
+    fun provideCloudinaryDirectRepository(): CloudinaryDirectRepository {
+        return CloudinaryDirectRepository()
+    }
+
+    @Provides
+    @Singleton
+    fun provideCloudinaryRepository(
+        auth: FirebaseAuth,
+        httpClient: OkHttpClient,
+        cloudinaryDirectRepository: CloudinaryDirectRepository
+    ): CloudinaryRepository {
+        return CloudinaryRepository(auth, httpClient, cloudinaryDirectRepository)
     }
 }
 

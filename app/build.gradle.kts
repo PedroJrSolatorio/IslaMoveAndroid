@@ -41,8 +41,8 @@ android {
 
         // Add Cloudinary configuration
         buildConfigField("String", "CLOUDINARY_CLOUD_NAME", "\"${getLocalProperty("CLOUDINARY_CLOUD_NAME", "")}\"")
-        buildConfigField("String", "CLOUDINARY_API_KEY", "\"${getLocalProperty("CLOUDINARY_API_KEY", "")}\"")
-        buildConfigField("String", "CLOUDINARY_API_SECRET", "\"${getLocalProperty("CLOUDINARY_API_SECRET", "")}\"")
+        buildConfigField("String", "CLOUDINARY_UPLOAD_PRESET", "\"${getLocalProperty("CLOUDINARY_UPLOAD_PRESET", "")}\"")
+        buildConfigField("String", "CLOUDINARY_PROFILE_PRESET", "\"${getLocalProperty("CLOUDINARY_PROFILE_PRESET", "")}\"")
         buildConfigField("String", "RENDER_BASE_URL", "\"${getLocalProperty("RENDER_BASE_URL", "")}\"")
     }
 

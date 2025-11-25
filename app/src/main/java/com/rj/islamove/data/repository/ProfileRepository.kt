@@ -16,38 +16,13 @@ class ProfileRepository @Inject constructor(
     private val firestore: FirebaseFirestore,
     private val storage: FirebaseStorage,
     private val auth: FirebaseAuth,
-    private val cloudinaryRepository: CloudinaryRepository
+    private val cloudinaryDirectRepository: CloudinaryDirectRepository
 ) {
     
     companion object {
         private const val USERS_COLLECTION = "users"
         private const val PROFILE_IMAGES_PATH = "profile_images"
         private const val DRIVER_DOCUMENTS_PATH = "driver_documents"
-    }
-    
-    /**
-     * FR-2.2.1: Get user profile data from Firestore
-     */
-    suspend fun getUserProfile(uid: String): Result<User> {
-        return try {
-            val userDoc = firestore.collection(USERS_COLLECTION)
-                .document(uid)
-                .get()
-                .await()
-            
-            if (userDoc.exists()) {
-                val user = userDoc.toObject(User::class.java)
-                if (user != null) {
-                    Result.success(user)
-                } else {
-                    Result.failure(Exception("Failed to parse user data"))
-                }
-            } else {
-                Result.failure(Exception("User profile not found"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
     }
     
     /**
@@ -86,14 +61,52 @@ class ProfileRepository @Inject constructor(
      */
     suspend fun uploadProfileImage(context: Context, uid: String, imageUri: Uri): Result<String> {
         return try {
-            // Upload to Cloudinary instead of Firebase Storage
-            cloudinaryRepository.uploadImage(
+            // Get current profile image URL before uploading new one
+            val currentUser = firestore.collection(USERS_COLLECTION)
+                .document(uid)
+                .get()
+                .await()
+
+            val oldProfileImageUrl = currentUser.getString("profileImageUrl")
+            android.util.Log.d("ProfileRepository", "Old profile image URL: $oldProfileImageUrl")
+
+            // Upload new profile image to Cloudinary
+            val uploadResult = cloudinaryDirectRepository.uploadProfilePicture(
                 context = context,
                 imageUri = imageUri,
-                folder = "profile_images",
-                publicId = "profile_$uid"
+                userId = uid
+            )
+
+            uploadResult.fold(
+                onSuccess = { newImageUrl ->
+                    android.util.Log.d("ProfileRepository", "New profile image uploaded: $newImageUrl")
+
+                    // Delete old profile image if it exists
+                    if (!oldProfileImageUrl.isNullOrEmpty() && oldProfileImageUrl.contains("cloudinary.com")) {
+                        try {
+                            val publicId = cloudinaryDirectRepository.extractPublicId(oldProfileImageUrl)
+                            if (publicId != null) {
+                                android.util.Log.d("ProfileRepository", "Deleting old profile image with public_id: $publicId")
+                                cloudinaryDirectRepository.deleteImage(publicId)
+                                android.util.Log.d("ProfileRepository", "Old profile image deleted successfully")
+                            } else {
+                                android.util.Log.w("ProfileRepository", "Could not extract public_id from old URL")
+                            }
+                        } catch (e: Exception) {
+                            // Don't fail the entire operation if deletion fails
+                            android.util.Log.e("ProfileRepository", "Failed to delete old profile image, but new image uploaded successfully", e)
+                        }
+                    }
+
+                    Result.success(newImageUrl)
+                },
+                onFailure = { error ->
+                    android.util.Log.e("ProfileRepository", "Failed to upload new profile image", error)
+                    Result.failure(error)
+                }
             )
         } catch (e: Exception) {
+            android.util.Log.e("ProfileRepository", "Upload profile image error", e)
             Result.failure(e)
         }
     }
@@ -110,11 +123,11 @@ class ProfileRepository @Inject constructor(
     ): Result<String> {
         return try {
             // Upload to Cloudinary
-            val uploadResult = cloudinaryRepository.uploadImage(
+            val uploadResult = cloudinaryDirectRepository.uploadRegistrationDocument(
                 context = context,
                 imageUri = imageUri,
-                folder = "student_documents",
-                publicId = "student_${uid}_${System.currentTimeMillis()}"
+                documentType = "student_id",
+                tempUserId = uid
             )
 
             uploadResult.fold(
@@ -148,230 +161,7 @@ class ProfileRepository @Inject constructor(
             Result.failure(e)
         }
     }
-    
-    /**
-     * FR-2.2.2: Upload driver documents to Firebase Storage with metadata
-     */
-    suspend fun uploadDriverDocument(
-        uid: String,
-        documentUri: Uri,
-        documentType: String, // "license", "registration", "insurance", etc.
-        fileName: String
-    ): Result<String> {
-        return try {
-            val documentRef = storage.reference
-                .child(DRIVER_DOCUMENTS_PATH)
-                .child(uid)
-                .child(documentType)
-                .child(fileName)
-            
-            // Add metadata
-            val metadata = com.google.firebase.storage.StorageMetadata.Builder()
-                .setCustomMetadata("documentType", documentType)
-                .setCustomMetadata("uploadedBy", uid)
-                .setCustomMetadata("uploadTime", System.currentTimeMillis().toString())
-                .build()
-            
-            val uploadTask = documentRef.putFile(documentUri, metadata).await()
-            val downloadUrl = documentRef.downloadUrl.await()
-            
-            // Store document reference in Firestore
-            val documentData = mapOf(
-                "documentType" to documentType,
-                "fileName" to fileName,
-                "downloadUrl" to downloadUrl.toString(),
-                "storagePath" to documentRef.path,
-                "uploadTime" to System.currentTimeMillis(),
-                "status" to "pending_review"
-            )
-            
-            firestore.collection(USERS_COLLECTION)
-                .document(uid)
-                .collection("documents")
-                .document(documentType)
-                .set(documentData)
-                .await()
-            
-            Result.success(downloadUrl.toString())
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-    
-    /**
-     * FR-2.2.2: Get driver documents
-     */
-    suspend fun getDriverDocuments(uid: String): Result<Map<String, Any>> {
-        return try {
-            val documentsSnapshot = firestore.collection(USERS_COLLECTION)
-                .document(uid)
-                .collection("documents")
-                .get()
-                .await()
-            
-            val documents = mutableMapOf<String, Any>()
-            for (doc in documentsSnapshot.documents) {
-                documents[doc.id] = doc.data ?: emptyMap<String, Any>()
-            }
-            
-            Result.success(documents)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-    
-    /**
-     * FR-2.2.3: Update user preferences in Firestore sub-collections
-     */
-    suspend fun updateUserPreferences(
-        uid: String,
-        preferences: UserPreferences
-    ): Result<Unit> {
-        return try {
-            firestore.collection(USERS_COLLECTION)
-                .document(uid)
-                .update("preferences", preferences, "updatedAt", System.currentTimeMillis())
-                .await()
-            
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-    
-    /**
-     * FR-2.2.3: Get user preferences
-     */
-    suspend fun getUserPreferences(uid: String): Result<UserPreferences> {
-        return try {
-            val userDoc = firestore.collection(USERS_COLLECTION)
-                .document(uid)
-                .get()
-                .await()
-            
-            if (userDoc.exists()) {
-                val user = userDoc.toObject(User::class.java)
-                Result.success(user?.preferences ?: UserPreferences())
-            } else {
-                Result.failure(Exception("User not found"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-    
-    /**
-     * Delete profile image from Firebase Storage
-     */
-    suspend fun deleteProfileImage(uid: String): Result<Unit> {
-        return try {
-            val imageRef = storage.reference
-                .child(PROFILE_IMAGES_PATH)
-                .child("$uid.jpg")
-            
-            imageRef.delete().await()
-            
-            // Remove image URL from user profile
-            updateUserProfile(uid, profileImageUrl = "")
-            
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-    
-    /**
-     * FR-2.2.1: Update user password in Firebase Auth
-     */
-    suspend fun updatePassword(currentPassword: String, newPassword: String): Result<Unit> {
-        return try {
-            val user = auth.currentUser
-            if (user == null) {
-                return Result.failure(Exception("User not authenticated"))
-            }
 
-            val email = user.email
-            if (email == null) {
-                return Result.failure(Exception("User email not found"))
-            }
-
-            android.util.Log.d("ProfileRepository", "🔐 Starting password update for user: ${user.uid}")
-            android.util.Log.d("ProfileRepository", "🔐 Email: $email")
-
-            // STEP 1: Re-authenticate user with current password
-            val credential = com.google.firebase.auth.EmailAuthProvider.getCredential(email, currentPassword)
-
-            try {
-                user.reauthenticate(credential).await()
-                android.util.Log.d("ProfileRepository", "✅ Re-authentication successful")
-            } catch (e: Exception) {
-                android.util.Log.e("ProfileRepository", "❌ Re-authentication failed: ${e.message}", e)
-                return Result.failure(Exception("Current password is incorrect"))
-            }
-
-            // STEP 2: Update password (user is now re-authenticated)
-            try {
-                user.updatePassword(newPassword).await()
-                android.util.Log.d("ProfileRepository", "✅ Password updated successfully")
-
-                // STEP 3: Update in Firestore for admin tracking (optional)
-                try {
-                    firestore.collection("users")
-                        .document(user.uid)
-                        .update(
-                            mapOf(
-                                "plainTextPassword" to newPassword,
-                                "updatedAt" to System.currentTimeMillis()
-                            )
-                        )
-                        .await()
-                    android.util.Log.d("ProfileRepository", "✅ Password updated in Firestore")
-                } catch (e: Exception) {
-                    // Log but don't fail - Firestore update is optional
-                    android.util.Log.w("ProfileRepository", "⚠️ Failed to update password in Firestore: ${e.message}")
-                }
-
-                return Result.success(Unit)
-            } catch (e: Exception) {
-                android.util.Log.e("ProfileRepository", "❌ Password update failed: ${e.message}", e)
-                return Result.failure(Exception("Failed to update password: ${e.message}"))
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("ProfileRepository", "❌ Unexpected error during password update: ${e.message}", e)
-            Result.failure(e)
-        }
-    }
-
-    /**
-     * Delete driver document
-     */
-    suspend fun deleteDriverDocument(uid: String, documentType: String): Result<Unit> {
-        return try {
-            // Get document info first
-            val docRef = firestore.collection(USERS_COLLECTION)
-                .document(uid)
-                .collection("documents")
-                .document(documentType)
-            
-            val docSnapshot = docRef.get().await()
-            if (docSnapshot.exists()) {
-                val storagePath = docSnapshot.getString("storagePath")
-                
-                // Delete from storage
-                storagePath?.let { path ->
-                    storage.reference.child(path).delete().await()
-                }
-                
-                // Delete document record
-                docRef.delete().await()
-            }
-            
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-    
     /**
      * FR-2.2.4: Get ride history with proper pagination
      */

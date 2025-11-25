@@ -40,7 +40,11 @@ class SessionMonitorService @Inject constructor(
 
         monitoringScope?.launch {
             try {
+                // Add a small delay to ensure session document is created first
+                kotlinx.coroutines.delay(1500)
+
                 authRepository.monitorCurrentSession(uid).collectLatest { isActive ->
+                    Log.d(TAG, "Session status received: $isActive")
                     if (!isActive) {
                         Log.d(TAG, "Session deactivated, triggering global logout")
                         triggerGlobalLogout()
@@ -48,7 +52,6 @@ class SessionMonitorService @Inject constructor(
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error in session monitoring", e)
-                stopSessionMonitoring()
             }
         }
     }
@@ -72,9 +75,4 @@ class SessionMonitorService @Inject constructor(
         authService.forceLogout()
         stopSessionMonitoring()
     }
-
-    /**
-     * Check if monitoring is active
-     */
-    fun isMonitoringActive(): Boolean = isMonitoring
 }

@@ -36,7 +36,8 @@ class AuthRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val firebaseAuth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
-    private val fcmTokenService: FCMTokenService
+    private val fcmTokenService: FCMTokenService,
+    private val userRepository: UserRepository
 ) {
 
     private var verificationId: String? = null
@@ -163,29 +164,25 @@ class AuthRepository @Inject constructor(
         val listener = sessionDocRef.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 android.util.Log.e("AuthRepository", "Session monitoring error", error)
-                trySend(false)
+                // Don't close on error, just log it
                 return@addSnapshotListener
             }
 
             if (snapshot != null && snapshot.exists()) {
                 val isActive = snapshot.getBoolean("active") ?: true
+                android.util.Log.d("AuthRepository", "Session active status: $isActive")
+                trySend(isActive)
+
                 if (!isActive) {
                     android.util.Log.d("AuthRepository", "Session deactivated by another device")
-                    trySend(false)
                     close()
-                } else {
-                    trySend(true)
                 }
             } else {
-                // Session doesn't exist, log out
-                android.util.Log.d("AuthRepository", "Session document not found")
-                trySend(false)
-                close()
+                // Session doesn't exist yet - this is normal during initial setup
+                android.util.Log.d("AuthRepository", "Session document not found yet - waiting...")
+                // Don't send anything, just wait for the document to be created
             }
         }
-
-        // Send initial status
-        trySend(true)
 
         // Clean up listener when flow is cancelled
         awaitClose {
@@ -226,8 +223,11 @@ class AuthRepository @Inject constructor(
                     firestore.collection("users").document(user.uid).set(newUser).await()
                 }
 
-                // Create session for this device
+                // Create session for this device FIRST and wait for it to complete
                 createSession(user.uid)
+
+                // Add a small delay to ensure Firestore has processed the write
+                kotlinx.coroutines.delay(500)
 
                 // Update FCM token for notifications
                 fcmTokenService.updateUserFCMToken()

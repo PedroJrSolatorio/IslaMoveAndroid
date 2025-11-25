@@ -252,6 +252,18 @@ class PassengerHomeViewModel @Inject constructor(
     }
 
     /**
+     * Clear error and success messages
+     */
+    fun clearMessages() {
+        _uiState.update {
+            it.copy(
+                errorMessage = null,
+                successMessage = null
+            )
+        }
+    }
+
+    /**
      * Check if location permissions are granted
      */
     private fun checkLocationPermissions() {
@@ -337,7 +349,10 @@ class PassengerHomeViewModel @Inject constructor(
 
         locationUpdatesStopCallback = locationUtils.startLocationUpdates(
             onLocationUpdate = { point ->
-                _uiState.value = _uiState.value.copy(currentUserLocation = point)
+                _uiState.value = _uiState.value.copy(
+                    currentUserLocation = point,
+                    errorMessage = null // Clear any location errors when we get a successful update
+                )
 
                 // Update pickup location with reverse geocoded address
                 viewModelScope.launch {
@@ -362,9 +377,20 @@ class PassengerHomeViewModel @Inject constructor(
                 }
             },
             onError = { exception ->
-                _uiState.value = _uiState.value.copy(
-                    errorMessage = "Location update failed: ${exception.message}"
-                )
+                // Only show location errors if user has an active booking or is on map screen
+                // Don't show GPS errors when user is just browsing profile/history
+                val currentBooking = _uiState.value.currentBooking
+                if (currentBooking != null &&
+                    (currentBooking.status == BookingStatus.DRIVER_ARRIVING ||
+                            currentBooking.status == BookingStatus.IN_PROGRESS)) {
+                    // Only show error during active ride when location is critical
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = "Location update failed: ${exception.message}"
+                    )
+                } else {
+                    // Just log it, don't show to user when not critical
+                    Log.w("PassengerHomeVM", "Location update error (non-critical): ${exception.message}")
+                }
             }
         )
     }
@@ -1936,43 +1962,6 @@ class PassengerHomeViewModel @Inject constructor(
     }
 
     /**
-     * Check if coordinates are within Dinagat Islands bounds
-     */
-    private fun isWithinDinagatIslands(coordinates: GeoPoint): Boolean {
-        // Dinagat Islands approximate bounds
-        val minLat = 9.8  // South bound
-        val maxLat = 10.3 // North bound  
-        val minLng = 125.3 // West bound
-        val maxLng = 125.8 // East bound
-
-        val isWithin = coordinates.latitude in minLat..maxLat &&
-                coordinates.longitude in minLng..maxLng
-
-        // Debug logging to help identify location issues
-        if (!isWithin) {
-            android.util.Log.d(
-                "PassengerGeoFence",
-                "Location outside bounds - Lat: ${coordinates.latitude}, Lng: ${coordinates.longitude}"
-            )
-            android.util.Log.d(
-                "PassengerGeoFence",
-                "Expected bounds: Lat[$minLat-$maxLat], Lng[$minLng-$maxLng]"
-            )
-            android.util.Log.d(
-                "PassengerGeoFence",
-                "Lat check: ${coordinates.latitude in minLat..maxLat}, Lng check: ${coordinates.longitude in minLng..maxLng}"
-            )
-        } else {
-            android.util.Log.d(
-                "PassengerGeoFence",
-                "Location within bounds - Lat: ${coordinates.latitude}, Lng: ${coordinates.longitude}"
-            )
-        }
-
-        return isWithin
-    }
-
-    /**
      * Ensure passenger route is available for active booking
      */
     private fun ensurePassengerRouteAvailable(booking: Booking) {
@@ -2014,57 +2003,6 @@ class PassengerHomeViewModel @Inject constructor(
                 }
             }
         }
-    }
-
-    /**
-     * Get admin-configured destination suggestions based on search query
-     */
-    private suspend fun getAdminDestinationSuggestions(query: String): List<BookingLocation> {
-        return try {
-            val serviceAreasResult = serviceAreaManagementRepository.getAllServiceAreas()
-            serviceAreasResult.onSuccess { serviceAreas ->
-                // Get all destinations from all service areas
-                val allDestinations = serviceAreas.flatMap { area ->
-                    area.destinations.filter { destination ->
-                        destination.isActive && destination.name.contains(query, ignoreCase = true)
-                    }
-                }
-
-                // Convert ServiceDestination to BookingLocation
-                return allDestinations.map { destination ->
-                    BookingLocation(
-                        address = destination.name,
-                        coordinates = com.google.firebase.firestore.GeoPoint(
-                            destination.latitude,
-                            destination.longitude
-                        )
-                    )
-                }.take(5) // Limit to 5 suggestions
-            }
-            emptyList()
-        } catch (e: Exception) {
-            Log.e("PassengerHomeViewModel", "Error fetching admin destinations", e)
-            emptyList()
-        }
-    }
-
-    /**
-     * Get local location suggestions based on search query using official San Jose locations
-     */
-    private fun getLocalLocationSuggestions(query: String): List<BookingLocation> {
-        // Filter locations based on query
-        val sanJoseLocations = SanJoseLocationsData.locations.filter { location ->
-            location.name.contains(query, ignoreCase = true) ||
-            location.barangay.contains(query, ignoreCase = true)
-        }
-
-        // Convert SanJoseLocation to BookingLocation
-        return sanJoseLocations.map { sanJoseLocation ->
-            BookingLocation(
-                address = "${sanJoseLocation.name}, ${sanJoseLocation.barangay}, San Jose, Dinagat Islands",
-                coordinates = sanJoseLocation.coordinates
-            )
-        }.take(5) // Limit to 5 suggestions
     }
 
     /**
@@ -2381,17 +2319,6 @@ class PassengerHomeViewModel @Inject constructor(
      */
     fun cancelFavoriteLocationSelection() {
         _uiState.value = _uiState.value.copy(isSelectingFavoriteLocation = false)
-    }
-
-    /**
-     * Start pickup location selection mode
-     */
-    fun startPickupLocationSelection() {
-        _uiState.value = _uiState.value.copy(
-            isSelectingPickupLocation = true,
-            isSelectingHomeLocation = false, // Cancel home selection if active
-            isSelectingFavoriteLocation = false // Cancel favorite selection if active
-        )
     }
 
     /**
@@ -3198,10 +3125,19 @@ class PassengerHomeViewModel @Inject constructor(
                 val currentUser = firebaseAuth.currentUser
                 if (currentUser == null) {
                     android.util.Log.e("ProfileImage", "User not authenticated")
+                    _uiState.update { it.copy(
+                        errorMessage = "User not authenticated"
+                    )}
                     return@launch
                 }
 
-                android.util.Log.d("ProfileImage", "Starting Cloudinary upload for user: ${currentUser.uid}")
+                android.util.Log.d("ProfileImage", "Starting profile image upload for user: ${currentUser.uid}")
+
+                _uiState.update { it.copy(
+                    isLoading = true,
+                    errorMessage = null,
+                    successMessage = null
+                )}
 
                 // Upload to Cloudinary
                 val result = profileRepository.uploadProfileImage(context, currentUser.uid, imageUri)
@@ -3218,16 +3154,38 @@ class PassengerHomeViewModel @Inject constructor(
 
                     if (updateResult.isSuccess) {
                         android.util.Log.d("ProfileImage", "Profile updated successfully with Cloudinary URL")
-                        // Image upload and profile update completed successfully
+                        _uiState.update { it.copy(
+                            isLoading = false,
+                            successMessage = "Profile picture updated successfully"
+                        )}
+
+                        // Auto-clear success message after 2 seconds
+                        delay(2000)
+                        _uiState.update { it.copy(successMessage = null) }
+
+                        // Refresh user data to update UI
+                        refreshUserData()
                     } else {
                         android.util.Log.e("ProfileImage", "Failed to update profile: ${updateResult.exceptionOrNull()}")
+                        _uiState.update { it.copy(
+                            isLoading = false,
+                            errorMessage = "Failed to save profile picture"
+                        )}
                     }
                 } else {
                     android.util.Log.e("ProfileImage", "Cloudinary upload failed: ${result.exceptionOrNull()}")
+                    _uiState.update { it.copy(
+                        isLoading = false,
+                        errorMessage = "Upload failed: ${result.exceptionOrNull()?.message}"
+                    )}
                 }
 
             } catch (e: Exception) {
                 android.util.Log.e("ProfileImage", "Upload process failed", e)
+                _uiState.update { it.copy(
+                    isLoading = false,
+                    errorMessage = "Upload error: ${e.message}"
+                )}
             }
         }
     }

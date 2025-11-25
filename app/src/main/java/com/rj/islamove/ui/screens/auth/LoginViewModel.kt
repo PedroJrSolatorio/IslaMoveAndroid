@@ -60,7 +60,9 @@ class LoginViewModel @Inject constructor(
                                                 pendingUserId = user.uid
                                             )
                                         } else {
-                                            // No other session, proceed normally
+                                            // No other session, session already created in signInWithEmail
+                                            // Add small delay before marking success to ensure monitoring picks up session
+                                            kotlinx.coroutines.delay(200)
                                             _uiState.value = _uiState.value.copy(
                                                 isLoading = false,
                                                 isSuccess = true,
@@ -70,6 +72,7 @@ class LoginViewModel @Inject constructor(
                                     }
                                     .onFailure {
                                         // If session check fails, proceed anyway
+                                        kotlinx.coroutines.delay(200)
                                         _uiState.value = _uiState.value.copy(
                                             isLoading = false,
                                             isSuccess = true,
@@ -78,6 +81,7 @@ class LoginViewModel @Inject constructor(
                                     }
                             } else {
                                 // Admin user - allow multiple devices
+                                kotlinx.coroutines.delay(200)
                                 _uiState.value = _uiState.value.copy(
                                     isLoading = false,
                                     isSuccess = true,
@@ -120,13 +124,17 @@ class LoginViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
 
+            // Use email as tempUserId for registration uploads
+            val tempUserId = email
+
             // Upload passenger ID document to Cloudinary if provided
             var documentUrl: String? = null
             if (idDocumentUri != null) {
                 cloudinaryRepository.uploadImage(
                     context = context,
                     imageUri = idDocumentUri,
-                    folder = "passenger_documents"
+                    folder = "passenger_documents",
+                    tempUserId = tempUserId
                 ).onSuccess { url ->
                     documentUrl = url
                 }.onFailure { exception ->
@@ -150,7 +158,8 @@ class LoginViewModel @Inject constructor(
                     cloudinaryRepository.uploadImage(
                         context = context,
                         imageUri = driverLicenseUri,
-                        folder = "driver_documents/license"
+                        folder = "driver_documents/license",
+                        tempUserId = tempUserId
                     ).onSuccess { url ->
                         licenseUrl = url
                     }.onFailure { exception ->
@@ -167,7 +176,8 @@ class LoginViewModel @Inject constructor(
                     cloudinaryRepository.uploadImage(
                         context = context,
                         imageUri = sjmodaUri,
-                        folder = "driver_documents/insurance"
+                        folder = "driver_documents/insurance",
+                        tempUserId = tempUserId
                     ).onSuccess { url ->
                         sjmodaUrl = url
                     }.onFailure { exception ->
@@ -184,7 +194,8 @@ class LoginViewModel @Inject constructor(
                     cloudinaryRepository.uploadImage(
                         context = context,
                         imageUri = orUri,
-                        folder = "driver_documents/vehicle_inspection"
+                        folder = "driver_documents/vehicle_inspection",
+                        tempUserId = tempUserId
                     ).onSuccess { url ->
                         orUrl = url
                     }.onFailure { exception ->
@@ -201,7 +212,8 @@ class LoginViewModel @Inject constructor(
                     cloudinaryRepository.uploadImage(
                         context = context,
                         imageUri = crUri,
-                        folder = "driver_documents/vehicle_registration"
+                        folder = "driver_documents/vehicle_registration",
+                        tempUserId = tempUserId
                     ).onSuccess { url ->
                         crUrl = url
                     }.onFailure { exception ->
@@ -253,6 +265,10 @@ class LoginViewModel @Inject constructor(
                     .onSuccess {
                         // Create session for current device after forcing logout others
                         authRepository.createSession(userId)
+
+                        // Wait to ensure session is written
+                        kotlinx.coroutines.delay(500)
+
                         // Proceed with login
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,

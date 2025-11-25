@@ -2,6 +2,7 @@ package com.rj.islamove.ui.viewmodels
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rj.islamove.data.models.DriverDocument
@@ -30,11 +31,42 @@ class DriverDocumentsViewModel @Inject constructor(
 
     private var documentsListenerJob: Job? = null
     private var isPassengerMode = false
+    private var isRegistrationMode = false
+    private var registrationTempId: String? = null
+    private var userEmail: String? = null
+
+    /**
+     * Set registration mode before loading documents
+     * Call this from your registration screen
+     */
+    fun setRegistrationMode(tempUserId: String) {
+        isRegistrationMode = true
+        registrationTempId = tempUserId
+        Log.d("DriverDocumentsViewModel", "Registration mode enabled for: $tempUserId")
+    }
 
     fun loadDriverDocuments(driverId: String, isPassengerMode: Boolean = false) {
         this.isPassengerMode = isPassengerMode
+
+        // Skip loading if in registration mode (no documents exist yet)
+        if (isRegistrationMode) {
+            _uiState.value = _uiState.value.copy(isLoading = false)
+            return
+        }
+
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
+
+            // FETCH USER EMAIL when loading documents
+            userRepository.getUserByUid(driverId).fold(
+                onSuccess = { user ->
+                    userEmail = user.email  // Store the email for later use
+                    Log.d("DriverDocumentsViewModel", "User email loaded: $userEmail")
+                },
+                onFailure = { error ->
+                    Log.e("DriverDocumentsViewModel", "Failed to load user email", error)
+                }
+            )
 
             if (isPassengerMode) {
                 // For passengers, load student document and convert to driver document format
@@ -150,37 +182,13 @@ class DriverDocumentsViewModel @Inject constructor(
         imageUris: List<Uri>
     ) {
         val currentPending = _pendingImages.value.toMutableMap()
-        val existingImages = currentPending[documentType] ?: emptyList()
 
-        // Check for duplicates by comparing URI paths and replace if found
-        val newImages = imageUris.toMutableList()
-        val finalImages = existingImages.toMutableList()
-
-        newImages.forEach { newUri ->
-            val duplicateIndex = finalImages.indexOfFirst { existingUri ->
-                existingUri.path == newUri.path || existingUri.toString() == newUri.toString()
-            }
-
-            if (duplicateIndex != -1) {
-                // Replace the duplicate image
-                finalImages[duplicateIndex] = newUri
-            } else {
-                // Add as new image
-                finalImages.add(newUri)
-            }
-        }
-
-        currentPending[documentType] = finalImages
+        // ALWAYS replace with only the latest image (limit to 1)
+        currentPending[documentType] = listOf(imageUris.last())
         _pendingImages.value = currentPending
 
-        val message = if (imageUris.size == 1) {
-            "Image selected. Click 'Submit for Review' to upload it."
-        } else {
-            "${imageUris.size} images selected. Click 'Submit for Review' to upload them."
-        }
-
         _uiState.value = _uiState.value.copy(
-            successMessage = message
+            successMessage = "Image selected. Click 'Submit for Review' to upload it."
         )
     }
 
@@ -204,21 +212,26 @@ class DriverDocumentsViewModel @Inject constructor(
         imageUri: Uri,
         imageDescription: String = ""
     ): Result<String> {
+        val tempId = userEmail ?: driverId  // Fallback to driverId if email not loaded
         return if (isPassengerMode && documentType == "passenger_id") {
-            // For passenger ID uploads, use the student document upload method
+            // For passenger ID uploads, use direct Cloudinary upload to registration_temp
             userRepository.uploadStudentDocument(
                 context = context,
                 studentUid = driverId,
-                imageUri = imageUri
+                imageUri = imageUri,
+                isRegistration = true,
+                tempUserId = tempId
             )
         } else {
-            // For driver documents, use the existing method
+            // For driver documents, use direct Cloudinary upload to registration_temp
             userRepository.uploadDriverDocument(
                 context = context,
                 driverUid = driverId,
                 documentType = documentType,
                 imageUri = imageUri,
-                imageDescription = imageDescription
+                imageDescription = imageDescription,
+                isRegistration = true,
+                tempUserId = tempId
             )
         }
     }

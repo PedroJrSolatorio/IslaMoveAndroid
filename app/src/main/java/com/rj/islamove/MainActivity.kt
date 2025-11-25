@@ -61,8 +61,9 @@ class MainActivity : ComponentActivity() {
                         // Set flag to prevent auto-login on recreate
                         wasForceLoggedOut = true
 
-                        // Recreate activity to reset navigation state
-                        recreate()
+                        // DON'T use recreate() - instead finish the activity
+                        // This prevents the infinite loop
+                        finish()
                     } catch (e: Exception) {
                         Log.e(TAG, "Error during force logout", e)
                     }

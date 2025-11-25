@@ -59,9 +59,11 @@ class ProfileViewModel @Inject constructor(
 
         viewModelScope.launch {
             _isUploading.value = true
-            _uiState.value = _uiState.value.copy(errorMessage = null)
+            _uiState.value = _uiState.value.copy(isUpdating = true, errorMessage = null)
 
             try {
+                Log.d("ProfileViewModel", "Starting profile image upload for user: ${currentUser.uid}")
+
                 // Call repository to upload the image
                 val uploadResult = profileRepository.uploadProfileImage(
                     context = context,
@@ -76,22 +78,45 @@ class ProfileViewModel @Inject constructor(
                             uid = currentUser.uid,
                             profileImageUrl = imageUrl
                         ).onSuccess {
-                            Log.d("ProfileViewModel", "✅ Profile image URL updated successfully in Firestore.")
-                        }.onFailure { exception ->
+                            Log.d("ProfileViewModel", "Profile image URL saved to Firestore")
                             _uiState.value = _uiState.value.copy(
-                                errorMessage = "Failed to save image URL: ${exception.message}"
+                                isUpdating = false,
+                                updateSuccess = true,
+                                updateMessage = "Profile picture updated successfully"
+                            )
+
+                            // Auto-clear success message after 2 seconds
+                            viewModelScope.launch {
+                                delay(2000)
+                                _uiState.value = _uiState.value.copy(
+                                    updateSuccess = false,
+                                    updateMessage = null
+                                )
+                            }
+
+                            // Reload user profile to update UI
+                            loadUserProfile()
+                        }.onFailure { exception ->
+                            Log.e("ProfileViewModel", "Failed to save image URL", exception)
+                            _uiState.value = _uiState.value.copy(
+                                isUpdating = false,
+                                errorMessage = "Failed to save profile picture: ${exception.message}"
                             )
                         }
                     },
                     onFailure = { exception ->
+                        Log.e("ProfileViewModel", "Upload failed", exception)
                         _uiState.value = _uiState.value.copy(
-                            errorMessage = "Image upload failed: ${exception.message}"
+                            isUpdating = false,
+                            errorMessage = "Upload failed: ${exception.message}"
                         )
                     }
                 )
             } catch (e: Exception) {
+                Log.e("ProfileViewModel", "Upload exception", e)
                 _uiState.value = _uiState.value.copy(
-                    errorMessage = "An unexpected error occurred during upload: ${e.message}"
+                    isUpdating = false,
+                    errorMessage = "Upload error: ${e.message}"
                 )
             } finally {
                 _isUploading.value = false

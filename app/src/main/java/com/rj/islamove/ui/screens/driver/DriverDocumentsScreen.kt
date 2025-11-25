@@ -1,6 +1,7 @@
 package com.rj.islamove.ui.screens.driver
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -14,8 +15,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import coil.compose.AsyncImage
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,6 +31,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rj.islamove.ui.theme.IslamovePrimary
@@ -35,6 +39,7 @@ import com.rj.islamove.ui.theme.IslamoveSecondary
 import com.rj.islamove.data.models.DocumentStatus
 import com.rj.islamove.data.models.DocumentImage
 import com.rj.islamove.ui.viewmodels.DriverDocumentsViewModel
+import java.io.File
 
 data class DocumentType(
     val id: String,
@@ -58,9 +63,73 @@ fun DriverDocumentsScreen(
 ) {
     val context = LocalContext.current
     var selectedDocument by remember { mutableStateOf<DocumentType?>(null) }
+    var showImageSourceDialog by remember { mutableStateOf(false) }
+    var cameraImageUri by remember { mutableStateOf<Uri?>(null) }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val documents by viewModel.documents.collectAsStateWithLifecycle()
     val pendingImages by viewModel.pendingImages.collectAsStateWithLifecycle()
+
+    // Function to create temporary file URI for camera
+    fun createImageUri(): Uri {
+        val imageFile = File(context.cacheDir, "document_image_${System.currentTimeMillis()}.jpg")
+        imageFile.parentFile?.mkdirs()
+        return FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.provider",
+            imageFile
+        )
+    }
+
+    // Camera launcher
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && cameraImageUri != null) {
+            selectedDocument?.let { document ->
+                viewModel.addPendingImages(
+                    documentType = document.id,
+                    imageUris = listOf(cameraImageUri!!)
+                )
+            }
+        }
+        selectedDocument = null
+        showImageSourceDialog = false
+    }
+
+    // Camera permission launcher
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            val uri = createImageUri()
+            cameraImageUri = uri
+            cameraLauncher.launch(uri)
+        } else {
+            // Permission denied
+            selectedDocument = null
+            showImageSourceDialog = false
+        }
+    }
+
+    // Change to GetContent (single selection)
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            selectedDocument?.let { document ->
+                viewModel.addPendingImages(
+                    documentType = document.id,
+                    imageUris = listOf(it)
+                )
+            }
+        }
+        selectedDocument = null
+        showImageSourceDialog = false
+    }
+
+    BackHandler(enabled = uiState.isUploading) {
+        // Do nothing - block back navigation while uploading
+    }
 
     LaunchedEffect(driverId, isPassengerMode) {
         viewModel.loadDriverDocuments(driverId, isPassengerMode)
@@ -169,21 +238,6 @@ fun DriverDocumentsScreen(
         }
     }
 
-    val documentPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetMultipleContents()
-    ) { uris: List<Uri> ->
-        if (uris.isNotEmpty()) {
-            selectedDocument?.let { document ->
-                // Add images to pending list instead of uploading immediately
-                viewModel.addPendingImages(
-                    documentType = document.id,
-                    imageUris = uris
-                )
-            }
-        }
-        selectedDocument = null
-    }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -202,8 +256,24 @@ fun DriverDocumentsScreen(
                 )
             },
             navigationIcon = {
-                IconButton(onClick = onNavigateBack) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                IconButton(
+                    onClick = {
+                        // Only allow navigation back if not uploading
+                        if (!uiState.isUploading) {
+                            onNavigateBack()
+                        }
+                    },
+                    enabled = !uiState.isUploading  // Disable button when uploading
+                ) {
+                    Icon(
+                        Icons.Default.ArrowBack,
+                        contentDescription = "Back",
+                        tint = if (uiState.isUploading) {
+                            Color.Gray  // Visual feedback when disabled
+                        } else {
+                            Color.Black
+                        }
+                    )
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(
@@ -355,7 +425,7 @@ fun DriverDocumentsScreen(
                         document = document,
                         onUploadClick = {
                             selectedDocument = document
-                            documentPickerLauncher.launch("image/*")
+                            showImageSourceDialog = true
                         }
                     )
 
@@ -483,6 +553,84 @@ fun DriverDocumentsScreen(
                 Spacer(modifier = Modifier.height(32.dp))
             }
         }
+    }
+
+    // Image source selection dialog
+    if (showImageSourceDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showImageSourceDialog = false
+                selectedDocument = null
+            },
+            title = {
+                Text(
+                    text = "Upload Document",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column {
+                    Text("Choose how you'd like to upload the document:")
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Camera option
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.CameraAlt,
+                            contentDescription = null,
+                            tint = IslamovePrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text(
+                            text = "Take a photo",
+                            fontSize = 16.sp
+                        )
+                    }
+
+                    // Gallery option
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                galleryLauncher.launch("image/*")
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Photo,
+                            contentDescription = null,
+                            tint = IslamovePrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text(
+                            text = "Choose from gallery",
+                            fontSize = 16.sp
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showImageSourceDialog = false
+                    selectedDocument = null
+                }) {
+                    Text("Cancel")
+                }
+            },
+            dismissButton = null
+        )
     }
 }
 
