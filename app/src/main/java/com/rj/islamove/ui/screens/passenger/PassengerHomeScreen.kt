@@ -425,7 +425,7 @@ private fun DriverFoundCard(
                             color = Color.Gray
                         )
                         Text(
-                            text = "Plate Number: ${vehicle.plateNumber}",
+                            text = "Body Number: ${vehicle.plateNumber}",
                             fontSize = 14.sp,
                             color = Color.Gray
                         )
@@ -2628,7 +2628,7 @@ private fun ProfileContent(
             }
         }
 
-        // Personal Information section
+        // Personal Information section (Passenger Profile Page)
         Column(
             modifier = Modifier.padding(horizontal = 16.dp)
         ) {

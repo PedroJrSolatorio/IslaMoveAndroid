@@ -646,7 +646,7 @@ fun ProfileScreen(
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // Personal Information section
+                    // Personal Information section (Driver Profile Page)
                     Column(
                         modifier = Modifier.padding(horizontal = 16.dp)
                     ) {

@@ -338,7 +338,7 @@ fun TripDetailsScreen(
 
                                     if (vehicle.plateNumber.isNotBlank()) {
                                         Text(
-                                            text = vehicle.plateNumber,
+                                            text = "Body Number: ${vehicle.plateNumber}",
                                             fontSize = 14.sp,
                                             color = Color(0xFF666666)
                                         )
