@@ -3266,9 +3266,9 @@ class PassengerHomeViewModel @Inject constructor(
     }
 
     /**
-     * Load passenger's rating statistics (public for manual refresh)
+     * Load passenger's rating statistics
      */
-    fun loadPassengerRatingStats() {
+    private fun loadPassengerRatingStats() {
         val currentUserId = firebaseAuth.currentUser?.uid ?: return
 
         viewModelScope.launch {
