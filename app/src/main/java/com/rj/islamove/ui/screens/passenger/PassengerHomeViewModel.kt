@@ -3266,9 +3266,9 @@ class PassengerHomeViewModel @Inject constructor(
     }
 
     /**
-     * Load passenger's rating statistics
+     * Load passenger's rating statistics (public for manual refresh)
      */
-    private fun loadPassengerRatingStats() {
+    fun loadPassengerRatingStats() {
         val currentUserId = firebaseAuth.currentUser?.uid ?: return
 
         viewModelScope.launch {
@@ -3415,6 +3415,7 @@ class PassengerHomeViewModel @Inject constructor(
     fun refreshUserData() {
         Log.d("PassengerViewModel", "Manually refreshing user data")
         loadCurrentUserData()
+        loadPassengerRatingStats()
     }
 
     /**
