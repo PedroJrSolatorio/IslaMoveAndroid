@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.res.painterResource
 import android.util.Log
+import androidx.activity.compose.BackHandler
 import java.io.FileOutputStream
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.BorderStroke
@@ -2102,11 +2103,17 @@ private fun ProfileContent(
     val context = LocalContext.current
 
     // Debug logging for ProfileContent
-    android.util.Log.d("ProfileContent", "ProfileContent recomposing, currentUser: ${uiState.currentUser?.uid}, isActive: ${uiState.currentUser?.isActive}")
+    android.util.Log.d(
+        "ProfileContent",
+        "ProfileContent recomposing, currentUser: ${uiState.currentUser?.uid}, isActive: ${uiState.currentUser?.isActive}"
+    )
 
     // Force refresh user data when ProfileContent is first composed
     LaunchedEffect(Unit) {
-        android.util.Log.d("ProfileContent", "ProfileContent LaunchedEffect - calling refreshUserData")
+        android.util.Log.d(
+            "ProfileContent",
+            "ProfileContent LaunchedEffect - calling refreshUserData"
+        )
         viewModel.clearMessages()
         viewModel.refreshUserData()
     }
@@ -2127,11 +2134,18 @@ private fun ProfileContent(
     var isUpdating by remember { mutableStateOf(false) }
     var updateMessage by remember { mutableStateOf<String?>(null) }
     var profileRefreshTrigger by remember { mutableStateOf(0) }
-    var currentDisplayName by remember { mutableStateOf(FirebaseAuth.getInstance().currentUser?.displayName ?: "User") }
-    var currentPhoneNumber by remember { mutableStateOf(FirebaseAuth.getInstance().currentUser?.phoneNumber ?: "") }
+    var currentDisplayName by remember {
+        mutableStateOf(
+            FirebaseAuth.getInstance().currentUser?.displayName ?: "User"
+        )
+    }
+    var currentPhoneNumber by remember {
+        mutableStateOf(
+            FirebaseAuth.getInstance().currentUser?.phoneNumber ?: ""
+        )
+    }
 
 
-    
     // Student ID dialog state
     var showStudentIdDialog by remember { mutableStateOf(false) }
     var studentIdNumber by remember { mutableStateOf("") }
@@ -2140,10 +2154,16 @@ private fun ProfileContent(
     var isUploadingStudentId by remember { mutableStateOf(false) }
     var showStudentIdImagePicker by remember { mutableStateOf(false) }
 
-    
+
     // Store camera image URI separately
     var cameraImageUri by remember { mutableStateOf<Uri?>(null) }
     var isUploading by remember { mutableStateOf(false) }
+    var showUploadWarningDialog by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = isUploading) {
+        // Show warning dialog instead of allowing back navigation
+        showUploadWarningDialog = true
+    }
 
     // Upload image to Cloudinary using ViewModel
     fun uploadImageToCloudinary(uri: Uri) {
@@ -2175,7 +2195,10 @@ private fun ProfileContent(
             // Check if the profile image URL has been updated
             val newImageUrl = uiState.currentUser?.profileImageUrl
             if (!newImageUrl.isNullOrEmpty() && newImageUrl != profileImageUri.toString()) {
-                android.util.Log.d("ProfileImage", "Upload completed successfully, isUploading set to false")
+                android.util.Log.d(
+                    "ProfileImage",
+                    "Upload completed successfully, isUploading set to false"
+                )
                 isUploading = false
                 showImagePicker = false // Close the dialog automatically
             }
@@ -2203,7 +2226,10 @@ private fun ProfileContent(
                 val savedFile = File(savedImagePath)
                 if (savedFile.exists()) {
                     profileImageUri = Uri.fromFile(savedFile)
-                    android.util.Log.d("ProfileImage", "Loaded saved profile image: $savedImagePath")
+                    android.util.Log.d(
+                        "ProfileImage",
+                        "Loaded saved profile image: $savedImagePath"
+                    )
                 }
             }
         }
@@ -2221,12 +2247,19 @@ private fun ProfileContent(
                         val phoneNumber = document.getString("phoneNumber")
                         if (phoneNumber != null) {
                             currentPhoneNumber = phoneNumber
-                            android.util.Log.d("ProfileUpdate", "Phone number loaded from Firestore: $phoneNumber")
+                            android.util.Log.d(
+                                "ProfileUpdate",
+                                "Phone number loaded from Firestore: $phoneNumber"
+                            )
                         }
                     }
                 }
                 .addOnFailureListener { e ->
-                    android.util.Log.e("ProfileUpdate", "Failed to load phone number from Firestore", e)
+                    android.util.Log.e(
+                        "ProfileUpdate",
+                        "Failed to load phone number from Firestore",
+                        e
+                    )
                 }
         }
     }
@@ -2263,18 +2296,26 @@ private fun ProfileContent(
                                         val pendingEmail = document.getString("pendingEmail")
 
                                         if (verifiedEmail != firestoreEmail && verifiedEmail == pendingEmail) {
-                                            android.util.Log.d("ProfileContent", "Email verified! Updating Firestore: $verifiedEmail")
+                                            android.util.Log.d(
+                                                "ProfileContent",
+                                                "Email verified! Updating Firestore: $verifiedEmail"
+                                            )
 
                                             firestore.collection("users").document(currentUser.uid)
-                                                .update(mapOf(
-                                                    "email" to verifiedEmail,
-                                                    "emailVerified" to isVerified,
-                                                    "pendingEmail" to null,
-                                                    "pendingEmailTimestamp" to null,
-                                                    "updatedAt" to System.currentTimeMillis()
-                                                ))
+                                                .update(
+                                                    mapOf(
+                                                        "email" to verifiedEmail,
+                                                        "emailVerified" to isVerified,
+                                                        "pendingEmail" to null,
+                                                        "pendingEmailTimestamp" to null,
+                                                        "updatedAt" to System.currentTimeMillis()
+                                                    )
+                                                )
                                                 .addOnSuccessListener {
-                                                    android.util.Log.d("ProfileContent", "Firestore email updated successfully")
+                                                    android.util.Log.d(
+                                                        "ProfileContent",
+                                                        "Firestore email updated successfully"
+                                                    )
                                                     viewModel.refreshUserData()
                                                 }
                                         }
@@ -2307,7 +2348,7 @@ private fun ProfileContent(
             android.util.Log.d("ProfileContent", "Email verification listener disposed")
         }
     }
-    
+
     // Create a function to create temporary file URI for camera
     fun createImageUri(): Uri {
         val imageFile = File(context.cacheDir, "profile_image_${System.currentTimeMillis()}.jpg")
@@ -2334,7 +2375,7 @@ private fun ProfileContent(
             android.util.Log.e("ProfileImage", "Camera photo failed or URI is null")
         }
     }
-    
+
     // Gallery launcher
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -2348,7 +2389,7 @@ private fun ProfileContent(
             android.util.Log.w("ProfileImage", "Upload already in progress, ignoring new selection")
         }
     }
-    
+
     // Camera permission launcher
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -2382,7 +2423,10 @@ private fun ProfileContent(
     ) { success ->
         if (success && studentIdCameraUri != null) {
             studentIdUri = studentIdCameraUri
-            android.util.Log.d("StudentId", "Student ID photo taken successfully: $studentIdCameraUri")
+            android.util.Log.d(
+                "StudentId",
+                "Student ID photo taken successfully: $studentIdCameraUri"
+            )
         } else {
             android.util.Log.e("StudentId", "Student ID photo failed or URI is null")
         }
@@ -2402,6 +2446,8 @@ private fun ProfileContent(
         }
     }
 
+    // Main content wrapped in Box to show loading overlay
+    Box(modifier = Modifier.fillMaxSize()) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -2423,345 +2469,456 @@ private fun ProfileContent(
 //                color = MaterialTheme.colorScheme.onSurface
 //            )
 //        }
-        
-        // User profile section
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Profile picture with edit badge - clickable
-            Box(
-                modifier = Modifier.clickable {
-                    // Prevent opening image picker while an upload is in progress
-                    if (!isUploading) {
-                        showImagePicker = true
-                    }
-                }
+
+            // User profile section
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // Profile picture with edit badge - clickable
                 Box(
-                    modifier = Modifier
-                        .size(80.dp)
-                        .background(
-                            color = if (profileImageUri != null) Color.Transparent else Color(0xFFE8B68C),
-                            shape = RoundedCornerShape(50)
-                        ),
-                    contentAlignment = Alignment.Center
+                    modifier = Modifier.clickable (enabled = !isUploading) {
+                        // Prevent opening image picker while an upload is in progress
+                        if (!isUploading) {
+                            showImagePicker = true
+                        }
+                    }
                 ) {
-                    // Check for Cloudinary URL first, then fall back to local URI
-                    if (!uiState.currentUser?.profileImageUrl.isNullOrEmpty()) {
-                        // Show Cloudinary image from Firestore
-                        android.util.Log.d("ProfileContent", "Loading profile image from Cloudinary: ${uiState.currentUser?.profileImageUrl}")
-                        AsyncImage(
-                            model = coil.request.ImageRequest.Builder(context)
-                                .data(uiState.currentUser?.profileImageUrl)
-                                .crossfade(true)
-                                .listener(
-                                    onError = { _, result ->
-                                        android.util.Log.e("ProfileContent", "Error loading profile image: ${result.throwable.message}")
-                                        android.util.Log.e("ProfileContent", "URL was: ${uiState.currentUser?.profileImageUrl}")
-                                    },
-                                    onSuccess = { _, _ ->
-                                        android.util.Log.d("ProfileContent", "Profile image loaded successfully from Cloudinary")
-                                    }
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .background(
+                                color = if (profileImageUri != null) Color.Transparent else Color(
+                                    0xFFE8B68C
+                                ),
+                                shape = RoundedCornerShape(50)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        // Check for Cloudinary URL first, then fall back to local URI
+                        if (!uiState.currentUser?.profileImageUrl.isNullOrEmpty()) {
+                            // Show Cloudinary image from Firestore
+                            android.util.Log.d(
+                                "ProfileContent",
+                                "Loading profile image from Cloudinary: ${uiState.currentUser?.profileImageUrl}"
+                            )
+                            AsyncImage(
+                                model = coil.request.ImageRequest.Builder(context)
+                                    .data(uiState.currentUser?.profileImageUrl)
+                                    .crossfade(true)
+                                    .listener(
+                                        onError = { _, result ->
+                                            android.util.Log.e(
+                                                "ProfileContent",
+                                                "Error loading profile image: ${result.throwable.message}"
+                                            )
+                                            android.util.Log.e(
+                                                "ProfileContent",
+                                                "URL was: ${uiState.currentUser?.profileImageUrl}"
+                                            )
+                                        },
+                                        onSuccess = { _, _ ->
+                                            android.util.Log.d(
+                                                "ProfileContent",
+                                                "Profile image loaded successfully from Cloudinary"
+                                            )
+                                        }
+                                    )
+                                    .build(),
+                                contentDescription = "Profile Picture",
+                                modifier = Modifier
+                                    .size(80.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.Gray.copy(alpha = 0.1f)),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else if (profileImageUri != null) {
+                            // Show selected image using AsyncImage (local file)
+                            AsyncImage(
+                                model = profileImageUri,
+                                contentDescription = "Profile Picture",
+                                modifier = Modifier
+                                    .size(80.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.Gray.copy(alpha = 0.1f)),
+                                contentScale = ContentScale.Crop,
+                                onError = {
+                                    // Log error for debugging
+                                    android.util.Log.e(
+                                        "ProfileImage",
+                                        "Error loading image: ${it.result.throwable}"
+                                    )
+                                },
+                                placeholder = painterResource(android.R.drawable.ic_menu_camera)
+                            )
+                        } else {
+                            Icon(
+                                Icons.Default.Person,
+                                contentDescription = "Profile Picture",
+                                modifier = Modifier.size(40.dp),
+                                tint = Color.White
+                            )
+                        }
+
+                        if (isUploading) {
+                            Box(
+                                modifier = Modifier
+                                    .size(80.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.Black.copy(alpha = 0.5f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(40.dp),
+                                    color = Color.White,
+                                    strokeWidth = 3.dp
                                 )
-                                .build(),
-                            contentDescription = "Profile Picture",
-                            modifier = Modifier
-                                .size(80.dp)
-                                .clip(CircleShape)
-                                .background(Color.Gray.copy(alpha = 0.1f)),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else if (profileImageUri != null) {
-                        // Show selected image using AsyncImage (local file)
-                        AsyncImage(
-                            model = profileImageUri,
-                            contentDescription = "Profile Picture",
-                            modifier = Modifier
-                                .size(80.dp)
-                                .clip(CircleShape)
-                                .background(Color.Gray.copy(alpha = 0.1f)),
-                            contentScale = ContentScale.Crop,
-                            onError = {
-                                // Log error for debugging
-                                android.util.Log.e("ProfileImage", "Error loading image: ${it.result.throwable}")
-                            },
-                            placeholder = painterResource(android.R.drawable.ic_menu_camera)
-                        )
-                    } else {
+                            }
+                        }
+
+                        if (!isUploading) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .size(24.dp)
+                                    .background(
+                                        color = IslamovePrimary,
+                                        shape = RoundedCornerShape(50)
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.Edit,
+                                    contentDescription = "Edit Profile",
+                                    modifier = Modifier.size(14.dp),
+                                    tint = Color.White
+                                )
+                            }
+                        }
+                    }
+                    // Edit badge
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(24.dp)
+                            .background(
+                                color = IslamovePrimary,
+                                shape = RoundedCornerShape(50)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Icon(
-                            Icons.Default.Person,
-                            contentDescription = "Profile Picture",
-                            modifier = Modifier.size(40.dp),
+                            Icons.Default.Edit,
+                            contentDescription = "Edit Profile",
+                            modifier = Modifier.size(14.dp),
                             tint = Color.White
                         )
                     }
                 }
-                // Edit badge
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .size(24.dp)
-                        .background(
-                            color = IslamovePrimary,
-                            shape = RoundedCornerShape(50)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.Edit,
-                        contentDescription = "Edit Profile",
-                        modifier = Modifier.size(14.dp),
-                        tint = Color.White
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // User name (read-only)
-            Text(
-                text = currentDisplayName,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            // Rating and trip count
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Default.Star,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = Color(0xFFFFA500)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // User name (read-only)
                 Text(
-                    text = uiState.passengerRatingStats?.let { stats ->
-                        if (stats.totalRatings > 0) {
-                            String.format("%.2f", stats.overallRating)
-                        } else {
-                            "New"
-                        }
-                    } ?: "New",
-                    fontSize = 14.sp,
+                    text = currentDisplayName,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Text(
-                    text = uiState.passengerRatingStats?.let { stats ->
-                        " • ${if (stats.totalRatings == 0) "No" else "${stats.totalRatings}"} trip${if (stats.totalRatings == 1) "" else "s"}"
-                    } ?: " • No trips",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Rating and trip count
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Star,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = Color(0xFFFFA500)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = uiState.passengerRatingStats?.let { stats ->
+                            if (stats.totalRatings > 0) {
+                                String.format("%.2f", stats.overallRating)
+                            } else {
+                                "New"
+                            }
+                        } ?: "New",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = uiState.passengerRatingStats?.let { stats ->
+                            " • ${if (stats.totalRatings == 0) "No" else "${stats.totalRatings}"} trip${if (stats.totalRatings == 1) "" else "s"}"
+                        } ?: " • No trips",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Account status indicator - Force recomposition with key
+                uiState.currentUser?.let { user ->
+                    // Debug logging
+                    android.util.Log.d(
+                        "ProfileContent",
+                        "Rendering user status: active=${user.isActive}, uid=${user.uid}, updatedAt=${user.updatedAt}"
+                    )
+
+                    // Using key to force recomposition when user status changes
+                    key(user.isActive, user.updatedAt, user.discountPercentage) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Status: ",
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = if (user.isActive) "Active" else "Blocked",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = if (user.isActive) Color(0xFF4CAF50) else Color(0xFFD32F2F),
+                                modifier = Modifier
+                                    .background(
+                                        color = if (user.isActive) Color(0xFFE8F5E8) else Color(
+                                            0xFFFFEBEE
+                                        ),
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+
+                            Text(
+                                text = " • ",
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            Text(
+                                text = when (user.discountPercentage) {
+                                    null -> "None"
+                                    20 -> "20%"
+                                    50 -> "50%"
+                                    else -> "${user.discountPercentage}%"
+                                },
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = when (user.discountPercentage) {
+                                    20 -> Color(0xFF4CAF50)
+                                    50 -> Color(0xFF2196F3)
+                                    else -> Color(0xFF9E9E9E)
+                                },
+                                modifier = Modifier
+                                    .background(
+                                        color = when (user.discountPercentage) {
+                                            20 -> Color(0xFFE8F5E8)
+                                            50 -> Color(0xFFE3F2FD)
+                                            else -> Color(0xFFF5F5F5)
+                                        },
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            // Personal Information section (Passenger Profile Page)
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp)
+            ) {
+                Text(
+                    text = "Personal Information",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
 
-            // Account status indicator - Force recomposition with key
-            uiState.currentUser?.let { user ->
-                // Debug logging
-                android.util.Log.d("ProfileContent", "Rendering user status: active=${user.isActive}, uid=${user.uid}, updatedAt=${user.updatedAt}")
+                // Email
+                ProfileMenuItem(
+                    icon = Icons.Default.Email,
+                    title = "Email",
+                    subtitle = FirebaseAuth.getInstance().currentUser?.email ?: "Not provided",
+                    onClick = {
+                        showEmailDialog = true
+                    }
+                )
 
-                // Using key to force recomposition when user status changes
-                key(user.isActive, user.updatedAt, user.discountPercentage) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Status: ",
-                            fontSize = 14.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = if (user.isActive) "Active" else "Blocked",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = if (user.isActive) Color(0xFF4CAF50) else Color(0xFFD32F2F),
-                            modifier = Modifier
-                                .background(
-                                    color = if (user.isActive) Color(0xFFE8F5E8) else Color(0xFFFFEBEE),
-                                    shape = RoundedCornerShape(8.dp)
+                // Phone Number
+                ProfileMenuItem(
+                    icon = Icons.Default.Phone,
+                    title = "Phone Number",
+                    subtitle = currentPhoneNumber.ifEmpty { "Not provided" },
+                    onClick = {
+                        editingPhone = currentPhoneNumber
+                        showPhoneDialog = true
+                    }
+                )
+
+                // Reviews Section
+                uiState.passengerRatingStats?.let { ratingStats ->
+                    if (ratingStats.totalRatings > 0) {
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        ProfileMenuItem(
+                            icon = Icons.Default.Star,
+                            title = "My Reviews",
+                            subtitle = "${ratingStats.totalRatings} reviews • ${
+                                String.format(
+                                    "%.1f",
+                                    ratingStats.overallRating
                                 )
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-
-                        Text(
-                            text = " • ",
-                            fontSize = 14.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        Text(
-                            text = when (user.discountPercentage) {
-                                null -> "None"
-                                20 -> "20%"
-                                50 -> "50%"
-                                else -> "${user.discountPercentage}%"
-                            },
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = when (user.discountPercentage) {
-                                20 -> Color(0xFF4CAF50)
-                                50 -> Color(0xFF2196F3)
-                                else -> Color(0xFF9E9E9E)
-                            },
-                            modifier = Modifier
-                                .background(
-                                    color = when (user.discountPercentage) {
-                                        20 -> Color(0xFFE8F5E8)
-                                        50 -> Color(0xFFE3F2FD)
-                                        else -> Color(0xFFF5F5F5)
-                                    },
-                                    shape = RoundedCornerShape(8.dp)
-                                )
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                            } stars",
+                            onClick = { onNavigateToReviews() }
                         )
                     }
                 }
             }
-        }
 
-        // Personal Information section (Passenger Profile Page)
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp)
-        ) {
-            Text(
-                text = "Personal Information",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // Email
-            ProfileMenuItem(
-                icon = Icons.Default.Email,
-                title = "Email",
-                subtitle = FirebaseAuth.getInstance().currentUser?.email ?: "Not provided",
-                onClick = {
-                    showEmailDialog = true
-                }
-            )
+            // Settings section
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp)
+            ) {
+                Text(
+                    text = "Settings",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
 
-            // Phone Number
-            ProfileMenuItem(
-                icon = Icons.Default.Phone,
-                title = "Phone Number",
-                subtitle = currentPhoneNumber.ifEmpty { "Not provided" },
-                onClick = {
-                    editingPhone = currentPhoneNumber
-                    showPhoneDialog = true
-                }
-            )
+                // Privacy & Security
+                ProfileMenuItem(
+                    icon = Icons.Default.Lock,
+                    title = "Privacy & Security",
+                    subtitle = "Password",
+                    onClick = {
+                        currentPassword = ""
+                        newPassword = ""
+                        confirmPassword = ""
+                        showPasswordDialog = true
+                    }
+                )
 
-            // Reviews Section
-            uiState.passengerRatingStats?.let { ratingStats ->
-                if (ratingStats.totalRatings > 0) {
-                    Spacer(modifier = Modifier.height(16.dp))
+                // ID Verification
+                ProfileMenuItem(
+                    icon = Icons.Default.Star,
+                    title = "ID Verification",
+                    subtitle = uiState.currentUser?.studentDocument?.let { doc ->
+                        when (doc.status) {
+                            com.rj.islamove.data.models.DocumentStatus.APPROVED -> "Verified • ID approved"
+                            com.rj.islamove.data.models.DocumentStatus.PENDING_REVIEW -> "Pending verification"
+                            com.rj.islamove.data.models.DocumentStatus.REJECTED -> "Rejected • Resubmit required"
+                            else -> "Upload ID for verification"
+                        }
+                    } ?: "Upload ID for verification",
+                    onClick = {
+                        uiState.currentUser?.uid?.let { userId ->
+                            onNavigateToDriverDocuments(userId)
+                        }
+                    }
+                )
 
-                    ProfileMenuItem(
-                        icon = Icons.Default.Star,
-                        title = "My Reviews",
-                        subtitle = "${ratingStats.totalRatings} reviews • ${String.format("%.1f", ratingStats.overallRating)} stars",
-                        onClick = { onNavigateToReviews() }
+                // Help & Support
+                ProfileMenuItem(
+                    icon = Icons.Default.Info,
+                    title = "Help & Support",
+                    subtitle = "FAQ, Report issues",
+                    onClick = { onNavigateToHelpSupport() }
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Logout button
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showLogoutDialog = true }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.ExitToApp,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text(
+                        text = "Logout",
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Icon(
+                        Icons.Default.ArrowForward,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
         }
-        
-        Spacer(modifier = Modifier.height(24.dp))
-        
-        // Settings section
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp)
-        ) {
-            Text(
-                text = "Settings",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
-            
-            // Privacy & Security
-            ProfileMenuItem(
-                icon = Icons.Default.Lock,
-                title = "Privacy & Security",
-                subtitle = "Password",
-                onClick = {
-                    currentPassword = ""
-                    newPassword = ""
-                    confirmPassword = ""
-                    showPasswordDialog = true
-                }
-            )
+    }
+}
 
-            // ID Verification
-            ProfileMenuItem(
-                icon = Icons.Default.Star,
-                title = "ID Verification",
-                subtitle = uiState.currentUser?.studentDocument?.let { doc ->
-                    when (doc.status) {
-                        com.rj.islamove.data.models.DocumentStatus.APPROVED -> "Verified • ID approved"
-                        com.rj.islamove.data.models.DocumentStatus.PENDING_REVIEW -> "Pending verification"
-                        com.rj.islamove.data.models.DocumentStatus.REJECTED -> "Rejected • Resubmit required"
-                        else -> "Upload ID for verification"
-                    }
-                } ?: "Upload ID for verification",
-                onClick = {
-                    uiState.currentUser?.uid?.let { userId ->
-                        onNavigateToDriverDocuments(userId)
-                    }
+    if (showUploadWarningDialog) {
+        AlertDialog(
+            onDismissRequest = { showUploadWarningDialog = false },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Info,
+                        contentDescription = null,
+                        tint = IslamovePrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Upload in Progress",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
-            )
-
-            // Help & Support
-            ProfileMenuItem(
-                icon = Icons.Default.Info,
-                title = "Help & Support",
-                subtitle = "FAQ, Report issues",
-                onClick = { onNavigateToHelpSupport() }
-            )
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Logout button
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { showLogoutDialog = true }
-                    .padding(vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Default.ExitToApp,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.error
-                )
-                Spacer(modifier = Modifier.width(16.dp))
+            },
+            text = {
                 Text(
-                    text = "Logout",
-                    fontSize = 16.sp,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.weight(1f)
+                    text = "Your profile picture is still uploading. Please wait for the upload to complete before navigating away.",
+                    fontSize = 14.sp
                 )
-                Icon(
-                    Icons.Default.ArrowForward,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showUploadWarningDialog = false },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = IslamovePrimary
+                    )
+                ) {
+                    Text("OK")
+                }
+            },
+            icon = {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp,
+                    color = IslamovePrimary
                 )
             }
-        }
-        }
+        )
     }
     
     // Logout confirmation dialog

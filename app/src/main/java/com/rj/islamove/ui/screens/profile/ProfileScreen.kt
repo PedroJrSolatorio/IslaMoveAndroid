@@ -1,6 +1,7 @@
 package com.rj.islamove.ui.screens.profile
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -128,6 +129,12 @@ fun ProfileScreen(
     var cameraImageUri by remember { mutableStateOf<Uri?>(null) }
     var isUploading by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
+    var showUploadWarningDialog by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = isUploading) {
+        // Show warning dialog instead of allowing back navigation
+        showUploadWarningDialog = true
+    }
 
     // Upload image to Cloudinary using ViewModel
     fun uploadImageToCloudinary(uri: Uri) {
@@ -779,6 +786,53 @@ fun ProfileScreen(
                 }
             }
         }
+    }
+
+    if (showUploadWarningDialog) {
+        AlertDialog(
+            onDismissRequest = { showUploadWarningDialog = false },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Info,
+                        contentDescription = null,
+                        tint = IslamovePrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Upload in Progress",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            text = {
+                Text(
+                    text = "Your profile picture is still uploading. Please wait for the upload to complete before navigating away.",
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showUploadWarningDialog = false },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = IslamovePrimary
+                    )
+                ) {
+                    Text("OK")
+                }
+            },
+            icon = {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp,
+                    color = IslamovePrimary
+                )
+            }
+        )
     }
 
     // Image picker dialog
