@@ -57,8 +57,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true // changed to true in order to not execute logs in production
-            isShrinkResources = true // removes unused resources
+            isMinifyEnabled = false // changed to true in order to not execute logs in production
+//            isShrinkResources = true // removes unused resources
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
