@@ -2086,9 +2086,50 @@ fun MapboxPlaceDetailsCard(
 
                     // Show trip details if available
                     if (tripDistance != null || tripDuration != null) {
+                        val formattedDistance = tripDistance?.let { distance ->
+                            Log.d("MapboxPlaceDetailsCard", "Raw tripDistance received: '$distance'")
+
+                            // Remove all whitespace first
+                            val cleanDistance = distance.trim()
+
+                            // Extract numeric value from the string
+                            val numericValue = cleanDistance.replace(Regex("[^0-9.]"), "").toDoubleOrNull()
+
+                            Log.d("MapboxPlaceDetailsCard", "Parsed numeric value: $numericValue")
+
+                            when {
+                                numericValue == null -> {
+                                    Log.d("MapboxPlaceDetailsCard", "Failed to parse, returning as-is")
+                                    distance
+                                }
+                                cleanDistance.contains("km", ignoreCase = true) && numericValue < 100 -> {
+                                    // Already in km format and reasonable
+                                    Log.d("MapboxPlaceDetailsCard", "Already in km format: $numericValue")
+                                    "${String.format("%.1f", numericValue)} km"
+                                }
+                                cleanDistance.contains("m", ignoreCase = true) && !cleanDistance.contains("km", ignoreCase = true) -> {
+                                    // Explicitly labeled as meters
+                                    val km = numericValue / 1000.0
+                                    Log.d("MapboxPlaceDetailsCard", "Converting from meters: $numericValue m -> $km km")
+                                    "${String.format("%.1f", km)} km"
+                                }
+                                numericValue >= 100 -> {
+                                    // Large number, likely meters without label
+                                    val km = numericValue / 1000.0
+                                    Log.d("MapboxPlaceDetailsCard", "Large number without unit, converting: $numericValue -> $km km")
+                                    "${String.format("%.1f", km)} km"
+                                }
+                                else -> {
+                                    // Small number, assume km
+                                    Log.d("MapboxPlaceDetailsCard", "Small number, assuming km: $numericValue")
+                                    "${String.format("%.1f", numericValue)} km"
+                                }
+                            }
+                        }
+
                         val tripInfo = buildString {
-                            tripDistance?.let { append("Trip of $it") }
-                            if (tripDistance != null && tripDuration != null) append(" • ")
+                            formattedDistance?.let { append("Trip of $it") }
+                            if (formattedDistance != null && tripDuration != null) append(" • ")
                             tripDuration?.let { append(it) }
                         }
 
