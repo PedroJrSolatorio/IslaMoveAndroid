@@ -20,6 +20,7 @@
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
 
+# Note: These rules are Not yet implemented t
 # ========== REMOVE LOGS ==========
 -assumenosideeffects class android.util.Log {
     public static boolean isLoggable(java.lang.String, int);

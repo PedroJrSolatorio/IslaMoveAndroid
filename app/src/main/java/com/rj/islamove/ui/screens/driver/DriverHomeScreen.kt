@@ -543,7 +543,106 @@ private fun DashboardContent(
             }
         }
 
+        // Check for expired franchise certificate
+        val franchiseCert = uiState.currentUser?.driverData?.documents?.get("insurance")
+        if (franchiseCert?.expiryDate != null && franchiseCert.expiryDate < System.currentTimeMillis()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Warning,
+                            contentDescription = "Warning",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Franchise Certificate Expired",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Your franchise certificate expired on ${
+                                    java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault())
+                                        .format(java.util.Date(franchiseCert.expiryDate))
+                                }. Please upload a new certificate in Documents to continue accepting rides.",
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                lineHeight = 20.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
 
+// Check for additional photo requests
+        uiState.currentUser?.driverData?.documents?.forEach { (docType, doc) ->
+            if (doc.additionalPhotosRequired.isNotEmpty() &&
+                doc.additionalPhotosRequired.any { !doc.additionalPhotos.containsKey(it) }) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFF2196F3).copy(alpha = 0.1f)
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Info,
+                                contentDescription = "Info",
+                                tint = Color(0xFF2196F3),
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Additional Document Photo Requested",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = Color(0xFF2196F3)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Admin has requested additional photos for your ${
+                                        when(docType) {
+                                            "license" -> "Driver's License"
+                                            "insurance" -> "Franchise Certificate"
+                                            "vehicle_inspection" -> "Official Receipt"
+                                            "vehicle_registration" -> "Certificate of Registration"
+                                            else -> docType.replace("_", " ")
+                                        }
+                                    }. Please upload them in the Documents section.",
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF1976D2),
+                                    lineHeight = 20.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         item {
             // Earnings Section

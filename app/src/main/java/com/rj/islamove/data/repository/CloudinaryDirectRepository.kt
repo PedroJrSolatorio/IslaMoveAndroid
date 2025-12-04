@@ -57,44 +57,46 @@ class CloudinaryDirectRepository @Inject constructor() {
         context: Context,
         imageUri: Uri,
         documentType: String,
-        tempUserId: String
+        tempUserId: String,
+        publicId: String? = null
     ): Result<String> = withContext(Dispatchers.IO) {
         suspendCancellableCoroutine { continuation ->
             try {
+                val finalPublicId = publicId ?: "${documentType}_${System.currentTimeMillis()}"
                 val requestId = MediaManager.get().upload(imageUri)
                     .unsigned(UPLOAD_PRESET)
                     .option("folder", "registration_temp/$tempUserId")
-                    .option("public_id", "${documentType}_${System.currentTimeMillis()}")
+                    .option("public_id", finalPublicId)
                     .option("resource_type", "image")
                     .option("tags", arrayOf("registration", tempUserId, documentType))
                     .callback(object : UploadCallback {
                         override fun onStart(requestId: String) {
-                            Log.d(TAG, "Upload started: $requestId")
+//                            Log.d(TAG, "Upload started: $requestId (publicId: $finalPublicId)")
                         }
 
                         override fun onProgress(requestId: String, bytes: Long, totalBytes: Long) {
                             val progress = (bytes * 100 / totalBytes).toInt()
-                            Log.d(TAG, "Upload progress: $progress%")
+//                            Log.d(TAG, "Upload progress: $progress%")
                         }
 
                         override fun onSuccess(requestId: String, resultData: Map<*, *>) {
                             val secureUrl = resultData["secure_url"] as? String
                             if (secureUrl != null) {
-                                Log.d(TAG, "✅ Upload successful: $secureUrl")
+//                                Log.d(TAG, "✅ Upload successful: $secureUrl")
                                 continuation.resume(Result.success(secureUrl))
                             } else {
-                                Log.e(TAG, "No secure_url in response")
+//                                Log.e(TAG, "No secure_url in response")
                                 continuation.resume(Result.failure(Exception("No URL in response")))
                             }
                         }
 
                         override fun onError(requestId: String, error: ErrorInfo) {
-                            Log.e(TAG, "Upload error: ${error.description}")
+//                            Log.e(TAG, "Upload error: ${error.description}")
                             continuation.resume(Result.failure(Exception(error.description)))
                         }
 
                         override fun onReschedule(requestId: String, error: ErrorInfo) {
-                            Log.w(TAG, "Upload rescheduled: ${error.description}")
+//                            Log.w(TAG, "Upload rescheduled: ${error.description}")
                         }
                     })
                     .dispatch()

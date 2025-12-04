@@ -59,7 +59,11 @@ data class DriverDocument(
     val images: List<DocumentImage> = emptyList(),
     val status: DocumentStatus = DocumentStatus.PENDING_REVIEW,
     val rejectionReason: String? = null,
-    val uploadedAt: Long = System.currentTimeMillis()
+    val uploadedAt: Long = System.currentTimeMillis(),
+    val expiryDate: Long? = null,
+    val isExpired: Boolean = false,
+    val additionalPhotosRequired: List<String> = emptyList(),
+    val additionalPhotos: Map<String, String> = emptyMap()
 )
 
 @Serializable
@@ -78,7 +82,11 @@ data class StudentDocument(
     val rejectionReason: String? = null,
     val uploadedAt: Long = System.currentTimeMillis(),
     val verificationDate: Long? = null,
-    val verifiedBy: String? = null // Admin UID who verified
+    val verifiedBy: String? = null, // Admin UID who verified
+    val expiryDate: Long? = null,
+    val isExpired: Boolean = false,
+    val additionalPhotosRequired: List<String> = emptyList(),
+    val additionalPhotos: Map<String, String> = emptyMap()
 )
 
 @Serializable
@@ -141,5 +149,6 @@ enum class DocumentStatus {
     PENDING,           // Just uploaded, not submitted for review yet
     PENDING_REVIEW,    // Submitted for admin review
     APPROVED,
-    REJECTED
+    REJECTED,
+    EXPIRED
 }

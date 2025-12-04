@@ -672,6 +672,21 @@ private fun DocumentItem(
                         color = MaterialTheme.colorScheme.tertiary
                     )
                 }
+                DocumentStatus.EXPIRED -> {
+                    Icon(
+                        imageVector = Icons.Default.HourglassEmpty,
+                        contentDescription = "Expired",
+                        tint = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "⏱", // clock icon
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
                 null -> {
                     // No status indicator for missing documents
                 }

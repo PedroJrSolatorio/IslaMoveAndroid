@@ -874,33 +874,6 @@ class UserRepository @Inject constructor(
     }
 
     /**
-     * Submit single document for admin review
-     */
-    suspend fun submitSingleDocumentForReview(driverUid: String, documentType: String): Result<Unit> {
-        return try {
-            val user = getUserByUid(driverUid).getOrNull()
-            val document = user?.driverData?.documents?.get(documentType)
-
-            // Only submit if document exists and has images
-            if (document != null && document.images.isNotEmpty() && document.status == DocumentStatus.PENDING) {
-                val updates = mapOf(
-                    "driverData.documents.$documentType.status" to DocumentStatus.PENDING_REVIEW,
-                    "updatedAt" to System.currentTimeMillis()
-                )
-
-                firestore.collection(USERS_COLLECTION)
-                    .document(driverUid)
-                    .update(updates)
-                    .await()
-            }
-
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    /**
      * Submit all uploaded documents for admin review
      */
     suspend fun submitAllDocumentsForReview(driverUid: String): Result<Unit> {
@@ -1022,6 +995,7 @@ class UserRepository @Inject constructor(
                 "studentDocument.status" to DocumentStatus.PENDING_REVIEW,
                 "studentDocument.uploadedAt" to System.currentTimeMillis(),
                 "studentDocument.rejectionReason" to null,
+                "studentDocument.expiryDate" to null,
                 "updatedAt" to System.currentTimeMillis()
             )
 
@@ -1241,6 +1215,79 @@ class UserRepository @Inject constructor(
             batch.commit().await()
             Result.success(Unit)
         } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun uploadAdditionalStudentPhoto(
+        context: Context,
+        studentUid: String,
+        photoType: String,
+        imageUri: Uri,
+        tempUserId: String
+    ): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            // Upload to Cloudinary with special naming for additional photos
+            val imageUrl = cloudinaryRepository.uploadImage(
+                context = context,
+                imageUri = imageUri,
+                folder = "passenger_id",
+                publicId = "passenger_id_additional_${photoType}_${System.currentTimeMillis()}",
+                tempUserId = tempUserId
+            ).getOrThrow()
+
+            // Update Firestore - add to additionalPhotos map
+            val updates = mapOf(
+                "studentDocument.additionalPhotos.$photoType" to imageUrl,
+                "updatedAt" to System.currentTimeMillis()
+            )
+
+            firestore.collection(USERS_COLLECTION)
+                .document(studentUid)
+                .update(updates)
+                .await()
+
+            Log.d("UserRepository", "Successfully uploaded additional student photo: $photoType")
+            Result.success(imageUrl)
+        } catch (e: Exception) {
+            Log.e("UserRepository", "Failed to upload additional student photo", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun uploadAdditionalDriverPhoto(
+        context: Context,
+        driverUid: String,
+        documentType: String,
+        photoType: String,
+        imageUri: Uri,
+        tempUserId: String
+    ): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            // Upload to Cloudinary with special naming
+            val imageUrl = cloudinaryRepository.uploadImage(
+                context = context,
+                imageUri = imageUri,
+                folder = documentType,
+                publicId = "${documentType}_additional_${photoType}_${System.currentTimeMillis()}",
+                tempUserId = tempUserId
+            ).getOrThrow()
+
+            // Update Firestore - add to additionalPhotos map
+            val updates = mapOf(
+                "driverData.documents.$documentType.additionalPhotos.$photoType" to imageUrl,
+                "updatedAt" to System.currentTimeMillis()
+            )
+
+            firestore.collection(USERS_COLLECTION)
+                .document(driverUid)
+                .update(updates)
+                .await()
+
+            Log.d("UserRepository", "Successfully uploaded additional driver photo: $photoType for $documentType")
+            Result.success(imageUrl)
+        } catch (e: Exception) {
+            Log.e("UserRepository", "Failed to upload additional driver photo", e)
             Result.failure(e)
         }
     }

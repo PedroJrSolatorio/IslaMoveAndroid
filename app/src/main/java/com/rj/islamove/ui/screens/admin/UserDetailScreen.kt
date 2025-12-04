@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
@@ -1391,6 +1392,7 @@ private fun PersonalInformationSection(
                                 DocumentStatus.PENDING_REVIEW -> "Pending Review"
                                 DocumentStatus.REJECTED -> "Rejected"
                                 DocumentStatus.PENDING -> "Uploaded"
+                                DocumentStatus.EXPIRED -> "Expired"
                             },
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
@@ -1399,6 +1401,7 @@ private fun PersonalInformationSection(
                                 DocumentStatus.PENDING_REVIEW -> Color(0xFFF57C00)
                                 DocumentStatus.REJECTED -> Color(0xFFD32F2F)
                                 DocumentStatus.PENDING -> Color(0xFF9E9E9E)
+                                DocumentStatus.EXPIRED -> Color(0xFF757575)
                             },
                             modifier = Modifier
                                 .background(
@@ -1407,6 +1410,7 @@ private fun PersonalInformationSection(
                                         DocumentStatus.PENDING_REVIEW -> Color(0xFFFFF3E0)
                                         DocumentStatus.REJECTED -> Color(0xFFFFEBEE)
                                         DocumentStatus.PENDING -> Color(0xFFF5F5F5)
+                                        DocumentStatus.EXPIRED -> Color(0xFFE0E0E0)
                                     },
                                     shape = RoundedCornerShape(8.dp)
                                 )
@@ -1978,6 +1982,11 @@ private fun DocumentItem(
                     Icons.Default.Info,
                     Color(0xFF9E9E9E),
                     Color(0xFFF5F5F5)
+                )
+                DocumentStatus.EXPIRED -> Triple(
+                    Icons.Default.HourglassEmpty,
+                    Color(0xFF757575),
+                    Color(0xFFE0E0E0)
                 )
             }
 

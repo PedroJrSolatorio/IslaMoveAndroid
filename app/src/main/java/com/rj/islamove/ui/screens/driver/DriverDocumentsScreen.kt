@@ -87,10 +87,25 @@ fun DriverDocumentsScreen(
     ) { success ->
         if (success && cameraImageUri != null) {
             selectedDocument?.let { document ->
-                viewModel.addPendingImages(
-                    documentType = document.id,
-                    imageUris = listOf(cameraImageUri!!)
-                )
+                // Check if this is an additional photo request
+                if (document.id.contains("_additional_")) {
+                    val parts = document.id.split("_additional_")
+                    if (parts.size == 2) {
+                        val originalDocType = parts[0]
+                        val photoType = parts[1]
+                        viewModel.addPendingImagesForAdditional(
+                            originalDocType = originalDocType,
+                            photoType = photoType,
+                            imageUris = listOf(cameraImageUri!!)
+                        )
+                    }
+                } else {
+                    // Regular document upload
+                    viewModel.addPendingImages(
+                        documentType = document.id,
+                        imageUris = listOf(cameraImageUri!!)
+                    )
+                }
             }
         }
         selectedDocument = null
@@ -118,10 +133,25 @@ fun DriverDocumentsScreen(
     ) { uri: Uri? ->
         uri?.let {
             selectedDocument?.let { document ->
-                viewModel.addPendingImages(
-                    documentType = document.id,
-                    imageUris = listOf(it)
-                )
+                // Check if this is an additional photo request
+                if (document.id.contains("_additional_")) {
+                    val parts = document.id.split("_additional_")
+                    if (parts.size == 2) {
+                        val originalDocType = parts[0]
+                        val photoType = parts[1]
+                        viewModel.addPendingImagesForAdditional(
+                            originalDocType = originalDocType,
+                            photoType = photoType,
+                            imageUris = listOf(it)
+                        )
+                    }
+                } else {
+                    // Regular document upload
+                    viewModel.addPendingImages(
+                        documentType = document.id,
+                        imageUris = listOf(it)
+                    )
+                }
             }
         }
         selectedDocument = null
@@ -253,7 +283,7 @@ fun DriverDocumentsScreen(
         TopAppBar(
             title = {
                 Text(
-                    text = if (isPassengerMode) "ID Verification" else "Upload Documents",
+                    text = if (isPassengerMode) "Upload ID" else "Upload Documents",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -347,6 +377,304 @@ fun DriverDocumentsScreen(
                 }
             }
 
+            // Check for expired franchise certificate (DRIVERS ONLY)
+            if (!isPassengerMode) {
+                val franchiseCert = documents["insurance"]
+                if (franchiseCert?.expiryDate != null && franchiseCert.expiryDate < System.currentTimeMillis()) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFFF44336).copy(alpha = 0.1f)
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.Warning,
+                                        contentDescription = "Expired",
+                                        tint = Color(0xFFF44336),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Franchise Certificate Expired",
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFFF44336)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Your franchise certificate expired on ${
+                                        java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault())
+                                            .format(java.util.Date(franchiseCert.expiryDate))
+                                    }. Please upload a new one to continue accepting rides.",
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF666666),
+                                    lineHeight = 20.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Check for expired student ID (PASSENGERS ONLY)
+            if (isPassengerMode) {
+                val studentDoc = documents["passenger_id"]
+                if (studentDoc?.expiryDate != null && studentDoc.expiryDate < System.currentTimeMillis()) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFFF44336).copy(alpha = 0.1f)
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.Warning,
+                                        contentDescription = "Expired",
+                                        tint = Color(0xFFF44336),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Student ID Expired",
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFFF44336)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Your student ID expired on ${
+                                        java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.getDefault())
+                                            .format(java.util.Date(studentDoc.expiryDate))
+                                    }. Please upload a new one to maintain your discount.",
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF666666),
+                                    lineHeight = 20.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Check for additional photo requests - BOTH DRIVERS AND PASSENGERS
+            if (isPassengerMode) {
+                // For passengers, check studentDocument.additionalPhotosRequired
+                val passengerDoc = documents["passenger_id"]
+                if (passengerDoc != null && passengerDoc.additionalPhotosRequired.isNotEmpty()) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFF2196F3).copy(alpha = 0.1f)
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.Info,
+                                        contentDescription = "Info",
+                                        tint = Color(0xFF2196F3),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Additional Photo Requested",
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFF2196F3)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Document: Valid ID",
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF666666),
+                                    fontWeight = FontWeight.Medium
+                                )
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                passengerDoc.additionalPhotosRequired.forEach { photoType ->
+                                    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "• ${photoType.replace("_", " ").capitalize()}",
+                                                fontSize = 14.sp,
+                                                color = Color(0xFF666666)
+                                            )
+
+                                            if (passengerDoc.additionalPhotos.containsKey(photoType)) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(
+                                                        Icons.Default.Check,
+                                                        contentDescription = "Uploaded",
+                                                        tint = IslamoveSecondary,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(
+                                                        text = "Uploaded",
+                                                        fontSize = 12.sp,
+                                                        color = IslamoveSecondary,
+                                                        fontWeight = FontWeight.Medium
+                                                    )
+                                                }
+                                            } else {
+                                                Button(
+                                                    onClick = {
+                                                        selectedDocument = DocumentType(
+                                                            id = "passenger_id_additional_${photoType}",
+                                                            title = photoType.replace("_", " ").capitalize(),
+                                                            description = "Upload additional photo",
+                                                            isRequired = true
+                                                        )
+                                                        showImageSourceDialog = true
+                                                    },
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = IslamovePrimary
+                                                    ),
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    modifier = Modifier.height(32.dp),
+                                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "Upload",
+                                                        fontSize = 12.sp,
+                                                        color = Color.White
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // For drivers, check each document's additionalPhotosRequired
+                documents.forEach { (docType, doc) ->
+                    if (doc.additionalPhotosRequired.isNotEmpty()) {
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = Color(0xFF2196F3).copy(alpha = 0.1f)
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Default.Info,
+                                            contentDescription = "Info",
+                                            tint = Color(0xFF2196F3),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "Additional Photo Requested",
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color(0xFF2196F3)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Document: ${
+                                            when(docType) {
+                                                "license" -> "Driver's License"
+                                                "insurance" -> "Franchise Certificate"
+                                                "vehicle_inspection" -> "Official Receipt (OR)"
+                                                "vehicle_registration" -> "Certificate of Registration (CR)"
+                                                else -> docType.replace("_", " ")
+                                            }
+                                        }",
+                                        fontSize = 14.sp,
+                                        color = Color(0xFF666666),
+                                        fontWeight = FontWeight.Medium
+                                    )
+
+                                    Spacer(modifier = Modifier.height(12.dp))
+
+                                    doc.additionalPhotosRequired.forEach { photoType ->
+                                        Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = "• ${photoType.replace("_", " ").capitalize()}",
+                                                    fontSize = 14.sp,
+                                                    color = Color(0xFF666666)
+                                                )
+
+                                                if (doc.additionalPhotos.containsKey(photoType)) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Icon(
+                                                            Icons.Default.Check,
+                                                            contentDescription = "Uploaded",
+                                                            tint = IslamoveSecondary,
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(4.dp))
+                                                        Text(
+                                                            text = "Uploaded",
+                                                            fontSize = 12.sp,
+                                                            color = IslamoveSecondary,
+                                                            fontWeight = FontWeight.Medium
+                                                        )
+                                                    }
+                                                } else {
+                                                    Button(
+                                                        onClick = {
+                                                            selectedDocument = DocumentType(
+                                                                id = "${docType}_additional_${photoType}",
+                                                                title = photoType.replace("_", " ").capitalize(),
+                                                                description = "Upload additional photo",
+                                                                isRequired = true
+                                                            )
+                                                            showImageSourceDialog = true
+                                                        },
+                                                        colors = ButtonDefaults.buttonColors(
+                                                            containerColor = IslamovePrimary
+                                                        ),
+                                                        shape = RoundedCornerShape(8.dp),
+                                                        modifier = Modifier.height(32.dp),
+                                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = "Upload",
+                                                            fontSize = 12.sp,
+                                                            color = Color.White
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             item {
                 Text(
                     text = if (isPassengerMode) "ID Verification" else "Required Documents",
@@ -434,23 +762,48 @@ fun DriverDocumentsScreen(
 
                     // Show pending images preview for this document
                     val docPendingImages = pendingImages[document.id] ?: emptyList()
-                    if (docPendingImages.isNotEmpty()) {
+
+                    val additionalPhotoPendingImages = mutableListOf<Uri>()
+                    documents[document.id]?.additionalPhotosRequired?.forEach { photoType ->
+                        val key = "${document.id}_additional_${photoType}"
+                        pendingImages[key]?.let { uris ->
+                            additionalPhotoPendingImages.addAll(uris)
+                        }
+                    }
+
+                    val allPendingImages = docPendingImages + additionalPhotoPendingImages
+
+                    if (allPendingImages.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(8.dp))
                         LazyRow(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             contentPadding = PaddingValues(horizontal = 16.dp)
                         ) {
-                            items(docPendingImages) { imageUri ->
+                            items(allPendingImages) { imageUri ->
                                 PendingImagePreview(
                                     imageUri = imageUri,
-                                    onRemove = { viewModel.removePendingImage(document.id, imageUri) }
+                                    onRemove = {
+                                        // Check if it's a regular doc or additional photo
+                                        val isAdditional = additionalPhotoPendingImages.contains(imageUri)
+                                        if (isAdditional) {
+                                            // Find which additional photo this is
+                                            documents[document.id]?.additionalPhotosRequired?.forEach { photoType ->
+                                                val key = "${document.id}_additional_${photoType}"
+                                                if (pendingImages[key]?.contains(imageUri) == true) {
+                                                    viewModel.removePendingImage(key, imageUri)
+                                                }
+                                            }
+                                        } else {
+                                            viewModel.removePendingImage(document.id, imageUri)
+                                        }
+                                    }
                                 )
                             }
                         }
 
                         Text(
-                            text = "${docPendingImages.size} image${if (docPendingImages.size > 1) "s" else ""} selected (not uploaded yet)",
+                            text = "${allPendingImages.size} image${if (allPendingImages.size > 1) "s" else ""} selected (not uploaded yet)",
                             fontSize = 12.sp,
                             color = Color(0xFF2196F3),
                             modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 8.dp)

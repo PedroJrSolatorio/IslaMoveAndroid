@@ -49,13 +49,13 @@ class CloudinaryRepository @Inject constructor(
 
             if (currentUser != null && tempUserId == null) {
                 // ✅ User is authenticated - use secure backend upload
-                Log.d(TAG, "User authenticated, uploading via backend")
+//                Log.d(TAG, "User authenticated, uploading via backend")
                 uploadViaBackend(context, imageUri, folder, currentUser.uid)
             } else if (tempUserId != null) {
                 // ✅ Re-uploading documents (authenticated but using temp storage)
-                Log.d(TAG, "Re-uploading to temp storage for user: $tempUserId")
+//                Log.d(TAG, "Re-uploading to temp storage for user: $tempUserId")
                 cloudinaryDirectRepository.uploadRegistrationDocument(
-                    context, imageUri, folder, tempUserId
+                    context, imageUri, folder, tempUserId, publicId
                 )
             } else {
                 // ✅ User NOT authenticated - use DIRECT Cloudinary upload for registration
@@ -76,10 +76,11 @@ class CloudinaryRepository @Inject constructor(
         context: Context,
         imageUri: Uri,
         folder: String,
-        userId: String
+        userId: String,
+        publicId: String? = null
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "Getting auth token...")
+//            Log.d(TAG, "Getting auth token...")
             val idToken = auth.currentUser?.getIdToken(false)?.await()?.token
                 ?: return@withContext Result.failure(Exception("Failed to get auth token"))
 
@@ -88,9 +89,9 @@ class CloudinaryRepository @Inject constructor(
 
             // ✅ Detect actual MIME type
             val mimeType = context.contentResolver.getType(imageUri) ?: "image/jpeg"
-            Log.d(TAG, "Detected MIME type: $mimeType")
+//            Log.d(TAG, "Detected MIME type: $mimeType")
 
-            val requestBody = MultipartBody.Builder()
+            val builder = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart("userId", userId)
                 .addFormDataPart("documentType", folder)
@@ -99,7 +100,12 @@ class CloudinaryRepository @Inject constructor(
                     file.name,
                     file.asRequestBody(mimeType.toMediaTypeOrNull()) // ✅ Use actual MIME type
                 )
-                .build()
+
+            if (publicId != null) {
+                builder.addFormDataPart("publicId", publicId)
+            }
+
+            val requestBody = builder.build()
 
             val request = Request.Builder()
                 .url("$BACKEND_URL/api/upload-document")
@@ -107,19 +113,19 @@ class CloudinaryRepository @Inject constructor(
                 .post(requestBody)
                 .build()
 
-            Log.d(TAG, "Sending request to: ${request.url}")
+//            Log.d(TAG, "Sending request to: ${request.url}")
             val response = httpClient.newCall(request).execute()
 
             val responseBody = response.body?.string()
-            Log.d(TAG, "Response code: ${response.code}")
-            Log.d(TAG, "Response body: $responseBody")
+//            Log.d(TAG, "Response code: ${response.code}")
+//            Log.d(TAG, "Response body: $responseBody")
 
             if (response.isSuccessful) {
                 val json = JSONObject(responseBody ?: "{}")
                 val imageUrl = json.getString("imageUrl")
 
                 file.delete()
-                Log.d(TAG, "✅ Upload successful: $imageUrl")
+//                Log.d(TAG, "✅ Upload successful: $imageUrl")
                 Result.success(imageUrl)
             } else {
                 file.delete()

@@ -3,6 +3,7 @@ package com.rj.islamove.ui.viewmodels
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import android.util.Log.d
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rj.islamove.data.models.DriverDocument
@@ -86,7 +87,11 @@ class DriverDocumentsViewModel @Inject constructor(
                                         )
                                     } else emptyList(),
                                     status = studentDoc.status,
-                                    rejectionReason = studentDoc.rejectionReason
+                                    rejectionReason = studentDoc.rejectionReason,
+                                    additionalPhotosRequired = studentDoc.additionalPhotosRequired,
+                                    additionalPhotos = studentDoc.additionalPhotos,
+                                    expiryDate = studentDoc.expiryDate,
+                                    isExpired = studentDoc.isExpired
                                 )
                             )
                         } else {
@@ -267,9 +272,59 @@ class DriverDocumentsViewModel @Inject constructor(
         }
     }
 
-    private fun submitSingleDocumentForReview(driverId: String, documentType: String) {
-        viewModelScope.launch {
-            userRepository.submitSingleDocumentForReview(driverId, documentType)
+    /**
+     * Add pending images for additional photo requests
+     * documentType format: "documentType_additional_photoType" e.g., "license_additional_back_of_id"
+     */
+    fun addPendingImagesForAdditional(
+        originalDocType: String,
+        photoType: String,
+        imageUris: List<Uri>
+    ) {
+        val currentPending = _pendingImages.value.toMutableMap()
+
+        // Store with special key format to identify as additional photo
+        val key = "${originalDocType}_additional_${photoType}"
+        currentPending[key] = listOf(imageUris.last()) // Only keep latest image
+
+        _pendingImages.value = currentPending
+
+        _uiState.value = _uiState.value.copy(
+            successMessage = "Additional photo selected for $photoType. Click 'Submit for Review' to upload."
+        )
+    }
+
+    /**
+     * Upload additional photo to Cloudinary and update Firestore
+     */
+    private suspend fun uploadAdditionalPhoto(
+        context: Context,
+        driverId: String,
+        originalDocType: String,
+        photoType: String,
+        imageUri: Uri
+    ): Result<String> {
+        val tempId = userEmail ?: driverId
+
+        return if (isPassengerMode && originalDocType == "passenger_id") {
+            // For passenger additional photos
+            userRepository.uploadAdditionalStudentPhoto(
+                context = context,
+                studentUid = driverId,
+                photoType = photoType,
+                imageUri = imageUri,
+                tempUserId = tempId
+            )
+        } else {
+            // For driver additional photos
+            userRepository.uploadAdditionalDriverPhoto(
+                context = context,
+                driverUid = driverId,
+                documentType = originalDocType,
+                photoType = photoType,
+                imageUri = imageUri,
+                tempUserId = tempId
+            )
         }
     }
 
@@ -292,19 +347,47 @@ class DriverDocumentsViewModel @Inject constructor(
             // First upload all pending images
             var uploadErrors = mutableListOf<String>()
 
-            currentPendingImages.forEach { (documentType, imageUris) ->
-                imageUris.forEach { imageUri ->
-                    uploadDocument(
-                        context = context,
-                        driverId = driverId,
-                        documentType = documentType,
-                        imageUri = imageUri
-                    ).fold(
-                        onSuccess = { /* Success handled below */ },
-                        onFailure = { error ->
-                            uploadErrors.add("Failed to upload ${getDocumentDisplayName(documentType)}: ${error.message}")
+            currentPendingImages.forEach { (key, imageUris) ->
+                // Check if this is an additional photo request
+                if (key.contains("_additional_")) {
+                    // Parse the key: "documentType_additional_photoType"
+                    val parts = key.split("_additional_")
+                    if (parts.size == 2) {
+                        val originalDocType = parts[0]
+                        val photoType = parts[1]
+
+                        imageUris.forEach { imageUri ->
+                            uploadAdditionalPhoto(
+                                context = context,
+                                driverId = driverId,
+                                originalDocType = originalDocType,
+                                photoType = photoType,
+                                imageUri = imageUri
+                            ).fold(
+                                onSuccess = {
+                                    d("DriverDocumentsViewModel", "✅ Uploaded additional photo: $photoType for $originalDocType")
+                                },
+                                onFailure = { error ->
+                                    uploadErrors.add("Failed to upload $photoType: ${error.message}")
+                                }
+                            )
                         }
-                    )
+                    }
+                } else {
+                    // Regular document upload (existing code)
+                    imageUris.forEach { imageUri ->
+                        uploadDocument(
+                            context = context,
+                            driverId = driverId,
+                            documentType = key,
+                            imageUri = imageUri
+                        ).fold(
+                            onSuccess = { /* Success */ },
+                            onFailure = { error ->
+                                uploadErrors.add("Failed to upload ${getDocumentDisplayName(key)}: ${error.message}")
+                            }
+                        )
+                    }
                 }
             }
 

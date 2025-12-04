@@ -912,7 +912,7 @@ class DriverHomeViewModel @Inject constructor(
         val currentState = _uiState.value
         val newOnlineStatus = !currentState.online
 
-        // OPTIMISTIC UPDATE: Update UI immediately for better responsiveness
+        // Update UI immediately for better responsiveness
         _uiState.value = currentState.copy(
             online = newOnlineStatus,
             isLoading = true,
@@ -935,101 +935,49 @@ class DriverHomeViewModel @Inject constructor(
                 }
 
                 userRepository.getUserByUid(driverId).onSuccess { user ->
-                    if (user.driverData?.verificationStatus == VerificationStatus.APPROVED) {
-                        // Driver is verified, proceed with going online
-                        viewModelScope.launch {
-                            try {
-                                val locationJob = async { loadCurrentLocation() }
-                                val statusJob = async { driverLocationService.setDriverOnlineStatus(true) }
-
-                                locationJob.await()
-                                statusJob.await().onSuccess {
-                                    driverRepository.updateDriverStatus(
-                                        online = true,
-                                        vehicleCategory = currentState.selectedVehicleCategory
-                                    ).onSuccess {
-                                        _uiState.value = _uiState.value.copy(isLoading = false)
-                                        startLocationUpdates()
-                                        auth.currentUser?.let { user ->
-                                            launch {
-                                                // AUTO-CLEANUP: Remove stuck bookings before processing queued bookings
-                                                d("DriverViewModel", "🧹 Running auto-cleanup for stuck bookings...")
-                                                matchingRepository.cleanupStuckBookings(user.uid).onSuccess { cleanedCount ->
-                                                    if (cleanedCount > 0) {
-                                                        w("DriverViewModel", "✅ Auto-cleanup: Cancelled $cleanedCount stuck booking(s)")
-                                                    } else {
-                                                        d("DriverViewModel", "✅ Auto-cleanup: No stuck bookings found")
-                                                    }
-                                                }.onFailure { exception ->
-                                                    e("DriverViewModel", "⚠️ Auto-cleanup failed (non-critical): ${exception.message}")
-                                                }
-
-                                                w("DriverViewModel", "🚀🚀🚀 CRITICAL: Driver ${user.uid} went online - processing queued bookings...")
-                                                matchingRepository.processQueuedBookingsForNewDriver(user.uid).onSuccess { count ->
-                                                    w("DriverViewModel", "✅✅✅ CRITICAL: Successfully processed $count requests for newly online driver ${user.uid}")
-                                                }.onFailure { exception ->
-                                                    e("DriverViewModel", "❌❌❌ CRITICAL: Failed to process queued bookings for driver ${user.uid}", exception)
-                                                }
-                                            }
-                                        }
-                                        val currentLocation = _uiState.value.currentUserLocation
-                                        if (currentLocation != null) {
-                                            launch {
-                                                d("DriverViewModel", "📍 Updating initial driver location to Firebase: ${currentLocation.latitude()}, ${currentLocation.longitude()}")
-                                                driverRepository.updateDriverLocation(
-                                                    latitude = currentLocation.latitude(),
-                                                    longitude = currentLocation.longitude()
-                                                ).onSuccess {
-                                                    d("DriverViewModel", "✅ Initial driver location updated in Firebase successfully")
-                                                }.onFailure { exception ->
-                                                    w("DriverViewModel", "⚠️ Failed to update initial driver location: ${exception.message}")
-                                                }
-                                            }
-                                        } else {
-                                            w("DriverViewModel", "⚠️ No current location available when going online")
-                                        }
-                                    }.onFailure { exception ->
-                                        _uiState.value = _uiState.value.copy(
-                                            online = false,
-                                            isLoading = false,
-                                            errorMessage = exception.message ?: "Failed to go online"
-                                        )
-                                    }
-                                }.onFailure { exception ->
-                                    e("DriverViewModel", "Failed to set online status: ${exception.message}")
-                                    // Check if it's a service boundary error
-                                    val errorMsg = exception.message ?: "Failed to start location tracking"
-                                    if (errorMsg.contains("You must be within", ignoreCase = true)) {
-                                        _uiState.value = _uiState.value.copy(
-                                            online = false,
-                                            isLoading = false,
-                                            showServiceBoundaryDialog = true,
-                                            serviceBoundaryMessage = errorMsg
-                                        )
-                                    } else {
-                                        _uiState.value = _uiState.value.copy(
-                                            online = false,
-                                            isLoading = false,
-                                            errorMessage = errorMsg
-                                        )
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                _uiState.value = _uiState.value.copy(
-                                    online = false,
-                                    isLoading = false,
-                                    errorMessage = e.message ?: "Failed to go online"
-                                )
-                            }
-                        }
-                    } else {
-                        // Driver is not verified
+                    // CHECK 1: Verification status
+                    if (user.driverData?.verificationStatus != VerificationStatus.APPROVED) {
                         _uiState.value = currentState.copy(
                             online = false,
                             isLoading = false,
                             errorMessage = "Your account is not verified. Please complete your document submission and wait for admin approval."
                         )
+                        return@launch
                     }
+
+                    // CHECK 2: Franchise certificate expiry
+                    val franchiseCert = user.driverData?.documents?.get("insurance")
+                    if (franchiseCert != null && franchiseCert.expiryDate != null) {
+                        if (franchiseCert.expiryDate < System.currentTimeMillis()) {
+                            _uiState.value = currentState.copy(
+                                online = false,
+                                isLoading = false,
+                                errorMessage = "Your franchise certificate has expired. Please upload a new one in Documents before going online."
+                            )
+                            return@launch
+                        }
+                    }
+
+                    // CHECK 3: Additional photos required
+                    val hasUnfulfilledRequests = user.driverData?.documents?.any { (_, doc) ->
+                        doc.additionalPhotosRequired.isNotEmpty() &&
+                                doc.additionalPhotosRequired.any { photoType ->
+                                    !doc.additionalPhotos.containsKey(photoType)
+                                }
+                    } ?: false
+
+                    if (hasUnfulfilledRequests) {
+                        _uiState.value = currentState.copy(
+                            online = false,
+                            isLoading = false,
+                            errorMessage = "Admin has requested additional document photos. Please upload them in Documents before going online."
+                        )
+                        return@launch
+                    }
+
+                    // All checks passed - proceed with going online
+                    proceedWithGoingOnline()
+
                 }.onFailure { exception ->
                     _uiState.value = currentState.copy(
                         online = false,
@@ -1038,39 +986,136 @@ class DriverHomeViewModel @Inject constructor(
                     )
                 }
             } else {
-                // Going offline - handle background operations
-                viewModelScope.launch {
-                    try {
-                        driverLocationService.setDriverOnlineStatus(false)
+                // Going offline - existing code
+                proceedWithGoingOffline()
+            }
+        }
+    }
+
+    /**
+     * Extract your existing "going online" logic into this function
+     */
+    private suspend fun proceedWithGoingOnline() {
+        viewModelScope.launch {
+            try {
+                val locationJob = async { loadCurrentLocation() }
+                val statusJob = async { driverLocationService.setDriverOnlineStatus(true) }
+
+                locationJob.await()
+                statusJob.await().onSuccess {
+                    driverRepository.updateDriverStatus(
+                        online = true,
+                        vehicleCategory = _uiState.value.selectedVehicleCategory
+                    ).onSuccess {
+                        _uiState.value = _uiState.value.copy(isLoading = false)
+                        startLocationUpdates()
+                        auth.currentUser?.let { user ->
+                            launch {
+                                // AUTO-CLEANUP: Remove stuck bookings before processing queued bookings
+//                                d("DriverViewModel", "🧹 Running auto-cleanup for stuck bookings...")
+                                matchingRepository.cleanupStuckBookings(user.uid).onSuccess { cleanedCount ->
+                                    if (cleanedCount > 0) {
+//                                        w("DriverViewModel", "Auto-cleanup: Cancelled $cleanedCount stuck booking(s)")
+                                    } else {
+//                                        d("DriverViewModel", "Auto-cleanup: No stuck bookings found")
+                                    }
+                                }.onFailure { exception ->
+//                                    e("DriverViewModel", "⚠Auto-cleanup failed (non-critical): ${exception.message}")
+                                }
+
+                                w("DriverViewModel", "CRITICAL: Driver ${user.uid} went online - processing queued bookings...")
+                                matchingRepository.processQueuedBookingsForNewDriver(user.uid).onSuccess { count ->
+//                                    w("DriverViewModel", "CRITICAL: Successfully processed $count requests for newly online driver ${user.uid}")
+                                }.onFailure { exception ->
+//                                    e("DriverViewModel", "CRITICAL: Failed to process queued bookings for driver ${user.uid}", exception)
+                                }
+                            }
+                        }
+                        val currentLocation = _uiState.value.currentUserLocation
+                        if (currentLocation != null) {
+                            launch {
+//                                d("DriverViewModel", "Updating initial driver location to Firebase: ${currentLocation.latitude()}, ${currentLocation.longitude()}")
+                                driverRepository.updateDriverLocation(
+                                    latitude = currentLocation.latitude(),
+                                    longitude = currentLocation.longitude()
+                                ).onSuccess {
+//                                    d("DriverViewModel", "Initial driver location updated in Firebase successfully")
+                                }.onFailure { exception ->
+//                                    w("DriverViewModel", "Failed to update initial driver location: ${exception.message}")
+                                }
+                            }
+                        } else {
+                            w("DriverViewModel", "No current location available when going online")
+                        }
+                    }.onFailure { exception ->
+                        _uiState.value = _uiState.value.copy(
+                            online = false,
+                            isLoading = false,
+                            errorMessage = exception.message ?: "Failed to go online"
+                        )
+                    }
+                }.onFailure { exception ->
+                    e("DriverViewModel", "Failed to set online status: ${exception.message}")
+                    val errorMsg = exception.message ?: "Failed to start location tracking"
+                    if (errorMsg.contains("You must be within", ignoreCase = true)) {
+                        _uiState.value = _uiState.value.copy(
+                            online = false,
+                            isLoading = false,
+                            showServiceBoundaryDialog = true,
+                            serviceBoundaryMessage = errorMsg
+                        )
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            online = false,
+                            isLoading = false,
+                            errorMessage = errorMsg
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    online = false,
+                    isLoading = false,
+                    errorMessage = e.message ?: "Failed to go online"
+                )
+            }
+        }
+    }
+
+    /**
+     * Extract your existing "going offline" logic into this function
+     */
+    private suspend fun proceedWithGoingOffline() {
+        viewModelScope.launch {
+            try {
+                driverLocationService.setDriverOnlineStatus(false)
+                    .onSuccess {
+                        driverRepository.updateDriverStatus(online = false)
                             .onSuccess {
-                                driverRepository.updateDriverStatus(online = false)
-                                    .onSuccess {
-                                        _uiState.value = _uiState.value.copy(isLoading = false)
-                                        stopLocationUpdates()
-                                    }
-                                    .onFailure { exception ->
-                                        _uiState.value = _uiState.value.copy(
-                                            online = true,
-                                            isLoading = false,
-                                            errorMessage = exception.message ?: "Failed to go offline"
-                                        )
-                                    }
+                                _uiState.value = _uiState.value.copy(isLoading = false)
+                                stopLocationUpdates()
                             }
                             .onFailure { exception ->
                                 _uiState.value = _uiState.value.copy(
                                     online = true,
                                     isLoading = false,
-                                    errorMessage = exception.message ?: "Failed to stop location tracking"
+                                    errorMessage = exception.message ?: "Failed to go offline"
                                 )
                             }
-                    } catch (e: Exception) {
+                    }
+                    .onFailure { exception ->
                         _uiState.value = _uiState.value.copy(
                             online = true,
                             isLoading = false,
-                            errorMessage = e.message ?: "Failed to go offline"
+                            errorMessage = exception.message ?: "Failed to stop location tracking"
                         )
                     }
-                }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    online = true,
+                    isLoading = false,
+                    errorMessage = e.message ?: "Failed to go offline"
+                )
             }
         }
     }

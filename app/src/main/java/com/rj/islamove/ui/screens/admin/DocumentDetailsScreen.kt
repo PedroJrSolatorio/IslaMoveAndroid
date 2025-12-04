@@ -272,6 +272,7 @@ fun DocumentDetailsScreen(
                             DocumentStatus.REJECTED -> "Rejected" to MaterialTheme.colorScheme.error
                             DocumentStatus.PENDING_REVIEW -> "Under Review" to MaterialTheme.colorScheme.primary
                             DocumentStatus.PENDING -> "Pending" to MaterialTheme.colorScheme.tertiary
+                            DocumentStatus.EXPIRED -> "Expired" to MaterialTheme.colorScheme.outline
                         }
 
                         Text(
