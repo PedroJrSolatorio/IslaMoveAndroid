@@ -2062,13 +2062,13 @@ class DriverMatchingRepository @Inject constructor(
                 val bearingDifference = kotlin.math.abs(driverDirectionFromNewPickup - passengerDirection).let {
                     if (it > 180) 360 - it else it
                 }
-                val isSimilarDirection = bearingDifference <= 30.0 // Only accept if within 30° - same general direction
+                val isSimilarDirection = bearingDifference <= 35.0 // Only accept if within 35° - same general direction
 
 //                android.util.Log.d("CompatibilityCheck", "  Route compatibility details (BEARING-BASED ONLY):")
 //                android.util.Log.d("CompatibilityCheck", "    - Driver bearing from new pickup: ${String.format("%.1f", driverDirectionFromNewPickup)}°")
 //                android.util.Log.d("CompatibilityCheck", "    - Passenger bearing from pickup: ${String.format("%.1f", passengerDirection)}°")
 //                android.util.Log.d("CompatibilityCheck", "    - Bearing difference: ${String.format("%.1f", bearingDifference)}°")
-//                android.util.Log.d("CompatibilityCheck", "    - Similar direction (≤30°): $isSimilarDirection")
+//                android.util.Log.d("CompatibilityCheck", "    - Similar direction (≤35°): $isSimilarDirection")
 
                 // Routes overlap if bearings are similar (same direction)
                 val routesOverlap = isSimilarDirection
