@@ -1935,7 +1935,7 @@ private fun RideCard(ride: Booking, onClick: () -> Unit = {}) {
             ) {
                 // Route summary
                 Text(
-                    text = formatRoute(ride.pickupLocation.address, ride.destination.address),
+                    text = ride.destination.address,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
                     color = Color.Black,
