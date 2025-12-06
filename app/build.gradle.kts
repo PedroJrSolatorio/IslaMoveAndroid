@@ -35,11 +35,11 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
-        // Add Mapbox access token to manifest (Google Maps API key kept as optional fallback)
-        manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = getLocalProperty("GOOGLE_MAPS_API_KEY", "")
+        // Add Mapbox access token to manifest
         manifestPlaceholders["MAPBOX_ACCESS_TOKEN"] = getLocalProperty("MAPBOX_ACCESS_TOKEN", "")
 
-        // Add Cloudinary configuration
+        // Add tokens to BuildConfig
+        buildConfigField("String", "MAPBOX_ACCESS_TOKEN", "\"${getLocalProperty("MAPBOX_ACCESS_TOKEN", "")}\"")
         buildConfigField("String", "CLOUDINARY_CLOUD_NAME", "\"${getLocalProperty("CLOUDINARY_CLOUD_NAME", "")}\"")
         buildConfigField("String", "CLOUDINARY_UPLOAD_PRESET", "\"${getLocalProperty("CLOUDINARY_UPLOAD_PRESET", "")}\"")
         buildConfigField("String", "CLOUDINARY_PROFILE_PRESET", "\"${getLocalProperty("CLOUDINARY_PROFILE_PRESET", "")}\"")

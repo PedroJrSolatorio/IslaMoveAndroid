@@ -3,6 +3,7 @@ package com.rj.islamove.data.repository
 import android.content.Context
 import android.util.Log
 import com.google.firebase.firestore.GeoPoint
+import com.rj.islamove.BuildConfig
 import com.rj.islamove.data.models.BookingLocation
 import com.rj.islamove.data.models.RouteInfo
 import com.rj.islamove.data.models.NavigationInstruction
@@ -10,12 +11,14 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.async
+import okhttp3.MediaType.Companion.toMediaType
 import javax.inject.Inject
 import javax.inject.Singleton
 // For direct HTTP requests to Mapbox Directions API
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
+import java.util.concurrent.TimeUnit
 
 @Singleton
 class MapboxRepository @Inject constructor(
@@ -25,20 +28,15 @@ class MapboxRepository @Inject constructor(
 
     companion object {
         private const val TAG = "MapboxRepository"
+        private const val BACKEND_URL = BuildConfig.RENDER_BASE_URL
         private const val CACHE_EXPIRY_HOURS = 48L // Extended cache to 48 hours
         private const val MAX_CACHE_SIZE = 50 // Reduced cache size
 
         // API Rate limiting - DYNAMIC based on Mapbox monthly limits
-        // Mapbox Free Tier: 100,000 API calls/month - we track usage against this real limit
         private var isThrottlingActive = false
         private val MIN_REQUEST_INTERVAL get() = if (isThrottlingActive) 30000L else 1500L // 30s when throttling, 1.5s normally (was 5s!)
-        private val SHORT_DISTANCE_THRESHOLD get() = if (isThrottlingActive) 500.0 else 50.0 // 500m when throttling, 50m normally (was 300m)
+        private val SHORT_DISTANCE_THRESHOLD get() = if (isThrottlingActive) 200.0 else 20.0 // 200m when throttling, 20m normally
         private val MAPBOX_MONTHLY_LIMIT = 100000 // Mapbox free tier monthly limit (real limit that matters)
-
-        // San Jose, Nueva Ecija bounding box
-        private const val SAN_JOSE_LAT = 15.7886
-        private const val SAN_JOSE_LNG = 121.0748
-        private const val SEARCH_RADIUS = 50000 // 50km radius
     }
 
     // In-memory route cache
@@ -68,86 +66,19 @@ class MapboxRepository @Inject constructor(
 
     private var accessToken: String? = null
 
-    /**
-     * Configure API limits for cost control
-     */
-    fun configureApiLimits(
-        requestInterval: Long = MIN_REQUEST_INTERVAL,
-        shortDistanceThreshold: Double = SHORT_DISTANCE_THRESHOLD,
-        cacheExpiryHours: Long = CACHE_EXPIRY_HOURS
-    ) {
-        monthlyRequestCount = 0 // Reset counter when limits change
-        Log.d(TAG, "API limits configured: interval=${requestInterval}ms, shortDist=$shortDistanceThreshold, cache=$cacheExpiryHours hours")
-    }
-
-    /**
-     * Get comprehensive API usage and cost statistics
-     */
-    fun getApiUsageStats(): Map<String, Any> {
-        val currentTime = System.currentTimeMillis()
-        val daysUntilMonthlyReset = ((ONE_MONTH_MS - (currentTime - lastMonthlyResetTime)) / (24 * 60 * 60 * 1000))
-        val monthlyUsagePercent = (monthlyRequestCount.toDouble() / MAPBOX_MONTHLY_LIMIT) * 100
-
-        return mapOf(
-            // Monthly request tracking (what actually matters for Mapbox)
-            "monthlyRequestCount" to monthlyRequestCount,
-            "monthlyLimit" to MAPBOX_MONTHLY_LIMIT,
-            "monthlyRemaining" to (MAPBOX_MONTHLY_LIMIT - monthlyRequestCount),
-            "monthlyUsagePercent" to monthlyUsagePercent,
-            "daysUntilMonthlyReset" to daysUntilMonthlyReset,
-
-            // Dynamic throttling status
-            "isThrottlingActive" to isThrottlingActive,
-            "throttleMode" to if (isThrottlingActive) "STRICT" else "RELAXED",
-            "throttleActivationThreshold" to (THROTTLE_ACTIVATION_THRESHOLD * 100),
-            "throttleDeactivationThreshold" to (THROTTLE_DEACTIVATION_THRESHOLD * 100),
-
-            // Cost monitoring
-            "estimatedMonthlyCost" to totalApiCostEstimate,
-            "costPerRequest" to 0.5,
-
-            // Cache efficiency
-            "cacheSize" to routeCache.size,
-            "maxCacheSize" to MAX_CACHE_SIZE,
-            "cacheHitRate" to calculateCacheHitRate(),
-
-            // Dynamic thresholds
-            "shortDistanceThreshold" to SHORT_DISTANCE_THRESHOLD,
-            "minRequestInterval" to (MIN_REQUEST_INTERVAL / 1000),
-
-            // Safety status based on monthly usage
-            "safetyStatus" to when {
-                isThrottlingActive -> "DYNAMIC_THROTTLED"
-                monthlyUsagePercent >= 90.0 -> "CRITICAL_USAGE"
-                monthlyUsagePercent >= 80.0 -> "HIGH_USAGE"
-                monthlyUsagePercent >= 60.0 -> "MODERATE_USAGE"
-                else -> "SAFE"
-            }
-        )
-    }
-
-    private fun calculateCacheHitRate(): Double {
-        val totalAttempts = monthlyRequestCount + routeCache.size
-        return if (totalAttempts > 0) {
-            (routeCache.size.toDouble() / totalAttempts.toDouble()) * 100.0
-        } else 0.0
-    }
-
     init {
         initializeMapbox()
     }
 
     private fun initializeMapbox() {
         try {
-            val appInfo = context.packageManager.getApplicationInfo(
-                context.packageName,
-                android.content.pm.PackageManager.GET_META_DATA
-            )
-            accessToken = appInfo.metaData?.getString("MAPBOX_ACCESS_TOKEN")
+            accessToken = BuildConfig.MAPBOX_ACCESS_TOKEN
+
             if (accessToken.isNullOrEmpty()) {
-                Log.e(TAG, "Mapbox access token not found in manifest")
+                Log.e(TAG, "Mapbox access token not found in BuildConfig")
             } else {
-                Log.d(TAG, "Mapbox initialized successfully")
+                com.mapbox.common.MapboxOptions.accessToken = accessToken!!
+//                Log.d(TAG, "Mapbox initialized successfully")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize Mapbox", e)
@@ -210,14 +141,14 @@ class MapboxRepository @Inject constructor(
             // Activate throttling if approaching monthly limit (85%)
             monthlyUsagePercent >= THROTTLE_ACTIVATION_THRESHOLD && !isThrottlingActive -> {
                 isThrottlingActive = true
-                Log.w(TAG, "🚨 DYNAMIC THROTTLING ACTIVATED! Monthly usage: ${String.format("%.1f", monthlyUsagePercent * 100)}% ($monthlyRequestCount/$MAPBOX_MONTHLY_LIMIT)")
-                Log.w(TAG, "📉 Switched to STRICT limits: Request interval increased to 60s, short distance threshold increased to 1km")
+//                Log.w(TAG, "🚨 DYNAMIC THROTTLING ACTIVATED! Monthly usage: ${String.format("%.1f", monthlyUsagePercent * 100)}% ($monthlyRequestCount/$MAPBOX_MONTHLY_LIMIT)")
+//                Log.w(TAG, "📉 Switched to STRICT limits: Request interval increased to 60s, short distance threshold increased to 1km")
             }
             // Deactivate throttling if usage dropped back down (70%)
             monthlyUsagePercent <= THROTTLE_DEACTIVATION_THRESHOLD && isThrottlingActive -> {
                 isThrottlingActive = false
-                Log.i(TAG, "✅ DYNAMIC THROTTLING DEACTIVATED! Monthly usage: ${String.format("%.1f", monthlyUsagePercent * 100)}% ($monthlyRequestCount/$MAPBOX_MONTHLY_LIMIT)")
-                Log.i(TAG, "📈 Switched back to RELAXED limits: Request interval reduced to 5s, short distance threshold reduced to 300m")
+//                Log.i(TAG, "✅ DYNAMIC THROTTLING DEACTIVATED! Monthly usage: ${String.format("%.1f", monthlyUsagePercent * 100)}% ($monthlyRequestCount/$MAPBOX_MONTHLY_LIMIT)")
+//                Log.i(TAG, "📈 Switched back to RELAXED limits: Request interval reduced to 5s, short distance threshold reduced to 300m")
             }
         }
 
@@ -236,7 +167,7 @@ class MapboxRepository @Inject constructor(
 
         // Reset monthly counter if it's a new month
         if (currentTime - lastMonthlyResetTime > ONE_MONTH_MS) {
-            Log.i(TAG, "🔄 Monthly reset: Used $monthlyRequestCount Mapbox API calls last month (Cost estimate: $${"%.2f".format(totalApiCostEstimate)})")
+//            Log.i(TAG, "🔄 Monthly reset: Used $monthlyRequestCount Mapbox API calls last month (Cost estimate: $${"%.2f".format(totalApiCostEstimate)})")
             monthlyRequestCount = 0
             lastMonthlyResetTime = currentTime
             totalApiCostEstimate = 0.0 // Reset cost estimate monthly
@@ -244,13 +175,13 @@ class MapboxRepository @Inject constructor(
 
         // Check if we've exceeded the monthly limit (should never happen with throttling, but as safety)
         if (monthlyRequestCount >= MAPBOX_MONTHLY_LIMIT) {
-            Log.e(TAG, "🚨 MONTHLY LIMIT EXCEEDED! Used $monthlyRequestCount/$MAPBOX_MONTHLY_LIMIT API calls")
+//            Log.e(TAG, "🚨 MONTHLY LIMIT EXCEEDED! Used $monthlyRequestCount/$MAPBOX_MONTHLY_LIMIT API calls")
             return true
         }
 
         // With dynamic throttling, we shouldn't need hard limits, but add emergency stop at 95%
         if (monthlyRequestCount >= (MAPBOX_MONTHLY_LIMIT * 0.95)) {
-            Log.e(TAG, "🚨 EMERGENCY: Reached 95% of monthly limit! Used $monthlyRequestCount/$MAPBOX_MONTHLY_LIMIT")
+//            Log.e(TAG, "🚨 EMERGENCY: Reached 95% of monthly limit! Used $monthlyRequestCount/$MAPBOX_MONTHLY_LIMIT")
             return true
         }
 
@@ -271,7 +202,7 @@ class MapboxRepository @Inject constructor(
             val cacheKey = generateCacheKey(origin, destination)
             pendingRequests[cacheKey]?.let { pendingDeferred ->
                 if (pendingDeferred.isActive) {
-                    Log.d(TAG, "⏳ Deduplicating request: Waiting for existing API call for $cacheKey")
+//                    Log.d(TAG, "⏳ Deduplicating request: Waiting for existing API call for $cacheKey")
                     return@withContext pendingDeferred.await() // Reuse the existing request!
                 } else {
                     pendingRequests.remove(cacheKey)
@@ -286,11 +217,11 @@ class MapboxRepository @Inject constructor(
                 destination.coordinates.longitude
             )
 
-            Log.d(TAG, "Route calculation - forceRealRoute: $forceRealRoute, distance: ${String.format("%.0f", distance)}m, threshold: $SHORT_DISTANCE_THRESHOLD")
+//            Log.d(TAG, "Route calculation - forceRealRoute: $forceRealRoute, distance: ${String.format("%.0f", distance)}m, threshold: $SHORT_DISTANCE_THRESHOLD")
 
             // NEVER use direct routes when forceRealRoute is true - always use real API routing
             if (!forceRealRoute && distance < SHORT_DISTANCE_THRESHOLD) {
-                Log.d(TAG, "Short distance (${String.format("%.0f", distance)}m), using direct route to save API costs")
+//                Log.d(TAG, "Short distance (${String.format("%.0f", distance)}m), using direct route to save API costs")
                 val directRoute = createSimpleDirectRoute(origin, destination)
                 return@withContext Result.success(directRoute)
             }
@@ -299,14 +230,14 @@ class MapboxRepository @Inject constructor(
             if (!forceRealRoute) {
                 routeCache[cacheKey]?.let { cachedRoute ->
                     if (isCacheValid(cachedRoute)) {
-                        Log.d(TAG, "Using cached route for $cacheKey (${(System.currentTimeMillis() - cachedRoute.timestamp) / (60 * 60 * 1000)}h old)")
+//                        Log.d(TAG, "Using cached route for $cacheKey (${(System.currentTimeMillis() - cachedRoute.timestamp) / (60 * 60 * 1000)}h old)")
                         return@withContext Result.success(cachedRoute.route)
                     } else {
                         routeCache.remove(cacheKey)
                     }
                 }
             } else {
-                Log.d(TAG, "⚡ REAL-TIME: Skipping cache for active tracking (forceRealRoute=true)")
+                Log.d(TAG, "REAL-TIME: Skipping cache for active tracking (forceRealRoute=true)")
             }
 
             cleanExpiredCache()
@@ -316,7 +247,7 @@ class MapboxRepository @Inject constructor(
 
             // Enhanced API limit checking - BUT bypass for active rides when forceRealRoute is true
             if (!forceRealRoute && isApiLimitExceeded()) {
-                Log.w(TAG, "💰 Monthly API limit exceeded - using cost-free fallback route (Monthly: $monthlyRequestCount/$MAPBOX_MONTHLY_LIMIT, Throttling: ${if(isThrottlingActive) "STRICT" else "RELAXED"})")
+//                Log.w(TAG, "Monthly API limit exceeded - using cost-free fallback route (Monthly: $monthlyRequestCount/$MAPBOX_MONTHLY_LIMIT, Throttling: ${if(isThrottlingActive) "STRICT" else "RELAXED"})")
                 val fallbackRoute = createSimpleDirectRoute(origin, destination)
                 return@withContext Result.success(fallbackRoute)
             }
@@ -325,7 +256,7 @@ class MapboxRepository @Inject constructor(
             lastRequestTime[cacheKey]?.let { lastTime ->
                 val timeSinceLastRequest = currentTime - lastTime
                 if (!forceRealRoute && timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
-                    Log.d(TAG, "Request throttled for $cacheKey (${timeSinceLastRequest / 1000}s since last request)")
+//                    Log.d(TAG, "Request throttled for $cacheKey (${timeSinceLastRequest / 1000}s since last request)")
                     val fallbackRoute = createSimpleDirectRoute(origin, destination)
                     return@withContext Result.success(fallbackRoute)
                 }
@@ -335,7 +266,7 @@ class MapboxRepository @Inject constructor(
 
             val routeTypeLog = if (forceRealRoute) "ACTIVE RIDE" else "Regular"
             val monthlyUsagePercent = (monthlyRequestCount.toDouble() / MAPBOX_MONTHLY_LIMIT) * 100
-            Log.d(TAG, "Creating $routeTypeLog route from ${origin.address} to ${destination.address} (Monthly: $monthlyRequestCount/$MAPBOX_MONTHLY_LIMIT, ${String.format("%.1f", monthlyUsagePercent)}% used)")
+//            Log.d(TAG, "Creating $routeTypeLog route from ${origin.address} to ${destination.address} (Monthly: $monthlyRequestCount/$MAPBOX_MONTHLY_LIMIT, ${String.format("%.1f", monthlyUsagePercent)}% used)")
 
             // Create deferred for this request to enable request deduplication
             val deferred = kotlinx.coroutines.CoroutineScope(Dispatchers.IO).async {
@@ -353,7 +284,7 @@ class MapboxRepository @Inject constructor(
             return@withContext result
 
         } catch (e: Exception) {
-            Log.e(TAG, "Error getting route", e)
+//            Log.e(TAG, "Error getting route", e)
             pendingRequests.remove(generateCacheKey(origin, destination))
             if (forceRealRoute) {
                 // For forceRealRoute, return failure instead of straight line
@@ -385,22 +316,22 @@ class MapboxRepository @Inject constructor(
                     monthlyRequestCount++
                     totalApiCostEstimate += 0.5 // Estimate $0.50 per Directions API call
                     val newMonthlyUsagePercent = (monthlyRequestCount.toDouble() / MAPBOX_MONTHLY_LIMIT) * 100
-                    Log.i(TAG, "💰 $routeTypeLog API call successful! Monthly: $monthlyRequestCount/$MAPBOX_MONTHLY_LIMIT (${String.format("%.1f", newMonthlyUsagePercent)}%) | Est. Cost: $${"%.2f".format(totalApiCostEstimate)}")
+//                    Log.i(TAG, "$routeTypeLog API call successful! Monthly: $monthlyRequestCount/$MAPBOX_MONTHLY_LIMIT (${String.format("%.1f", newMonthlyUsagePercent)}%) | Est. Cost: $${"%.2f".format(totalApiCostEstimate)}")
                     apiRoute
                 } catch (e: Exception) {
-                    Log.w(TAG, "Real Mapbox Directions API failed, using fallback", e)
+//                    Log.w(TAG, "Real Mapbox Directions API failed, using fallback", e)
                     // For active rides, if API fails, try a second time
                     if (forceRealRoute) {
-                        Log.i(TAG, "🔄 RETRY: Second attempt for active ride route")
+//                        Log.i(TAG, "RETRY: Second attempt for active ride route")
                         try {
                             val retryRoute = getRealMapboxDirectionsRoute(origin, destination)
                             monthlyRequestCount++
                             totalApiCostEstimate += 0.5
                             val retryUsagePercent = (monthlyRequestCount.toDouble() / MAPBOX_MONTHLY_LIMIT) * 100
-                            Log.i(TAG, "💰 $routeTypeLog API RETRY successful! Monthly: $monthlyRequestCount/$MAPBOX_MONTHLY_LIMIT (${String.format("%.1f", retryUsagePercent)}%)")
+//                            Log.i(TAG, "💰 $routeTypeLog API RETRY successful! Monthly: $monthlyRequestCount/$MAPBOX_MONTHLY_LIMIT (${String.format("%.1f", retryUsagePercent)}%)")
                             retryRoute
                         } catch (e2: Exception) {
-                            Log.e(TAG, "🚨 CRITICAL: Both attempts failed for active ride - NO ROUTE AVAILABLE", e2)
+//                            Log.e(TAG, "🚨 CRITICAL: Both attempts failed for active ride - NO ROUTE AVAILABLE", e2)
                             // For forceRealRoute, return failure instead of straight line
                             return@calculateActualRoute Result.failure(Exception("Failed to calculate real route after 2 attempts: ${e2.message}"))
                         }
@@ -409,18 +340,18 @@ class MapboxRepository @Inject constructor(
                     }
                 }
             } else {
-                Log.w(TAG, "No Mapbox access token, using fallback route")
+//                Log.w(TAG, "No Mapbox access token, using fallback route")
                 createSimpleDirectRoute(origin, destination)
             }
 
             // Cache the route
             routeCache[cacheKey] = CachedRoute(routeInfo, System.currentTimeMillis())
-            Log.d(TAG, "Cached new route for $cacheKey. Cache size: ${routeCache.size}")
+//            Log.d(TAG, "Cached new route for $cacheKey. Cache size: ${routeCache.size}")
 
             return Result.success(routeInfo)
 
         } catch (e: Exception) {
-            Log.e(TAG, "Error getting route", e)
+//            Log.e(TAG, "Error getting route", e)
             if (forceRealRoute) {
                 // For forceRealRoute, return failure instead of straight line
                 return Result.failure(e)
@@ -439,70 +370,151 @@ class MapboxRepository @Inject constructor(
         destination: BookingLocation
     ): RouteInfo = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "Getting REAL Mapbox Directions API route with actual roads")
+//            Log.d(TAG, "Getting REAL Mapbox Directions API route with actual roads")
 
             if (accessToken.isNullOrEmpty()) {
-                Log.w(TAG, "No Mapbox access token, using fallback")
+//                Log.w(TAG, "No Mapbox access token, using fallback")
                 return@withContext createSimpleDirectRoute(origin, destination)
             }
 
             // Use REAL Mapbox Directions API for actual road routing
             getMapboxDirectionsApiRoute(origin, destination)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to get real Mapbox route, using fallback", e)
+//            Log.e(TAG, "Failed to get real Mapbox route, using fallback", e)
             createSimpleDirectRoute(origin, destination)
         }
     }
 
     /**
-     * Get route from Mapbox Directions API that follows REAL roads
-     * Using direct HTTP request to Mapbox REST API
+     * Get route from Mapbox Directions API via backend proxy
+     * This routes through your backend for usage tracking and rate limiting
      */
     private suspend fun getMapboxDirectionsApiRoute(
         origin: BookingLocation,
         destination: BookingLocation
     ): RouteInfo = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "Calling Mapbox Directions API via HTTP for real road routing")
+//            Log.d(TAG, "Calling backend proxy for Mapbox Directions API")
+//            Log.d(TAG, "Origin: ${origin.coordinates.latitude}, ${origin.coordinates.longitude}")
+//            Log.d(TAG, "Destination: ${destination.coordinates.latitude}, ${destination.coordinates.longitude}")
 
-            val client = OkHttpClient()
+            val client = OkHttpClient.Builder()
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .build()
 
-            // Build the Mapbox Directions API URL
-            val baseUrl = "https://api.mapbox.com/directions/v5/mapbox/driving/"
+            // Build request to backend proxy
             val coordinates = "${origin.coordinates.longitude},${origin.coordinates.latitude};${destination.coordinates.longitude},${destination.coordinates.latitude}"
-            val url = "$baseUrl$coordinates?access_token=${accessToken ?: ""}&geometries=polyline6&overview=full&steps=true"
 
-            Log.d(TAG, "Mapbox API URL: $url")
+            val requestBody = JSONObject().apply {
+                put("coordinates", coordinates)
+            }
+
+//            Log.d(TAG, "Request body: $requestBody")
 
             val request = Request.Builder()
-                .url(url)
+                .url("$BACKEND_URL/api/mapbox/directions")
+                .post(
+                    okhttp3.RequestBody.create(
+                        "application/json".toMediaType(),
+                        requestBody.toString()
+                    )
+                )
                 .build()
 
             val response = client.newCall(request).execute()
+            val responseBody = response.body?.string()
 
-            if (response.isSuccessful) {
-                val responseBody = response.body?.string()
-                if (responseBody != null) {
-                    val jsonResponse = JSONObject(responseBody)
-                    val routes = jsonResponse.optJSONArray("routes")
+//            Log.d(TAG, "Response code: ${response.code}")
+//            Log.d(TAG, "Response body length: ${responseBody?.length ?: 0}")
 
-                    if (routes != null && routes.length() > 0) {
-                        val route = routes.getJSONObject(0)
-                        Log.d(TAG, "SUCCESS: Got real Mapbox route from HTTP API")
-                        return@withContext convertMapboxJsonToRouteInfo(route)
-                    } else {
-                        Log.w(TAG, "No routes found in Mapbox response")
-                    }
-                }
-            } else {
-                Log.e(TAG, "Mapbox Directions API failed: ${response.code}")
+            if (responseBody != null && responseBody.length < 5000) {
+//                Log.d(TAG, "Response body preview: ${responseBody.take(500)}")
             }
 
-            Log.w(TAG, "Mapbox API failed, using fallback route")
+            if (response.isSuccessful && responseBody != null) {
+                val jsonResponse = JSONObject(responseBody)
+
+                // Check if this is a fallback response due to rate limiting
+                if (jsonResponse.optBoolean("fallback", false)) {
+//                    Log.w(TAG, "Backend returned fallback due to rate limiting")
+                    return@withContext createSimpleDirectRoute(origin, destination)
+                }
+
+                val routes = jsonResponse.optJSONArray("routes")
+//                Log.d(TAG, "Routes array: ${routes != null}, length: ${routes?.length() ?: 0}")
+
+                if (routes != null && routes.length() > 0) {
+                    val route = routes.getJSONObject(0)
+//                    Log.d(TAG, "Route object keys: ${route.keys().asSequence().toList()}")
+
+                    val geometry = route.optString("geometry", "")
+//                    Log.d(TAG, "Geometry present: ${geometry.isNotEmpty()}, length: ${geometry.length}")
+
+                    val distance = route.optDouble("distance", 0.0)
+                    val duration = route.optDouble("duration", 0.0)
+//                    Log.d(TAG, "Distance: ${distance}m, Duration: ${duration}s")
+
+                    val convertedRoute = convertMapboxJsonToRouteInfo(route)
+//                    Log.d(TAG, "✅ Converted route: ${convertedRoute.waypoints.size} waypoints, ${convertedRoute.totalDistance}m")
+                    return@withContext convertedRoute
+                } else {
+                    Log.e(TAG, "No routes in response!")
+                }
+            } else if (response.code == 429) {
+                // Rate limit exceeded - use fallback
+//                Log.w(TAG, "Backend rate limit exceeded (429), using fallback route")
+                return@withContext createSimpleDirectRoute(origin, destination)
+            } else {
+                Log.e(TAG, "Backend proxy failed: ${response.code}")
+//                Log.e(TAG, "Response body: $responseBody")
+            }
+
+//            Log.w(TAG, "Backend proxy failed, using fallback route")
             createSimpleDirectRoute(origin, destination)
         } catch (e: Exception) {
-            Log.e(TAG, "Exception calling Mapbox Directions API", e)
+//            Log.e(TAG, "❌ Exception calling backend proxy: ${e.message}", e)
             createSimpleDirectRoute(origin, destination)
+        }
+    }
+
+    /**
+     * Get current Mapbox API usage from backend.
+     * Optional - it's for showing usage in mobile app's admin section. You don't need to implement it.
+     */
+    suspend fun getMapboxUsageStats(): Result<Map<String, Any>> = withContext(Dispatchers.IO) {
+        try {
+            val client = OkHttpClient()
+            val request = Request.Builder()
+                .url("$BACKEND_URL/api/mapbox/usage")
+                .build()
+
+            val response = client.newCall(request).execute()
+            val responseBody = response.body?.string()
+
+            if (response.isSuccessful && responseBody != null) {
+                val json = JSONObject(responseBody)
+                val usage = json.getJSONObject("usage")
+
+                val stats = mapOf(
+                    "directions" to usage.getInt("directions"),
+                    "geocoding" to usage.getInt("geocoding"),
+                    "total" to usage.getInt("total"),
+                    "limit" to usage.getInt("limit"),
+                    "remaining" to usage.getInt("remaining"),
+                    "percentUsed" to usage.getDouble("percentUsed"),
+                    "status" to json.getString("status"),
+                    "daysUntilReset" to json.getInt("daysUntilReset"),
+                    "lastReset" to json.getString("lastReset")
+                )
+
+                Result.success(stats)
+            } else {
+                Result.failure(Exception("Failed to get usage stats: ${response.code}"))
+            }
+        } catch (e: Exception) {
+//            Log.e(TAG, "Error getting usage stats", e)
+            Result.failure(e)
         }
     }
 
@@ -526,9 +538,9 @@ class MapboxRepository @Inject constructor(
                     waypoints.add(GeoPoint(point.latitude, point.longitude))
                 }
 
-                Log.d(TAG, "Decoded ${decodedPoints.size} REAL road coordinates from Mapbox")
+//                Log.d(TAG, "Decoded ${decodedPoints.size} REAL road coordinates from Mapbox")
             } else {
-                Log.w(TAG, "No geometry in Mapbox route, using fallback")
+//                Log.w(TAG, "No geometry in Mapbox route, using fallback")
                 return createDirectFallbackRoute()
             }
 
@@ -538,7 +550,7 @@ class MapboxRepository @Inject constructor(
             // Extract turn-by-turn instructions
             val turnByTurnInstructions = extractTurnByTurnInstructions(route)
 
-            Log.i(TAG, "REAL Mapbox road route: ${String.format("%.0f", distance)}m, ~${duration}min with ${waypoints.size} road points and ${turnByTurnInstructions.size} instructions")
+//            Log.i(TAG, "REAL Mapbox road route: ${String.format("%.0f", distance)}m, ~${duration}min with ${waypoints.size} road points and ${turnByTurnInstructions.size} instructions")
 
             return RouteInfo(
                 waypoints = waypoints,
@@ -548,7 +560,7 @@ class MapboxRepository @Inject constructor(
                 turnByTurnInstructions = turnByTurnInstructions
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to convert Mapbox JSON route", e)
+//            Log.e(TAG, "Failed to convert Mapbox JSON route", e)
             return createDirectFallbackRoute()
         }
     }
@@ -763,53 +775,6 @@ class MapboxRepository @Inject constructor(
     private fun Double.format(digits: Int) = "%.${digits}f".format(this)
 
     /**
-     * Get route polyline points for map display
-     */
-    suspend fun getRoutePolyline(
-        origin: BookingLocation,
-        destination: BookingLocation
-    ): Result<List<com.mapbox.geojson.Point>> = withContext(Dispatchers.IO) {
-        try {
-            val routeResult = getRoute(origin, destination)
-
-            if (routeResult.isSuccess) {
-                val route = routeResult.getOrNull()!!
-                val points = route.waypoints.map { geoPoint ->
-                    com.mapbox.geojson.Point.fromLngLat(geoPoint.longitude, geoPoint.latitude)
-                }
-                Result.success(points)
-            } else {
-                Result.failure(routeResult.exceptionOrNull() ?: Exception("Failed to get route"))
-            }
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Error getting route polyline", e)
-            Result.failure(e)
-        }
-    }
-
-    /**
-     * Calculate estimated travel time
-     */
-    suspend fun getEstimatedTravelTime(
-        origin: BookingLocation,
-        destination: BookingLocation
-    ): Result<Int> = withContext(Dispatchers.IO) {
-        try {
-            val routeResult = getRoute(origin, destination)
-            if (routeResult.isSuccess) {
-                val route = routeResult.getOrNull()!!
-                Result.success(route.estimatedDuration)
-            } else {
-                Result.failure(routeResult.exceptionOrNull() ?: Exception("Failed to get travel time"))
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error getting travel time", e)
-            Result.failure(e)
-        }
-    }
-
-    /**
      * Search for locations (placeholder - using Google Places instead)
      */
     suspend fun searchLocations(
@@ -821,7 +786,7 @@ class MapboxRepository @Inject constructor(
                 return@withContext Result.success(emptyList())
             }
 
-            Log.w(TAG, "Location search not implemented - using Google Places API instead")
+//            Log.w(TAG, "Location search not implemented - using Google Places API instead")
             Result.success(emptyList())
 
         } catch (e: Exception) {
@@ -831,31 +796,31 @@ class MapboxRepository @Inject constructor(
     }
 
     /**
-     * Reverse geocoding (placeholder - using Google Places instead)
+     * Reverse geocoding (placeholder - using Google Places instead) - but i dont put google api key
      */
     suspend fun reverseGeocode(
         coordinates: GeoPoint
     ): Result<LocationSearchResult> = withContext(Dispatchers.IO) {
         try {
-            Log.w(TAG, "Reverse geocoding not implemented - using Google Places API instead")
+//            Log.w(TAG, "Reverse geocoding not implemented - using Google Places API instead")
 
             // Return a basic result
             val locationResult = LocationSearchResult(
                 id = "mapbox_${coordinates.latitude}_${coordinates.longitude}",
                 name = "Location",
                 fullAddress = "Lat: ${String.format("%.6f", coordinates.latitude)}, Lng: ${String.format("%.6f", coordinates.longitude)}",
-                shortAddress = "Nueva Ecija",
+                shortAddress = "Dinagat Islands",
                 coordinates = coordinates,
                 placeType = "address",
                 barangay = "",
                 municipality = "San Jose",
-                province = "Nueva Ecija"
+                province = "Dinagat Islands"
             )
 
             Result.success(locationResult)
 
         } catch (e: Exception) {
-            Log.e(TAG, "Error reverse geocoding", e)
+//            Log.e(TAG, "Error reverse geocoding", e)
             Result.failure(e)
         }
     }
@@ -873,5 +838,5 @@ data class LocationSearchResult(
     val placeType: String,
     val barangay: String = "",
     val municipality: String = "San Jose",
-    val province: String = "Nueva Ecija"
+    val province: String = "Dinagat Islands"
 )

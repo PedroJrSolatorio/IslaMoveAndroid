@@ -1145,15 +1145,15 @@ private fun MapContent(
         overlayVisibilityMap[request.requestId] == true
     }
 
-    // Log the state for debugging
-    android.util.Log.e("MapContent", "🎨 RENDERING MapContent:")
-    android.util.Log.e("MapContent", "   - currentBooking: ${uiState.currentBooking?.id}")
-    android.util.Log.e("MapContent", "   - queuedBookings: ${uiState.queuedBookings.map { it.id }}")
-    android.util.Log.e("MapContent", "   - allAcceptedRides count: ${allAcceptedRides.size}")
-    android.util.Log.e("MapContent", "   - hasActivePassengers: $hasActivePassengers")
-    android.util.Log.e("MapContent", "   - Will show 60/40 split: $hasActivePassengers")
-    android.util.Log.e("MapContent", "   - 🗺️ routeInfo: ${uiState.routeInfo != null} (${uiState.routeInfo?.waypoints?.size} waypoints)")
-    android.util.Log.e("MapContent", "   - 🛣️ showRoute will be: ${uiState.currentBooking != null && uiState.routeInfo != null}")
+//    // Log the state for debugging
+//    android.util.Log.e("MapContent", "🎨 RENDERING MapContent:")
+//    android.util.Log.e("MapContent", "   - currentBooking: ${uiState.currentBooking?.id}")
+//    android.util.Log.e("MapContent", "   - queuedBookings: ${uiState.queuedBookings.map { it.id }}")
+//    android.util.Log.e("MapContent", "   - allAcceptedRides count: ${allAcceptedRides.size}")
+//    android.util.Log.e("MapContent", "   - hasActivePassengers: $hasActivePassengers")
+//    android.util.Log.e("MapContent", "   - Will show 60/40 split: $hasActivePassengers")
+//    android.util.Log.e("MapContent", "   - 🗺️ routeInfo: ${uiState.routeInfo != null} (${uiState.routeInfo?.waypoints?.size} waypoints)")
+//    android.util.Log.e("MapContent", "   - 🛣️ showRoute will be: ${uiState.currentBooking != null && uiState.routeInfo != null}")
 
     // If there are active passengers (current or queued), show 60/40 split layout
     // Otherwise show full map with incoming requests at bottom

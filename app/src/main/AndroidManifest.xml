@@ -36,11 +36,6 @@
         android:name=".IslamoveApplication"
         android:usesCleartextTraffic="true"
         android:networkSecurityConfig="@xml/network_security_config">
-        
-        <!-- Google Maps API Key -->
-        <meta-data
-            android:name="com.google.android.geo.API_KEY"
-            android:value="${GOOGLE_MAPS_API_KEY}" />
             
         <!-- Mapbox API Key -->
         <meta-data

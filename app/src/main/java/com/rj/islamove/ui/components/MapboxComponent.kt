@@ -578,13 +578,13 @@ fun MapboxRideView(
 
             // Add new route if conditions are met
             if (showRoute && routeInfo != null && routeInfo.waypoints.isNotEmpty()) {
-                Log.d("MapboxComponent", "🎯 ROUTE DISPLAY CONDITIONS MET:")
-                Log.d("MapboxComponent", "   - showRoute: $showRoute")
-                Log.d("MapboxComponent", "   - routeInfo != null: ${routeInfo != null}")
-                Log.d("MapboxComponent", "   - routeInfo.waypoints.isNotEmpty(): ${routeInfo.waypoints.isNotEmpty()}")
-                Log.d("MapboxComponent", "   - waypoint count: ${routeInfo.waypoints.size}")
-                Log.d("MapboxComponent", "   - routeId: ${routeInfo.routeId}")
-                Log.d("MapboxComponent", "   - totalDistance: ${routeInfo.totalDistance}m")
+//                Log.d("MapboxComponent", "🎯 ROUTE DISPLAY CONDITIONS MET:")
+//                Log.d("MapboxComponent", "   - showRoute: $showRoute")
+//                Log.d("MapboxComponent", "   - routeInfo != null: ${routeInfo != null}")
+//                Log.d("MapboxComponent", "   - routeInfo.waypoints.isNotEmpty(): ${routeInfo.waypoints.isNotEmpty()}")
+//                Log.d("MapboxComponent", "   - waypoint count: ${routeInfo.waypoints.size}")
+//                Log.d("MapboxComponent", "   - routeId: ${routeInfo.routeId}")
+//                Log.d("MapboxComponent", "   - totalDistance: ${routeInfo.totalDistance}m")
                 try {
                     addMapboxRoute(
                         polylineAnnotationManager = manager,
@@ -593,7 +593,7 @@ fun MapboxRideView(
                     )
                     Log.d("MapboxComponent", "✅ Route rendered successfully in dedicated LaunchedEffect")
 
-                    // CRITICAL FIX: Zoom camera to show the entire route
+                    // Zoom camera to show the entire route
                     if (!isNavigationMode && mapView != null) {
                         val routePoints = routeInfo.waypoints.map { Point.fromLngLat(it.longitude, it.latitude) }
                         if (routePoints.size >= 2) {
@@ -629,7 +629,7 @@ fun MapboxRideView(
                                     .zoom(zoom)
                                     .build()
                             )
-                            Log.d("MapboxComponent", "📷 Camera positioned to show route: center=($centerLat,$centerLng), zoom=$zoom")
+//                            Log.d("MapboxComponent", "📷 Camera positioned to show route: center=($centerLat,$centerLng), zoom=$zoom")
                         }
                     }
                 } catch (e: Exception) {
@@ -637,14 +637,14 @@ fun MapboxRideView(
                 }
             } else {
                 // Log why route is not being displayed
-                Log.d("MapboxComponent", "❌ ROUTE DISPLAY CONDITIONS NOT MET:")
-                Log.d("MapboxComponent", "   - showRoute: $showRoute")
-                Log.d("MapboxComponent", "   - routeInfo != null: ${routeInfo != null}")
-                Log.d("MapboxComponent", "   - routeInfo.waypoints.isNotEmpty(): ${routeInfo?.waypoints?.isNotEmpty() ?: false}")
-                Log.d("MapboxComponent", "   - waypoint count: ${routeInfo?.waypoints?.size ?: 0}")
+//                Log.d("MapboxComponent", "❌ ROUTE DISPLAY CONDITIONS NOT MET:")
+//                Log.d("MapboxComponent", "   - showRoute: $showRoute")
+//                Log.d("MapboxComponent", "   - routeInfo != null: ${routeInfo != null}")
+//                Log.d("MapboxComponent", "   - routeInfo.waypoints.isNotEmpty(): ${routeInfo?.waypoints?.isNotEmpty() ?: false}")
+//                Log.d("MapboxComponent", "   - waypoint count: ${routeInfo?.waypoints?.size ?: 0}")
                 if (routeInfo != null) {
-                    Log.d("MapboxComponent", "   - routeId: ${routeInfo.routeId}")
-                    Log.d("MapboxComponent", "   - totalDistance: ${routeInfo.totalDistance}m")
+//                    Log.d("MapboxComponent", "   - routeId: ${routeInfo.routeId}")
+//                    Log.d("MapboxComponent", "   - totalDistance: ${routeInfo.totalDistance}m")
                 }
             }
         } ?: Log.w("MapboxComponent", "⚠️ Cannot manage routes: polylineAnnotationManager is null")
@@ -765,7 +765,7 @@ fun MapboxRideView(
                             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(this, 1500) // Check every 1.5 seconds
                         }
                     } catch (e: Exception) {
-                        Log.e("MapboxComponent", "Error in boundary monitoring: ${e.message}")
+//                        Log.e("MapboxComponent", "Error in boundary monitoring: ${e.message}")
                         // Continue monitoring even after errors
                         if (showBarangayBoundaries) {
                             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(this, 3000) // Check every 3 seconds on error
@@ -805,13 +805,13 @@ fun MapboxRideView(
             // Create annotation manager if needed
             if (driverPassengerAnnotationManager == null) {
                 driverPassengerAnnotationManager = view.annotations.createPointAnnotationManager()
-                Log.d("MapboxComponent", "Created dedicated driver/passenger annotation manager")
+//                Log.d("MapboxComponent", "Created dedicated driver/passenger annotation manager")
             }
 
             driverPassengerAnnotationManager?.let { manager ->
                 // Clear ALL markers in this manager to prevent duplication from async race conditions
                 manager.deleteAll()
-                Log.d("MapboxComponent", "🧹 Cleared driver/passenger markers")
+//                Log.d("MapboxComponent", "🧹 Cleared driver/passenger markers")
 
                 // Add new driver marker if location available
                 if (driverLocation != null && currentBooking != null) {
@@ -820,7 +820,7 @@ fun MapboxRideView(
                         .withPoint(driverLocation)
                         .withIconImage(driverIcon)
                     manager.create(driverOptions)
-                    Log.d("MapboxComponent", "🚗 Created driver marker at (${driverLocation.latitude()}, ${driverLocation.longitude()})")
+//                    Log.d("MapboxComponent", "🚗 Created driver marker at (${driverLocation.latitude()}, ${driverLocation.longitude()})")
                 }
 
                 // Add new passenger marker if location available
@@ -830,7 +830,7 @@ fun MapboxRideView(
                         .withPoint(passengerLocation)
                         .withIconImage(passengerIcon)
                     manager.create(passengerOptions)
-                    Log.d("MapboxComponent", "👤 Created passenger marker at (${passengerLocation.latitude()}, ${passengerLocation.longitude()})")
+//                    Log.d("MapboxComponent", "👤 Created passenger marker at (${passengerLocation.latitude()}, ${passengerLocation.longitude()})")
                 }
             }
         }
@@ -1181,20 +1181,20 @@ fun MapboxRideView(
                             try {
                                 if (polylineAnnotationManager == null) {
                                     polylineAnnotationManager = annotations.createPolylineAnnotationManager()
-                                    Log.d("MapboxComponent", "✅ Polyline manager created - routes can now be rendered")
+//                                    Log.d("MapboxComponent", "Polyline manager created - routes can now be rendered")
 
                                     // Test the manager by trying to create a simple point annotation first
-                                    Log.d("MapboxComponent", "🧪 Testing polyline manager readiness...")
+//                                    Log.d("MapboxComponent", "Testing polyline manager readiness...")
                                 }
 
                                 // Additional delay to ensure annotation system is fully initialized
                                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                                     // NOW set isMapStyleLoaded to trigger route rendering
                                     isMapStyleLoaded = true
-                                    Log.d("MapboxComponent", "✅ Map style fully loaded - route rendering can proceed")
+//                                    Log.d("MapboxComponent", "Map style fully loaded - route rendering can proceed")
                                 }, 300) // Extra 300ms delay for annotation system
                             } catch (e: Exception) {
-                                Log.e("MapboxComponent", "❌ Failed to create polyline annotation manager", e)
+                                Log.e("MapboxComponent", "Failed to create polyline annotation manager", e)
                             }
                         }, 500) // Increased delay to 500ms for full style initialization
                     }

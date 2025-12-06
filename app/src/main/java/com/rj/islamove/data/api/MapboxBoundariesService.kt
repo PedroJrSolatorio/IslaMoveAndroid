@@ -26,6 +26,7 @@ package com.rj.islamove.data.api
 import android.util.Log
 import com.mapbox.geojson.Geometry
 import com.mapbox.geojson.Polygon
+import com.rj.islamove.BuildConfig
 import com.rj.islamove.data.models.BoundaryPoint
 import com.rj.islamove.data.models.ServiceAreaBoundary
 import kotlinx.coroutines.Dispatchers
@@ -43,15 +44,6 @@ class MapboxBoundariesService @Inject constructor(
     companion object {
         private const val TAG = "MapboxBoundariesService"
         private const val MAPBOX_API_BASE = "https://api.mapbox.com"
-
-        // Boundaries v4 tilesets
-        private const val ADMIN_TILESET = "mapbox.boundaries-adm"
-        private const val LOCALITY_TILESET = "mapbox.boundaries-loc"
-        private const val POSTAL_TILESET = "mapbox.boundaries-pos"
-
-        // Barangay boundary source for Philippines
-        const val BARANGAY_BOUNDARIES_SOURCE_ID = "barangay-boundaries"
-        const val BARANGAY_BOUNDARIES_LAYER_ID = "barangay-boundaries-layer"
     }
 
     data class BoundaryFeature(
@@ -64,24 +56,6 @@ class MapboxBoundariesService @Inject constructor(
         val centroid: Pair<Double, Double>? = null,
         val bbox: List<Double>? = null
     )
-
-    data class BoundaryLayer(
-        val name: String,
-        val description: String,
-        val tileset: String,
-        val level: Int
-    )
-
-    fun getAvailableBoundaryLayers(): List<BoundaryLayer> {
-        return listOf(
-            BoundaryLayer("Countries", "Country boundaries", ADMIN_TILESET + "0", 0),
-            BoundaryLayer("Provinces/States", "First-level administrative divisions", ADMIN_TILESET + "1", 1),
-            BoundaryLayer("Cities/Municipalities", "Second-level administrative divisions", ADMIN_TILESET + "2", 2),
-            BoundaryLayer("Districts", "Third-level administrative divisions", ADMIN_TILESET + "3", 3),
-            BoundaryLayer("Localities", "Local administrative areas", LOCALITY_TILESET + "1", 1),
-            BoundaryLayer("Neighborhoods", "Neighborhood boundaries", LOCALITY_TILESET + "2", 2)
-        )
-    }
 
     suspend fun searchBoundaries(
         query: String,
@@ -188,18 +162,8 @@ class MapboxBoundariesService @Inject constructor(
 
     private fun getMapboxAccessToken(): String {
         // In production, this should come from BuildConfig or secure storage
-        val token = "pk.eyJ1IjoiamhhenBlcjExMiIsImEiOiJjbWYxeGdiemUyYXB6MmpzZGdoODhnYTM0In0.ZOWrbtXWV8eT0tEkfa-GYQ"
+        val token = BuildConfig.MAPBOX_ACCESS_TOKEN
         Log.d(TAG, "Using Mapbox access token: ${token.take(20)}...")
         return token
-    }
-
-    /**
-     * Get the tileset URL for Philippines administrative boundaries (including barangays)
-     * Uses the free-tier compatible administrative boundaries
-     */
-    fun getPhilippinesAdminBoundariesUrl(): String {
-        // For free tier, we'll use a publicly available tileset for Philippines admin boundaries
-        // This provides city/municipality and barangay level boundaries
-        return "mapbox://mapbox.boundaries-adm3-v3"
     }
 }
