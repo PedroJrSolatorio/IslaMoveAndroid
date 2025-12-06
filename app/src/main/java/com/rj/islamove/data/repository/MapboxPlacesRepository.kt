@@ -105,7 +105,7 @@ class MapboxPlacesRepository @Inject constructor(
      */
     suspend fun findNearbyPlaces(
         location: Point,
-        radius: Int = 500 // 500m radius
+        radius: Int = 250 // 250m radius
     ): Result<List<PlaceDetails>> {
         return try {
             // Return empty list for now - basic implementation

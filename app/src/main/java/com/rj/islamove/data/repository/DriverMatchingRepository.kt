@@ -179,7 +179,7 @@ class DriverMatchingRepository @Inject constructor(
         private const val MAX_ACCEPTED_RIDES_PER_DRIVER = 5 // Maximum number of accepted rides a driver can have
 
         // Distance thresholds in meters
-        private const val MAX_DRIVER_TO_PICKUP_RADIUS_METERS = 500.0 // Maximum radius for drivers to receive ride requests (500m)
+        private const val MAX_DRIVER_TO_PICKUP_RADIUS_METERS = 250.0 // Maximum radius for drivers to receive ride requests (250m)
     }
 
     /**

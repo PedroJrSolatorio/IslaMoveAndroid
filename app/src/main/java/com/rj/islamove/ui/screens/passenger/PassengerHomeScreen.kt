@@ -942,7 +942,7 @@ private fun MapsContent(
                             val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
                             val distance = R * c
                             Log.d("PassengerHomeScreen", "Distance to ${landmark.name}: ${distance}m")
-                            distance < 500.0 // 500 meters threshold for admin destinations
+                            distance < 50.0 // 50 meters threshold for admin destinations (custom landmarks)
                         }
 
                         // Determine destination address and display name
