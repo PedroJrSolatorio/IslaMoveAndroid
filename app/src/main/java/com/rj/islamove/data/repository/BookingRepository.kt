@@ -62,17 +62,17 @@ class BookingRepository @Inject constructor(
             val migratedDistance = fareEstimate.estimatedDistance * 1000.0 // Convert km to meters
             val migratedFareEstimate = fareEstimate.copy(estimatedDistance = migratedDistance)
 
-            android.util.Log.i("BookingRepository", "🔄 MIGRATED booking ${booking.id}: distance ${fareEstimate.estimatedDistance}km -> ${migratedDistance}m")
+//            android.util.Log.i("BookingRepository", "MIGRATED booking ${booking.id}: distance ${fareEstimate.estimatedDistance}km -> ${migratedDistance}m")
 
             // Update the booking in Firestore with migrated distance
             firestore.collection(BOOKINGS_COLLECTION)
                 .document(booking.id)
                 .update("fareEstimate.estimatedDistance", migratedDistance)
                 .addOnSuccessListener {
-                    android.util.Log.i("BookingRepository", "✅ Updated booking ${booking.id} in Firestore with migrated distance")
+//                    android.util.Log.i("BookingRepository", "Updated booking ${booking.id} in Firestore with migrated distance")
                 }
                 .addOnFailureListener { e ->
-                    android.util.Log.e("BookingRepository", "❌ Failed to update booking ${booking.id} in Firestore", e)
+//                    android.util.Log.e("BookingRepository", "Failed to update booking ${booking.id} in Firestore", e)
                 }
 
             booking.copy(fareEstimate = migratedFareEstimate)
@@ -102,27 +102,6 @@ class BookingRepository @Inject constructor(
         // Note: Fare calculations now use San Jose Municipal Fare Matrix only
         // No distance or time-based calculations - matrix covers all routes
     }
-    
-    /**
-     * FR-3.1.2: Calculate fare estimates using San Jose Municipal Fare Matrix only
-     */
-    suspend fun calculateFareEstimate(
-        pickupLocation: GeoPoint,
-        destination: GeoPoint,
-        vehicleCategory: VehicleCategory = VehicleCategory.STANDARD
-    ): FareEstimate {
-        // Create temporary BookingLocation objects for the San Jose fare calculation
-        val pickup = BookingLocation(
-            address = "Pickup Location",
-            coordinates = pickupLocation
-        )
-        val dest = BookingLocation(
-            address = "Destination Location", 
-            coordinates = destination
-        )
-        
-        return calculateFareEstimate(pickup, dest, vehicleCategory)
-    }
 
     suspend fun searchZoneBoundaries(query: String): List<BookingLocation> {
         if (cachedZones == null || System.currentTimeMillis() - cacheTimestamp > CACHE_DURATION) {
@@ -143,61 +122,11 @@ class BookingRepository @Inject constructor(
                 }
                 cacheTimestamp = System.currentTimeMillis()
             } catch (e: Exception) {
-                Log.e("BookingRepository", "Error loading zone boundaries", e)
+//                Log.e("BookingRepository", "Error loading zone boundaries", e)
                 if (cachedZones == null) return emptyList()
             }
         }
         return cachedZones?.filter { it.address.contains(query, ignoreCase = true) } ?: emptyList()
-    }
-
-    suspend fun refreshZoneBoundariesCache() {
-        cachedZones = null
-        cacheTimestamp = 0
-        searchZoneBoundaries("") // Trigger reload
-    }
-
-    /**
-     * Calculate fare estimate using San Jose Municipal Fare Matrix only
-     */
-    suspend fun calculateFareEstimate(
-        pickupLocation: BookingLocation,
-        destination: BookingLocation,
-        vehicleCategory: VehicleCategory = VehicleCategory.STANDARD,
-        discountPercentage: Int? = null
-    ): FareEstimate {
-        // Check cache first to avoid unnecessary calculation
-        val cacheKey = generateFareCacheKey(pickupLocation, destination, vehicleCategory)
-        fareCache[cacheKey]?.let { cachedFare ->
-            return cachedFare
-        }
-
-        return try {
-            // Use only San Jose municipal fare matrix - no distance/time calculations
-            val fareEstimate = sanJoseLocationRepository.calculateFareEstimate(
-                pickupLocation, destination, vehicleCategory, discountPercentage
-            )
-
-            // Cache the result
-            if (fareCache.size >= maxFareCacheSize) {
-                // Remove oldest entry to make room
-                fareCache.remove(fareCache.keys.first())
-            }
-            fareCache[cacheKey] = fareEstimate
-
-            fareEstimate
-        } catch (e: Exception) {
-            // Fallback to municipal calculation on any error
-            val fareEstimate = sanJoseLocationRepository.calculateFareEstimate(
-                pickupLocation, destination, vehicleCategory, discountPercentage
-            )
-
-            // Cache the fallback result too
-            if (fareCache.size < maxFareCacheSize) {
-                fareCache[cacheKey] = fareEstimate
-            }
-
-            fareEstimate
-        }
     }
     
     /**
@@ -279,9 +208,9 @@ class BookingRepository @Inject constructor(
             if (bookingDoc.exists()) {
                 // Log the raw Firestore data to see what fields exist
                 val rawData = bookingDoc.data
-                android.util.Log.d("BookingRepository", "Raw Firestore document fields:")
+//                android.util.Log.d("BookingRepository", "Raw Firestore document fields:")
                 rawData?.forEach { (key, value) ->
-                    android.util.Log.d("BookingRepository", "  $key: '$value' (${value?.javaClass?.simpleName})")
+//                    android.util.Log.d("BookingRepository", "  $key: '$value' (${value?.javaClass?.simpleName})")
                 }
 
                 val booking = bookingDoc.toObject(Booking::class.java)
@@ -295,19 +224,19 @@ class BookingRepository @Inject constructor(
                     // If passengerId is empty, try manual extraction from raw data
                     if (bookingWithId.passengerId.isBlank()) {
                         val manualPassengerId = rawData?.get("passengerId") as? String
-                        android.util.Log.w("BookingRepository", "passengerId empty in toObject(), trying manual extraction: '$manualPassengerId'")
+//                        android.util.Log.w("BookingRepository", "passengerId empty in toObject(), trying manual extraction: '$manualPassengerId'")
 
                         if (!manualPassengerId.isNullOrBlank()) {
                             bookingWithId = bookingWithId.copy(passengerId = manualPassengerId)
-                            android.util.Log.i("BookingRepository", "Fixed passengerId with manual extraction: '$manualPassengerId'")
+//                            android.util.Log.i("BookingRepository", "Fixed passengerId with manual extraction: '$manualPassengerId'")
                         }
                     }
 
-                    android.util.Log.d("BookingRepository", "After toObject() conversion:")
-                    android.util.Log.d("BookingRepository", "  booking.id: '${bookingWithId.id}'")
-                    android.util.Log.d("BookingRepository", "  booking.passengerId: '${bookingWithId.passengerId}' (length: ${bookingWithId.passengerId.length})")
-                    android.util.Log.d("BookingRepository", "  booking.driverId: '${bookingWithId.driverId}'")
-                    android.util.Log.d("BookingRepository", "  booking.status: ${bookingWithId.status}")
+//                    android.util.Log.d("BookingRepository", "After toObject() conversion:")
+//                    android.util.Log.d("BookingRepository", "  booking.id: '${bookingWithId.id}'")
+//                    android.util.Log.d("BookingRepository", "  booking.passengerId: '${bookingWithId.passengerId}' (length: ${bookingWithId.passengerId.length})")
+//                    android.util.Log.d("BookingRepository", "  booking.driverId: '${bookingWithId.driverId}'")
+//                    android.util.Log.d("BookingRepository", "  booking.status: ${bookingWithId.status}")
                     Result.success(bookingWithId)
                 } else {
                     Result.failure(Exception("Failed to parse booking data"))
@@ -343,7 +272,7 @@ class BookingRepository @Inject constructor(
                 Result.success(bookings)
             } catch (indexException: Exception) {
                 // Fallback: Get data without ordering, then sort in memory
-                android.util.Log.w("BookingRepository", "Composite index not available, using fallback query")
+//                android.util.Log.w("BookingRepository", "Composite index not available, using fallback query")
 
                 val querySnapshot = firestore.collection(BOOKINGS_COLLECTION)
                     .whereEqualTo("passengerId", currentUser.uid)
@@ -373,7 +302,7 @@ class BookingRepository @Inject constructor(
         cancelledBy: String = "passenger"  // "passenger" or "driver"
     ): Result<Unit> {
         return try {
-            android.util.Log.d("BookingRepository", "🔒 ATOMIC: Starting cancellation transaction for booking: '$bookingId'")
+//            android.util.Log.d("BookingRepository", "ATOMIC: Starting cancellation transaction for booking: '$bookingId'")
 
             val bookingRef = firestore.collection(BOOKINGS_COLLECTION).document(bookingId)
 
@@ -392,7 +321,7 @@ class BookingRepository @Inject constructor(
                 when {
                     currentStatus == BookingStatus.CANCELLED.name -> {
                         // Booking is already cancelled - this is actually the desired outcome
-                        android.util.Log.d("BookingRepository", "✅ ATOMIC: Booking already cancelled - treating as success")
+//                        android.util.Log.d("BookingRepository", "✅ ATOMIC: Booking already cancelled - treating as success")
                         return@runTransaction null // Return null to indicate success without further updates
                     }
                     currentStatus == BookingStatus.COMPLETED.name -> {
@@ -402,7 +331,7 @@ class BookingRepository @Inject constructor(
                             && currentDriverId != null && currentDriverId.isNotBlank()
                             && cancelledBy == "passenger" -> {
                         // Passenger cancelling after driver accepted - this is allowed
-                        android.util.Log.d("BookingRepository", "Passenger cancelling accepted booking with driver $currentDriverId")
+//                        android.util.Log.d("BookingRepository", "Passenger cancelling accepted booking with driver $currentDriverId")
                     }
                 }
 
@@ -425,17 +354,17 @@ class BookingRepository @Inject constructor(
             }.await().also { transactionResult ->
                 // Handle case where booking was already cancelled (transactionResult is null)
                 if (transactionResult == null) {
-                    android.util.Log.d("BookingRepository", "✅ ATOMIC: Booking was already cancelled - still need to clean up driver requests")
+//                    android.util.Log.d("BookingRepository", "ATOMIC: Booking was already cancelled - still need to clean up driver requests")
 
                     // Even if booking was already cancelled, we still need to cancel driver requests
                     // to prevent stale requests from appearing on driver side
                     if (cancelledBy == "passenger") {
-                        android.util.Log.d("BookingRepository", "Passenger cancelled - clearing all driver requests for booking: $bookingId")
+//                        android.util.Log.d("BookingRepository", "Passenger cancelled - clearing all driver requests for booking: $bookingId")
                         try {
                             cancelDriverRequestsDirectly(bookingId)
-                            android.util.Log.d("BookingRepository", "✅ Successfully cancelled all driver requests for already-cancelled booking")
+//                            android.util.Log.d("BookingRepository", "Successfully cancelled all driver requests for already-cancelled booking")
                         } catch (e: Exception) {
-                            android.util.Log.e("BookingRepository", "❌ Failed to cancel driver requests for already-cancelled booking", e)
+                            android.util.Log.e("BookingRepository", "Failed to cancel driver requests for already-cancelled booking", e)
                         }
                     }
                     return@also
@@ -446,19 +375,19 @@ class BookingRepository @Inject constructor(
                 val previousStatus = transactionResult["status"] as? String
                 val actualCancelledBy = transactionResult["cancelledBy"] as? String
 
-                android.util.Log.d("BookingRepository", "✅ ATOMIC: Cancellation transaction successful for booking: $bookingId")
+//                android.util.Log.d("BookingRepository", "ATOMIC: Cancellation transaction successful for booking: $bookingId")
 
                 // Remove from active bookings in Realtime Database
                 activeBookingRepository.removeActiveBooking(bookingId)
 
                 // Cancel all pending driver requests if PASSENGER cancelled (clears Maps tab)
                 if (actualCancelledBy == "passenger") {
-                    android.util.Log.d("BookingRepository", "Passenger cancelled - clearing all driver requests for booking: $bookingId")
+//                    android.util.Log.d("BookingRepository", "Passenger cancelled - clearing all driver requests for booking: $bookingId")
                     try {
                         cancelDriverRequestsDirectly(bookingId)
-                        android.util.Log.d("BookingRepository", "✅ Successfully cancelled all driver requests")
+//                        android.util.Log.d("BookingRepository", "Successfully cancelled all driver requests")
                     } catch (e: Exception) {
-                        android.util.Log.e("BookingRepository", "❌ Failed to cancel driver requests", e)
+//                        android.util.Log.e("BookingRepository", "Failed to cancel driver requests", e)
                     }
                 }
 
@@ -467,17 +396,17 @@ class BookingRepository @Inject constructor(
                     previousStatus in listOf(BookingStatus.ACCEPTED.name, BookingStatus.DRIVER_ARRIVING.name, BookingStatus.DRIVER_ARRIVED.name) &&
                     actualCancelledBy == "passenger") {
 
-                    android.util.Log.i("BookingRepository", "🔔 Notifying assigned driver $driverId of passenger cancellation")
+                    android.util.Log.i("BookingRepository", "Notifying assigned driver $driverId of passenger cancellation")
                     try {
                         // Get full booking details for notification
                         val bookingDoc = firestore.collection(BOOKINGS_COLLECTION).document(bookingId).get().await()
                         val booking = bookingDoc.toObject(Booking::class.java)
                         if (booking != null) {
                             notificationService.sendRideCancellationToDriver(booking, driverId, reason)
-                            android.util.Log.d("BookingRepository", "✅ Driver notification sent successfully")
+//                            android.util.Log.d("BookingRepository", "Driver notification sent successfully")
                         }
                     } catch (e: Exception) {
-                        android.util.Log.e("BookingRepository", "❌ Failed to notify driver of cancellation", e)
+                        android.util.Log.e("BookingRepository", "Failed to notify driver of cancellation", e)
                     }
                 }
 
@@ -489,11 +418,11 @@ class BookingRepository @Inject constructor(
         } catch (e: Exception) {
             when {
                 e.message?.contains("RACE_CONDITION") == true -> {
-                    android.util.Log.w("BookingRepository", "Race condition detected during cancellation: ${e.message}")
+//                    android.util.Log.w("BookingRepository", "Race condition detected during cancellation: ${e.message}")
                     Result.failure(Exception(e.message))
                 }
                 e.message?.contains("Booking not found") == true -> {
-                    android.util.Log.w("BookingRepository", "Booking not found - may be timing issue, retrying once...")
+//                    android.util.Log.w("BookingRepository", "Booking not found - may be timing issue, retrying once...")
 
                     // Retry once for immediate cancellations (when booking might still be creating)
                     return try {
@@ -503,16 +432,16 @@ class BookingRepository @Inject constructor(
                         if (retryException.message?.contains("Booking not found") == true) {
                             // If still not found after retry, consider it a successful cancellation
                             // since the booking likely never fully created
-                            android.util.Log.d("BookingRepository", "Booking still not found after retry - assuming cancellation successful")
+//                            android.util.Log.d("BookingRepository", "Booking still not found after retry - assuming cancellation successful")
                             Result.success(Unit)
                         } else {
-                            android.util.Log.e("BookingRepository", "Retry failed for booking: $bookingId", retryException)
+//                            android.util.Log.e("BookingRepository", "Retry failed for booking: $bookingId", retryException)
                             Result.failure(retryException)
                         }
                     }
                 }
                 else -> {
-                    android.util.Log.e("BookingRepository", "Failed to cancel booking: $bookingId", e)
+//                    android.util.Log.e("BookingRepository", "Failed to cancel booking: $bookingId", e)
                     Result.failure(e)
                 }
             }
@@ -547,12 +476,12 @@ class BookingRepository @Inject constructor(
                         requestSnapshot.ref.child("status").setValue(DriverRequestStatus.CANCELLED.name)
                         
                         cancelledCount++
-                        android.util.Log.d("BookingRepository", "Cancelled request ${request.requestId} for driver $driverId (passenger cancelled booking)")
+//                        android.util.Log.d("BookingRepository", "Cancelled request ${request.requestId} for driver $driverId (passenger cancelled booking)")
                     }
                 }
             }
             
-            android.util.Log.d("BookingRepository", "Successfully cancelled $cancelledCount driver requests for booking $bookingId")
+//            android.util.Log.d("BookingRepository", "Successfully cancelled $cancelledCount driver requests for booking $bookingId")
             
         } catch (e: Exception) {
             android.util.Log.e("BookingRepository", "Failed to cancel driver requests for booking $bookingId", e)
@@ -566,16 +495,16 @@ class BookingRepository @Inject constructor(
     suspend fun updateBookingStatus(bookingId: String, status: BookingStatus): Result<Unit> {
         return try {
             // Enhanced logging for debugging
-            android.util.Log.d("BookingRepository", "Received bookingId: '$bookingId' (length: ${bookingId.length})")
+//            android.util.Log.d("BookingRepository", "Received bookingId: '$bookingId' (length: ${bookingId.length})")
             
             // Validate bookingId is not empty or just "booking"
             if (bookingId.isBlank()) {
-                android.util.Log.e("BookingRepository", "BookingId is blank or empty")
+//                android.util.Log.e("BookingRepository", "BookingId is blank or empty")
                 return Result.failure(Exception("Booking ID is empty. Please try again or restart the app."))
             }
             
             if (bookingId.equals("booking", ignoreCase = true)) {
-                android.util.Log.e("BookingRepository", "BookingId is literally 'booking' - this is invalid")
+//                android.util.Log.e("BookingRepository", "BookingId is literally 'booking' - this is invalid")
                 return Result.failure(Exception("Invalid booking reference. Please restart the app."))
             }
             
@@ -584,7 +513,7 @@ class BookingRepository @Inject constructor(
                 android.util.Log.w("BookingRepository", "BookingId seems suspiciously short: '$bookingId'")
             }
             
-            android.util.Log.d("BookingRepository", "Updating booking status - ID: '$bookingId', Status: $status")
+//            android.util.Log.d("BookingRepository", "Updating booking status - ID: '$bookingId', Status: $status")
             
             val updates = mutableMapOf<String, Any>(
                 "status" to status
@@ -602,22 +531,22 @@ class BookingRepository @Inject constructor(
                     .update(updates)
                     .await()
                     
-                android.util.Log.d("BookingRepository", "Firestore update successful for booking: $bookingId")
+//                android.util.Log.d("BookingRepository", "Firestore update successful for booking: $bookingId")
             } catch (firestoreException: Exception) {
                 if (firestoreException.message?.contains("NOT_FOUND") == true) {
-                    android.util.Log.w("BookingRepository", "Booking document not found for update. Status: $status")
+//                    android.util.Log.w("BookingRepository", "Booking document not found for update. Status: $status")
                     
                     // For certain status updates, we can proceed without the document
                     // This handles cases where status is updated before the booking document is fully created
                     if (status in listOf(BookingStatus.DRIVER_ARRIVED, BookingStatus.IN_PROGRESS, BookingStatus.COMPLETED)) {
-                        android.util.Log.i("BookingRepository", "Proceeding with status update $status even though document doesn't exist")
+//                        android.util.Log.i("BookingRepository", "Proceeding with status update $status even though document doesn't exist")
                         // Continue execution - don't throw error
                     } else {
-                        android.util.Log.e("BookingRepository", "Document not found and status $status requires existing document")
+//                        android.util.Log.e("BookingRepository", "Document not found and status $status requires existing document")
                         throw Exception("Booking document not found for required status update: $status. BookingId: $bookingId")
                     }
                 } else {
-                    android.util.Log.e("BookingRepository", "Firestore update failed for booking: $bookingId", firestoreException)
+//                    android.util.Log.e("BookingRepository", "Firestore update failed for booking: $bookingId", firestoreException)
                     throw firestoreException
                 }
             }
@@ -644,8 +573,8 @@ class BookingRepository @Inject constructor(
             }
             
             // Log status changes for debugging
-            android.util.Log.d("BookingRepository", "Booking $bookingId status updated to: $status")
-            android.util.Log.d("BookingRepository", "Firestore update completed for booking: $bookingId")
+//            android.util.Log.d("BookingRepository", "Booking $bookingId status updated to: $status")
+//            android.util.Log.d("BookingRepository", "Firestore update completed for booking: $bookingId")
             
             // Handle active booking updates
             if (status in listOf(BookingStatus.COMPLETED, BookingStatus.CANCELLED, BookingStatus.EXPIRED)) {
@@ -691,7 +620,7 @@ class BookingRepository @Inject constructor(
         status: BookingStatus = BookingStatus.ACCEPTED
     ): Result<Unit> {
         return try {
-            android.util.Log.d("BookingRepository", "🔒 ATOMIC: Starting driver assignment transaction for booking: '$bookingId'")
+//            android.util.Log.d("BookingRepository", "ATOMIC: Starting driver assignment transaction for booking: '$bookingId'")
 
             val bookingRef = firestore.collection(BOOKINGS_COLLECTION).document(bookingId)
 
@@ -700,7 +629,7 @@ class BookingRepository @Inject constructor(
                 val bookingDoc = transaction.get(bookingRef)
 
                 if (!bookingDoc.exists()) {
-                    android.util.Log.e("BookingRepository", "❌ ATOMIC: Booking document does not exist: $bookingId")
+//                    android.util.Log.e("BookingRepository", "ATOMIC: Booking document does not exist: $bookingId")
                     throw Exception("Booking not found: $bookingId")
                 }
 
@@ -708,25 +637,25 @@ class BookingRepository @Inject constructor(
                 val currentDriverId = bookingDoc.getString("driverId")
                 val cancelledBy = bookingDoc.getString("cancelledBy")
 
-                android.util.Log.d("BookingRepository", "🔒 ATOMIC: Current booking state - status: $currentStatus, driverId: $currentDriverId, cancelledBy: $cancelledBy")
+//                android.util.Log.d("BookingRepository", "ATOMIC: Current booking state - status: $currentStatus, driverId: $currentDriverId, cancelledBy: $cancelledBy")
 
                 // RACE CONDITION CHECK: Only proceed if booking is still available for acceptance
                 when {
                     // Case 1: Booking is already cancelled - REJECT
                     currentStatus == BookingStatus.CANCELLED.name -> {
-                        android.util.Log.w("BookingRepository", "🚫 ATOMIC: Booking already cancelled by $cancelledBy - rejecting driver assignment")
+//                        android.util.Log.w("BookingRepository", "ATOMIC: Booking already cancelled by $cancelledBy - rejecting driver assignment")
                         throw Exception("RACE_CONDITION: Booking was cancelled by passenger during driver acceptance")
                     }
 
                     // Case 2: Booking already has a driver - REJECT
                     currentDriverId != null && currentDriverId.isNotBlank() -> {
-                        android.util.Log.w("BookingRepository", "🚫 ATOMIC: Booking already assigned to driver $currentDriverId - rejecting duplicate assignment")
+//                        android.util.Log.w("BookingRepository", "ATOMIC: Booking already assigned to driver $currentDriverId - rejecting duplicate assignment")
                         throw Exception("RACE_CONDITION: Booking already assigned to another driver")
                     }
 
                     // Case 3: Booking is in terminal state - REJECT
                     currentStatus in listOf(BookingStatus.COMPLETED.name, BookingStatus.EXPIRED.name) -> {
-                        android.util.Log.w("BookingRepository", "🚫 ATOMIC: Booking is in terminal state ($currentStatus) - rejecting assignment")
+//                        android.util.Log.w("BookingRepository", "ATOMIC: Booking is in terminal state ($currentStatus) - rejecting assignment")
                         throw Exception("RACE_CONDITION: Booking is no longer available")
                     }
 
@@ -800,14 +729,14 @@ class BookingRepository @Inject constructor(
      */
     suspend fun searchLocations(query: String): Result<List<BookingLocation>> {
         return try {
-            Log.d("BookingRepository", "🔍 Starting search for: '$query'")
+//            Log.d("BookingRepository", "Starting search for: '$query'")
 
             // Try Google Maps geocoding first for better search results
             val googleMapsResult = mapboxRepository.searchLocations(query)
 
             if (googleMapsResult.isSuccess) {
                 val googleMapsResults = googleMapsResult.getOrNull() ?: emptyList()
-                Log.d("BookingRepository", "🗺️ Google Maps returned ${googleMapsResults.size} results")
+//                Log.d("BookingRepository", "Google Maps returned ${googleMapsResults.size} results")
 
                 if (googleMapsResults.isNotEmpty()) {
                     val bookingLocations = googleMapsResults.map { searchResult ->
@@ -818,30 +747,30 @@ class BookingRepository @Inject constructor(
                             placeType = searchResult.placeType
                         )
                     }
-                    Log.d("BookingRepository", "✅ Returning ${bookingLocations.size} Google Maps results")
+//                    Log.d("BookingRepository", "Returning ${bookingLocations.size} Google Maps results")
                     return Result.success(bookingLocations)
                 } else {
-                    Log.w("BookingRepository", "⚠️ Google Maps returned empty list, trying fallback")
+                    Log.w("BookingRepository", "Google Maps returned empty list, trying fallback")
                 }
             } else {
-                Log.w("BookingRepository", "⚠️ Google Maps search failed: ${googleMapsResult.exceptionOrNull()?.message}, trying fallback")
+                Log.w("BookingRepository", "Google Maps search failed: ${googleMapsResult.exceptionOrNull()?.message}, trying fallback")
             }
 
             // Fallback to San Jose municipal data
-            Log.d("BookingRepository", "📍 Using San Jose municipal data fallback")
+//            Log.d("BookingRepository", "📍 Using San Jose municipal data fallback")
             val fallbackResult = sanJoseLocationRepository.searchLocations(query)
-            Log.d("BookingRepository", "📍 Fallback returned: ${fallbackResult.isSuccess}, size: ${fallbackResult.getOrNull()?.size ?: 0}")
+//            Log.d("BookingRepository", "📍 Fallback returned: ${fallbackResult.isSuccess}, size: ${fallbackResult.getOrNull()?.size ?: 0}")
 
             fallbackResult
 
         } catch (e: Exception) {
-            Log.e("BookingRepository", "❌ Search error: ${e.message}", e)
+//            Log.e("BookingRepository", "❌ Search error: ${e.message}", e)
             // Final fallback to municipal data
             try {
-                Log.d("BookingRepository", "🔄 Exception fallback to municipal data")
+//                Log.d("BookingRepository", "🔄 Exception fallback to municipal data")
                 sanJoseLocationRepository.searchLocations(query)
             } catch (fallbackError: Exception) {
-                Log.e("BookingRepository", "💥 Fallback search also failed: ${fallbackError.message}", fallbackError)
+//                Log.e("BookingRepository", "💥 Fallback search also failed: ${fallbackError.message}", fallbackError)
                 Result.success(emptyList()) // Return empty list instead of failure
             }
         }
@@ -913,19 +842,19 @@ class BookingRepository @Inject constructor(
                     val sortedBookings = activeBookings.sortedByDescending { it.requestTime }
 
                     // Debug logging to understand the data
-                    println("DEBUG: getActiveBookings - Total from DB: ${allBookings.size}, Recent: ${recentBookings.size}, Active: ${sortedBookings.size}")
+//                    println("DEBUG: getActiveBookings - Total from DB: ${allBookings.size}, Recent: ${recentBookings.size}, Active: ${sortedBookings.size}")
 
                     if (allBookings.size != sortedBookings.size) {
-                        println("DEBUG: Filtered out ${allBookings.size - sortedBookings.size} old or inactive bookings")
+//                        println("DEBUG: Filtered out ${allBookings.size - sortedBookings.size} old or inactive bookings")
                     }
 
                     // Group by status for debugging
                     val statusCounts = sortedBookings.groupBy { it.status }.mapValues { it.value.size }
-                    println("DEBUG: Active status breakdown: $statusCounts")
+//                    println("DEBUG: Active status breakdown: $statusCounts")
 
                     trySend(Result.success(sortedBookings))
                 } catch (e: Exception) {
-                    println("DEBUG: Error in getActiveBookings: ${e.message}")
+//                    println("DEBUG: Error in getActiveBookings: ${e.message}")
                     trySend(Result.failure(e))
                 }
             }
@@ -967,15 +896,15 @@ class BookingRepository @Inject constructor(
 
                         cancelledCount++
                         val requestId = requestData?.get("requestId") as? String ?: "unknown"
-                        android.util.Log.d("BookingRepository", "Cancelled request $requestId for driver $driverId (passenger cancelled booking)")
+//                        android.util.Log.d("BookingRepository", "Cancelled request $requestId for driver $driverId (passenger cancelled booking)")
                     }
                 }
             }
 
-            android.util.Log.d("BookingRepository", "Successfully cancelled $cancelledCount driver requests for booking $bookingId")
+//            android.util.Log.d("BookingRepository", "Successfully cancelled $cancelledCount driver requests for booking $bookingId")
 
         } catch (e: Exception) {
-            android.util.Log.e("BookingRepository", "Failed to cancel driver requests directly", e)
+//            android.util.Log.e("BookingRepository", "Failed to cancel driver requests directly", e)
             throw e // Re-throw so calling code knows it failed
         }
     }

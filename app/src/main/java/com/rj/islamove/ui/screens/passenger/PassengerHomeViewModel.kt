@@ -122,7 +122,8 @@ data class PassengerHomeUiState(
     // Trip details dialog
     val showTripDetailsDialog: Boolean = false,
     val selectedTripForDetails: Booking? = null,
-    val selectedTripDriver: User? = null
+    val selectedTripDriver: User? = null,
+    val showBlockedUserDialog: Boolean = false,
 )
 
 @HiltViewModel
@@ -263,6 +264,14 @@ class PassengerHomeViewModel @Inject constructor(
         }
     }
 
+    fun showBlockedUserDialog() {
+        _uiState.update { it.copy(showBlockedUserDialog = true) }
+    }
+
+    fun hideBlockedUserDialog() {
+        _uiState.update { it.copy(showBlockedUserDialog = false) }
+    }
+
     /**
      * Check if location permissions are granted
      */
@@ -328,7 +337,7 @@ class PassengerHomeViewModel @Inject constructor(
                     refreshDriversForLocation()
                 }
             } catch (e: Exception) {
-                Log.e("PassengerHomeVM", "Error loading current location", e)
+//                Log.e("PassengerHomeVM", "Error loading current location", e)
                 _uiState.value = _uiState.value.copy(
                     errorMessage = "Unable to get current location. Please check location settings."
                 )
@@ -389,7 +398,7 @@ class PassengerHomeViewModel @Inject constructor(
                     )
                 } else {
                     // Just log it, don't show to user when not critical
-                    Log.w("PassengerHomeVM", "Location update error (non-critical): ${exception.message}")
+//                    Log.w("PassengerHomeVM", "Location update error (non-critical): ${exception.message}")
                 }
             }
         )
@@ -424,30 +433,30 @@ class PassengerHomeViewModel @Inject constructor(
     fun searchLocations(query: String) {
         viewModelScope.launch {
             try {
-                Log.d("PassengerHomeViewModel", "🔍 Starting search for: '$query'")
+//                Log.d("PassengerHomeViewModel", "🔍 Starting search for: '$query'")
 
                 // Search zone boundaries
                 val zoneBoundaries = bookingRepository.searchZoneBoundaries(query)
-                Log.d("PassengerHomeViewModel", "📍 Zone boundaries found: ${zoneBoundaries.size}")
+//                Log.d("PassengerHomeViewModel", "📍 Zone boundaries found: ${zoneBoundaries.size}")
                 zoneBoundaries.forEach { Log.d("PassengerHomeViewModel", "  - ${it.address}") }
 
                 // Search regular locations
                 val regularLocationsResult = bookingRepository.searchLocations(query)
-                Log.d("PassengerHomeViewModel", "🗺️ Regular search result: ${regularLocationsResult.isSuccess}")
+//                Log.d("PassengerHomeViewModel", "🗺️ Regular search result: ${regularLocationsResult.isSuccess}")
 
                 val regularLocations = if (regularLocationsResult.isSuccess) {
                     val locations = regularLocationsResult.getOrNull() ?: emptyList()
-                    Log.d("PassengerHomeViewModel", "✅ Regular locations found: ${locations.size}")
+//                    Log.d("PassengerHomeViewModel", "✅ Regular locations found: ${locations.size}")
                     locations.forEach { Log.d("PassengerHomeViewModel", "  - ${it.address}") }
                     locations
                 } else {
-                    Log.e("PassengerHomeViewModel", "❌ Regular search failed: ${regularLocationsResult.exceptionOrNull()?.message}")
+//                    Log.e("PassengerHomeViewModel", "❌ Regular search failed: ${regularLocationsResult.exceptionOrNull()?.message}")
                     emptyList()
                 }
 
                 // Combine
                 val combinedResults = (zoneBoundaries + regularLocations).distinctBy { it.address }
-                Log.d("PassengerHomeViewModel", "🎯 Total combined results: ${combinedResults.size}")
+//                Log.d("PassengerHomeViewModel", "🎯 Total combined results: ${combinedResults.size}")
 
                 _uiState.update { it.copy(locationSuggestions = combinedResults) }
             } catch (e: Exception) {
@@ -504,7 +513,7 @@ class PassengerHomeViewModel @Inject constructor(
 
         // IMPORTANT: Don't recalculate fare if passenger already has an active booking
         if (state.currentBooking != null && state.currentBooking.status != BookingStatus.COMPLETED) {
-            Log.d("PassengerHomeViewModel", "⏭️ Skipping fare calculation - passenger has active booking: ${state.currentBooking.id}")
+//            Log.d("PassengerHomeViewModel", "Skipping fare calculation - passenger has active booking: ${state.currentBooking.id}")
             return
         }
 
@@ -521,16 +530,16 @@ class PassengerHomeViewModel @Inject constructor(
                     if (pickup.address.startsWith("Lat:")) {
                         val pickupBoundary = BoundaryFareUtils.determineBoundary(pickup.coordinates, zoneBoundaryRepository)
                         if (pickupBoundary != null) {
-                            Log.i("PassengerHomeViewModel", "📍 Updating pickup from '${pickup.address}' to '$pickupBoundary'")
+//                            Log.i("PassengerHomeViewModel", "📍 Updating pickup from '${pickup.address}' to '$pickupBoundary'")
                             pickup = pickup.copy(address = pickupBoundary)
                             _uiState.value = _uiState.value.copy(pickupLocation = pickup)
                         }
                     }
 
                     // Check for boundary-based fare first
-                    Log.i("PassengerHomeViewModel", "🚖 FARE CALCULATION START")
-                    Log.i("PassengerHomeViewModel", "📍 Pickup: ${pickup.address}")
-                    Log.i("PassengerHomeViewModel", "🎯 Destination: ${destination.address}")
+//                    Log.i("PassengerHomeViewModel", "🚖 FARE CALCULATION START")
+//                    Log.i("PassengerHomeViewModel", "📍 Pickup: ${pickup.address}")
+//                    Log.i("PassengerHomeViewModel", "🎯 Destination: ${destination.address}")
 
                     val boundaryFare = BoundaryFareUtils.calculateBoundaryBasedFare(
                         pickupCoordinates = pickup.coordinates,
@@ -545,18 +554,18 @@ class PassengerHomeViewModel @Inject constructor(
 
                     val fareEstimate = if (boundaryFare != null) {
                         // Use boundary-based fare
-                        Log.i("PassengerHomeViewModel", "🎉 FINAL FARE: BOUNDARY-BASED - ₱$boundaryFare")
-                        Log.i("PassengerHomeViewModel", "=========================================")
+//                        Log.i("PassengerHomeViewModel", "🎉 FINAL FARE: BOUNDARY-BASED - ₱$boundaryFare")
+//                        Log.i("PassengerHomeViewModel", "=========================================")
                         createFareEstimateFromAdminFare(boundaryFare, state.selectedVehicleCategory)
                     } else if (adminFare != null) {
                         // Create fare estimate with admin-set fare
-                        Log.i("PassengerHomeViewModel", "🏛️  FINAL FARE: ADMIN-SET - ₱$adminFare")
-                        Log.i("PassengerHomeViewModel", "=========================================")
+//                        Log.i("PassengerHomeViewModel", "🏛️  FINAL FARE: ADMIN-SET - ₱$adminFare")
+//                        Log.i("PassengerHomeViewModel", "=========================================")
                         createFareEstimateFromAdminFare(adminFare, state.selectedVehicleCategory)
                     } else {
                         // No admin fare configured - hide error message from user
-                        Log.w("PassengerHomeViewModel", "❌ NO ADMIN FARE CONFIGURED")
-                        Log.w("PassengerHomeViewModel", "=========================================")
+//                        Log.w("PassengerHomeViewModel", "❌ NO ADMIN FARE CONFIGURED")
+//                        Log.w("PassengerHomeViewModel", "=========================================")
                         _uiState.value = _uiState.value.copy(
                             errorMessage = null,
                             fareEstimate = null,
@@ -569,7 +578,7 @@ class PassengerHomeViewModel @Inject constructor(
                     val route = try {
                         mapboxRepository.getRoute(pickup, destination).getOrNull()
                     } catch (e: Exception) {
-                        Log.e("PassengerHomeViewModel", "Failed to calculate route: ${e.message}")
+//                        Log.e("PassengerHomeViewModel", "Failed to calculate route: ${e.message}")
                         null
                     }
 
@@ -612,7 +621,7 @@ class PassengerHomeViewModel @Inject constructor(
                         passengerRoute = null,
                         errorMessage = "No drivers are currently online. Please try again later."
                     )
-                    Log.w("PassengerHomeViewModel", "Booking creation blocked - no drivers online")
+//                    Log.w("PassengerHomeViewModel", "Booking creation blocked - no drivers online")
                     return@launch
                 }
 
@@ -728,9 +737,9 @@ class PassengerHomeViewModel @Inject constructor(
                             booking = booking,
                             maxDrivers = 10 // Notify up to 10 nearby drivers
                         )
-                        Log.d("PassengerHomeViewModel", "Successfully notified drivers for booking ${booking.id}")
+//                        Log.d("PassengerHomeViewModel", "Successfully notified drivers for booking ${booking.id}")
                     } catch (e: Exception) {
-                        Log.e("PassengerHomeViewModel", "Error finding drivers", e)
+//                        Log.e("PassengerHomeViewModel", "Error finding drivers", e)
                         _uiState.value = _uiState.value.copy(
                             errorMessage = "Could not find nearby drivers. Please try again."
                         )
@@ -738,9 +747,9 @@ class PassengerHomeViewModel @Inject constructor(
                 }
                 // Start monitoring booking status for rating screen
                 monitorBookingStatus(booking.id)
-                Log.d("PassengerHomeViewModel", "Started monitoring booking ${booking.id} for status changes")
+//                Log.d("PassengerHomeViewModel", "Started monitoring booking ${booking.id} for status changes")
             } catch (e: Exception) {
-                Log.e("PassengerHomeViewModel", "Error creating booking with companions", e)
+//                Log.e("PassengerHomeViewModel", "Error creating booking with companions", e)
                 _uiState.value = _uiState.value.copy(
                     errorMessage = "Failed to create booking: ${e.message}"
                 )
@@ -756,11 +765,11 @@ class PassengerHomeViewModel @Inject constructor(
 
         // Prevent double-clicking while cancellation is in progress
         if (cancellationInProgress) {
-            Log.d("PassengerHomeViewModel", "Cancellation already in progress, ignoring duplicate request")
+//            Log.d("PassengerHomeViewModel", "Cancellation already in progress, ignoring duplicate request")
             return
         }
 
-        Log.d("PassengerHomeViewModel", "cancelBooking() called - instantly clearing UI")
+//        Log.d("PassengerHomeViewModel", "cancelBooking() called - instantly clearing UI")
         cancellationInProgress = true
 
         // Mark this booking as locally cancelled to prevent race condition
@@ -770,7 +779,7 @@ class PassengerHomeViewModel @Inject constructor(
         viewModelScope.launch {
             delay(30000) // 30 seconds
             if (locallyCancelledBookings.remove(currentBooking.id)) {
-                Log.d("PassengerViewModel", "Safety timeout: Removed booking ${currentBooking.id} from locally cancelled bookings after 30s")
+//                Log.d("PassengerViewModel", "Safety timeout: Removed booking ${currentBooking.id} from locally cancelled bookings after 30s")
             }
         }
 
@@ -786,7 +795,7 @@ class PassengerHomeViewModel @Inject constructor(
 
         // Reset cancellation flag immediately so user can book again
         cancellationInProgress = false
-        Log.d("PassengerViewModel", "Cancellation flag reset immediately - user can book again")
+//        Log.d("PassengerViewModel", "Cancellation flag reset immediately - user can book again")
 
         // Reset route calculation flag for next booking
         isDriverRouteCalculated = false
@@ -825,14 +834,14 @@ class PassengerHomeViewModel @Inject constructor(
                     reason = reason,
                     cancelledBy = "passenger"
                 ).onSuccess {
-                    Log.d("PassengerViewModel", "✅ Background cancellation successful for booking: ${currentBooking.id}")
+//                    Log.d("PassengerViewModel", "Background cancellation successful for booking: ${currentBooking.id}")
                 }.onFailure { exception ->
-                    Log.w("PassengerViewModel", "Background cancellation failed for booking: ${currentBooking.id}: ${exception.message}")
+//                    Log.w("PassengerViewModel", "Background cancellation failed for booking: ${currentBooking.id}: ${exception.message}")
                     // Remove from locally cancelled bookings so Firebase listener can restore the booking if needed
                     locallyCancelledBookings.remove(currentBooking.id)
                 }
             } catch (e: Exception) {
-                Log.e("PassengerViewModel", "Exception during background cancellation", e)
+//                Log.e("PassengerViewModel", "Exception during background cancellation", e)
             }
         }
     }
@@ -923,14 +932,14 @@ class PassengerHomeViewModel @Inject constructor(
                         cancellationResetTimeMillis = resetTimeMillis
                     )
 
-                    Log.d("PassengerViewModel", "Cancellation limit check - Count: $cancellationCount, Remaining: $remainingCancellations")
+//                    Log.d("PassengerViewModel", "Cancellation limit check - Count: $cancellationCount, Remaining: $remainingCancellations")
 
                     cancellationCount >= 3
                 },
                 onFailure = { false }
             )
         } catch (e: Exception) {
-            Log.w("PassengerViewModel", "Error checking cancellation limit", e)
+//            Log.w("PassengerViewModel", "Error checking cancellation limit", e)
             false
         }
     }
@@ -982,7 +991,7 @@ class PassengerHomeViewModel @Inject constructor(
                     cancellationResetTimeMillis = resetTimeMillis
                 )
 
-                Log.d("PassengerViewModel", "Updated cancellation count to: $newCancellationCount, reset time: $resetTimeMillis")
+//                Log.d("PassengerViewModel", "Updated cancellation count to: $newCancellationCount, reset time: $resetTimeMillis")
             }
         } catch (e: Exception) {
             Log.w("PassengerViewModel", "Error incrementing cancellation count", e)
@@ -1035,7 +1044,7 @@ class PassengerHomeViewModel @Inject constructor(
                         // Don't update UI if this booking was cancelled locally
                         // This prevents the cancelled booking from briefly reappearing due to race conditions
                         if (locallyCancelledBookings.contains(updatedBooking.id)) {
-                            Log.d("PassengerViewModel", "Ignoring booking update for locally cancelled booking: ${updatedBooking.id}, status: ${updatedBooking.status}")
+//                            Log.d("PassengerViewModel", "Ignoring booking update for locally cancelled booking: ${updatedBooking.id}, status: ${updatedBooking.status}")
                             // Remove from tracking once we've confirmed the cancellation OR if booking gets terminal state
                             if (updatedBooking.status == BookingStatus.CANCELLED ||
                                 updatedBooking.status == BookingStatus.COMPLETED ||
@@ -1137,10 +1146,10 @@ class PassengerHomeViewModel @Inject constructor(
                                     // Mark as shown for passenger immediately
                                     sharedPreferences.edit().putBoolean(globalKey, true).apply()
 
-                                    android.util.Log.d(
-                                        "PassengerViewModel",
-                                        "Booking completed! Showing rating screen for booking: ${updatedBooking.id}"
-                                    )
+//                                    android.util.Log.d(
+//                                        "PassengerViewModel",
+//                                        "Booking completed! Showing rating screen for booking: ${updatedBooking.id}"
+//                                    )
                                     // Small delay to ensure the booking status is fully processed
                                     kotlinx.coroutines.delay(1000)
 
@@ -1160,12 +1169,12 @@ class PassengerHomeViewModel @Inject constructor(
                                     isDriverRouteCalculated = false
                                     lastCalculatedDestination = null
                                     optimizedRouteManager.clearRoute()
-                                    android.util.Log.d("PassengerHomeVM", "🗑️ Route calculation flag reset after ride completion")
+//                                    android.util.Log.d("PassengerHomeVM", "🗑️ Route calculation flag reset after ride completion")
                                 } else {
-                                    android.util.Log.d(
-                                        "PassengerViewModel",
-                                        "Not showing rating screen for booking ${updatedBooking.id} - already handled"
-                                    )
+//                                    android.util.Log.d(
+//                                        "PassengerViewModel",
+//                                        "Not showing rating screen for booking ${updatedBooking.id} - already handled"
+//                                    )
 
                                     // Still refresh ride history and clear current booking if it's completed
                                     loadRideHistory()
@@ -1180,10 +1189,10 @@ class PassengerHomeViewModel @Inject constructor(
                                     // If rating screen is shown but this booking completed again,
                                     // it might be a duplicate completion event - ignore it
                                     if (isRatingScreenAlreadyShown && isAlreadyCompleted) {
-                                        android.util.Log.d(
-                                            "PassengerViewModel",
-                                            "Ignoring duplicate completion event for booking ${updatedBooking.id}"
-                                        )
+//                                        android.util.Log.d(
+//                                            "PassengerViewModel",
+//                                            "Ignoring duplicate completion event for booking ${updatedBooking.id}"
+//                                        )
                                     }
                                 }
 
@@ -1194,10 +1203,10 @@ class PassengerHomeViewModel @Inject constructor(
                                         if (ratingResult.isSuccess && ratingResult.getOrNull() != null) {
                                             // This booking was already rated, add to ratedBookings set
                                             ratedBookings.add(updatedBooking.id)
-                                            android.util.Log.d(
-                                                "PassengerViewModel",
-                                                "Found existing rating for booking ${updatedBooking.id}, added to ratedBookings set"
-                                            )
+//                                            android.util.Log.d(
+//                                                "PassengerViewModel",
+//                                                "Found existing rating for booking ${updatedBooking.id}, added to ratedBookings set"
+//                                            )
                                         }
                                     } catch (e: Exception) {
                                         android.util.Log.w("PassengerViewModel", "Error checking rating status for booking ${updatedBooking.id}", e)
@@ -1206,24 +1215,24 @@ class PassengerHomeViewModel @Inject constructor(
 
                                 // Stop monitoring this booking since it's completed
                                 monitoredBookings.remove(updatedBooking.id)
-                                android.util.Log.d("PassengerViewModel", "Stopped monitoring completed booking: ${updatedBooking.id}")
+//                                android.util.Log.d("PassengerViewModel", "Stopped monitoring completed booking: ${updatedBooking.id}")
                             }
                             // Handle trip cancellation (by driver or system)
                             else if (updatedBooking.status == BookingStatus.CANCELLED) {
-                                android.util.Log.d(
-                                    "PassengerViewModel",
-                                    "Booking cancelled! Restoring passenger to normal state for booking: ${updatedBooking.id}"
-                                )
+//                                android.util.Log.d(
+//                                    "PassengerViewModel",
+//                                    "Booking cancelled! Restoring passenger to normal state for booking: ${updatedBooking.id}"
+//                                )
                                 handleDriverCancellation(updatedBooking)
 
                                 // Stop monitoring this booking since it's cancelled
                                 monitoredBookings.remove(updatedBooking.id)
-                                android.util.Log.d("PassengerViewModel", "Stopped monitoring cancelled booking: ${updatedBooking.id}")
+//                                android.util.Log.d("PassengerViewModel", "Stopped monitoring cancelled booking: ${updatedBooking.id}")
                             } else {
-                                android.util.Log.d(
-                                    "PassengerViewModel",
-                                    "Booking status updated to: ${updatedBooking.status} for booking: ${updatedBooking.id}"
-                                )
+//                                android.util.Log.d(
+//                                    "PassengerViewModel",
+//                                    "Booking status updated to: ${updatedBooking.status} for booking: ${updatedBooking.id}"
+//                                )
                             }
                         }
                     }
@@ -1351,6 +1360,16 @@ class PassengerHomeViewModel @Inject constructor(
         // Check if current user is blocked/inactive using real-time data
         val currentUser = _uiState.value.currentUser
         val currentUserId = firebaseAuth.currentUser?.uid
+
+        if (_uiState.value.currentUser?.isActive == false) {
+            _uiState.update {
+                it.copy(
+                    showBlockedUserDialog = true,
+                    errorMessage = "Your account has been blocked. Please contact support."
+                )
+            }
+            return
+        }
 
         if (currentUserId == null) {
             _uiState.value = _uiState.value.copy(
@@ -1494,11 +1513,11 @@ class PassengerHomeViewModel @Inject constructor(
 
                 result.onFailure { exception ->
                     // Log error but don't show to user as it's not critical
-                    Log.e(
-                        "PassengerHomeViewModel",
-                        "Failed to handle location tracking for booking status: ${booking.status}",
-                        exception
-                    )
+//                    Log.e(
+//                        "PassengerHomeViewModel",
+//                        "Failed to handle location tracking for booking status: ${booking.status}",
+//                        exception
+//                    )
                 }
             } catch (e: Exception) {
                 Log.e(
@@ -1516,10 +1535,10 @@ class PassengerHomeViewModel @Inject constructor(
     private fun handleDriverCancellation(cancelledBooking: Booking) {
         viewModelScope.launch {
             try {
-                android.util.Log.d(
-                    "PassengerViewModel",
-                    "Handling driver cancellation, restoring passenger UI"
-                )
+//                android.util.Log.d(
+//                    "PassengerViewModel",
+//                    "Handling driver cancellation, restoring passenger UI"
+//                )
 
                 // STEP 1: Stop any ongoing driver tracking
                 driverObserverJob?.cancel()
@@ -1532,7 +1551,7 @@ class PassengerHomeViewModel @Inject constructor(
                 Log.d("PassengerViewModel", "cancelledBy: '${cancelledBooking.cancelledBy}'")
 
                 if (cancelledBooking.cancelledBy == "driver") {
-                    Log.i("PassengerViewModel", "✅ Driver cancelled - showing dialog to passenger")
+//                    Log.i("PassengerViewModel", "✅ Driver cancelled - showing dialog to passenger")
 
                     // STEP 3: Show cancellation dialog and restore passenger to booking-ready state
                     _uiState.value = _uiState.value.copy(
@@ -1565,7 +1584,7 @@ class PassengerHomeViewModel @Inject constructor(
                         errorMessage = null
                     )
                 } else {
-                    Log.i("PassengerViewModel", "❌ Passenger cancelled their own ride - not showing dialog")
+//                    Log.i("PassengerViewModel", "❌ Passenger cancelled their own ride - not showing dialog")
 
                     // Just restore to booking-ready state without dialog
                     _uiState.value = _uiState.value.copy(
@@ -1595,13 +1614,13 @@ class PassengerHomeViewModel @Inject constructor(
                 // Restart driver observation to show available drivers
                 observeOnlineDrivers()
 
-                android.util.Log.d(
-                    "PassengerViewModel",
-                    "Passenger UI restored after driver cancellation"
-                )
+//                android.util.Log.d(
+//                    "PassengerViewModel",
+//                    "Passenger UI restored after driver cancellation"
+//                )
 
             } catch (e: Exception) {
-                android.util.Log.e("PassengerViewModel", "Error handling driver cancellation", e)
+//                android.util.Log.e("PassengerViewModel", "Error handling driver cancellation", e)
                 _uiState.value = _uiState.value.copy(
                     errorMessage = "Error handling trip cancellation: ${e.message}",
                     isLoading = false,
@@ -1666,12 +1685,12 @@ class PassengerHomeViewModel @Inject constructor(
             if (adminFare != null) {
                 // Use admin-set fare for admin destinations with discount applied
                 val discountedFare = applyDiscountToFare(adminFare)
-                Log.d("PassengerHomeViewModel", "Using admin fare for POI destination: ₱$adminFare -> ₱$discountedFare (after discount)")
+//                Log.d("PassengerHomeViewModel", "Using admin fare for POI destination: ₱$adminFare -> ₱$discountedFare (after discount)")
                 return "₱${kotlin.math.floor(discountedFare).toInt()}"
             }
 
             // No admin fare configured
-            Log.w("PassengerHomeViewModel", "No admin fare configured for ${destinationLocation.address}")
+//            Log.w("PassengerHomeViewModel", "No admin fare configured for ${destinationLocation.address}")
             return "No fare set"
         }
 
@@ -1748,11 +1767,11 @@ class PassengerHomeViewModel @Inject constructor(
                             )
                             val timeSinceLastUpdate = currentTimeMillis - lastUpdateTimeMillis
 
-                            android.util.Log.d("PassengerHomeVM", "📏 Distance from last: ${String.format("%.2f", distance)}m, time since last: ${timeSinceLastUpdate}ms")
+//                            android.util.Log.d("PassengerHomeVM", "Distance from last: ${String.format("%.2f", distance)}m, time since last: ${timeSinceLastUpdate}ms")
 
                             // Update if moved enough OR enough time has passed (for real-time feel)
                             val shouldUpdate = distance >= DRIVER_LOCATION_UPDATE_THRESHOLD_METERS || timeSinceLastUpdate >= TIME_UPDATE_THRESHOLD_MS
-                            android.util.Log.d("PassengerHomeVM", "🔄 Should update UI: $shouldUpdate (distance threshold: ${DRIVER_LOCATION_UPDATE_THRESHOLD_METERS}m, time threshold: ${TIME_UPDATE_THRESHOLD_MS}ms)")
+//                            android.util.Log.d("PassengerHomeVM", "Should update UI: $shouldUpdate (distance threshold: ${DRIVER_LOCATION_UPDATE_THRESHOLD_METERS}m, time threshold: ${TIME_UPDATE_THRESHOLD_MS}ms)")
                             shouldUpdate
                         } ?: true // Always update on first location
 
@@ -1763,7 +1782,7 @@ class PassengerHomeViewModel @Inject constructor(
                             // Update driverEta in UI state so passengers can see the ETA
                             _uiState.value = _uiState.value.copy(driverEta = eta)
 
-                            android.util.Log.i("PassengerHomeVM", "📍 DRIVER LOCATION UPDATED: (${location.latitude}, ${location.longitude}) - ETA: ${eta}min - UI updated!")
+//                            android.util.Log.i("PassengerHomeVM", "DRIVER LOCATION UPDATED: (${location.latitude}, ${location.longitude}) - ETA: ${eta}min - UI updated!")
 
                             // Update driver location in route manager for deviation detection
                             optimizedRouteManager.updateDriverLocation(driverPoint)
@@ -1788,17 +1807,17 @@ class PassengerHomeViewModel @Inject constructor(
                             showDriverNavigation = false,
                             errorMessage = "Driver went offline."
                         )
-                        android.util.Log.w("PassengerHomeVM", "⚠️ Driver location became null - driver offline")
+//                        android.util.Log.w("PassengerHomeVM", "Driver location became null - driver offline")
                     }
                 }
-                android.util.Log.w("PassengerHomeVM", "⚠️ Driver location observer completed (stream ended)")
+//                android.util.Log.w("PassengerHomeVM", "Driver location observer completed (stream ended)")
             } catch (e: kotlinx.coroutines.CancellationException) {
                 // Expected when job is cancelled - don't log as error or show error message
-                android.util.Log.d("PassengerHomeVM", "✅ Driver tracking cancelled (expected when restarting tracking)")
+//                android.util.Log.d("PassengerHomeVM", "Driver tracking cancelled (expected when restarting tracking)")
                 forceRefreshJob.cancel() // Cancel the force refresh job
                 throw e // Re-throw to properly handle coroutine cancellation
             } catch (e: Exception) {
-                android.util.Log.e("PassengerHomeVM", "❌ Error in driver location tracking: ${e.message}", e)
+//                android.util.Log.e("PassengerHomeVM", "Error in driver location tracking: ${e.message}", e)
                 forceRefreshJob.cancel() // Cancel the force refresh job
                 _uiState.value = _uiState.value.copy(
                     errorMessage = "Location tracking error. Please try again."
@@ -1806,7 +1825,7 @@ class PassengerHomeViewModel @Inject constructor(
             }
         }
 
-        android.util.Log.i("PassengerHomeVM", "✅ Driver tracking observer job created and active")
+//        android.util.Log.i("PassengerHomeVM", "Driver tracking observer job created and active")
     }
 
     /**
@@ -1895,7 +1914,7 @@ class PassengerHomeViewModel @Inject constructor(
                                 lastCalculatedDestination != dest
 
             if (needsNewRoute) {
-                android.util.Log.d("PassengerHomeVM", "🗺️ Calculating driver route for NEW destination: ${dest.address}")
+//                android.util.Log.d("PassengerHomeVM", "Calculating driver route for NEW destination: ${dest.address}")
 
                 val driverBookingLocation = BookingLocation(
                     address = "Driver Location",
@@ -1913,7 +1932,7 @@ class PassengerHomeViewModel @Inject constructor(
                             assignedDriverLocation = com.rj.islamove.utils.Point.fromLngLat(driverLocation.longitude, driverLocation.latitude),
                             driverEta = route?.estimatedDuration ?: 0
                         )
-                        android.util.Log.d("PassengerHomeVM", "✅ Driver route calculated: ${route?.totalDistance}m - Route will persist as driver moves")
+//                        android.util.Log.d("PassengerHomeVM", "Driver route calculated: ${route?.totalDistance}m - Route will persist as driver moves")
 
                         // Mark route as calculated
                         isDriverRouteCalculated = true
@@ -1930,7 +1949,7 @@ class PassengerHomeViewModel @Inject constructor(
                                     driverRoute = newRoute,
                                     driverEta = newRoute?.estimatedDuration ?: _uiState.value.driverEta
                                 )
-                                android.util.Log.w("PassengerHomeVM", "🔄 Driver route recalculated due to major deviation")
+//                                android.util.Log.w("PassengerHomeVM", "Driver route recalculated due to major deviation")
                             }
                         }
                     }
@@ -1938,7 +1957,7 @@ class PassengerHomeViewModel @Inject constructor(
         } else {
             // Route already calculated - just update driver position, polyline stays visible
             _uiState.value = _uiState.value.copy(assignedDriverLocation = com.rj.islamove.utils.Point.fromLngLat(driverLocation.longitude, driverLocation.latitude))
-            Log.d("PassengerHomeVM", "📍 Driver location updated - Route polyline persists (no API call)")
+//            Log.d("PassengerHomeVM", "Driver location updated - Route polyline persists (no API call)")
         }
         }
     }
@@ -1982,9 +2001,9 @@ class PassengerHomeViewModel @Inject constructor(
                                 "ACTIVE RIDE: Passenger route recalculated successfully with ${route.waypoints.size} waypoints, Route ID: ${route.routeId}"
                             )
                             if (route.routeId.startsWith("simple_direct")) {
-                                Log.w("PassengerHomeViewModel", "⚠️ WARNING: Passenger route is simple direct instead of real roads for active ride!")
+//                                Log.w("PassengerHomeViewModel", "WARNING: Passenger route is simple direct instead of real roads for active ride!")
                             } else {
-                                Log.i("PassengerHomeViewModel", "✅ SUCCESS: Passenger route using real Mapbox Directions API")
+//                                Log.i("PassengerHomeViewModel", "SUCCESS: Passenger route using real Mapbox Directions API")
                             }
                         }
                         .onFailure { exception ->
@@ -2056,17 +2075,17 @@ class PassengerHomeViewModel @Inject constructor(
     fun loadSavedPlaces() {
         val currentUser = firebaseAuth.currentUser
         if (currentUser == null) {
-            Log.d("PassengerHomeViewModel", "No authenticated user, cannot load saved places")
+//            Log.d("PassengerHomeViewModel", "No authenticated user, cannot load saved places")
             _uiState.value = _uiState.value.copy(savedPlaces = emptyList())
             return
         }
 
-        Log.d("PassengerHomeViewModel", "Loading saved places for user: ${currentUser.uid}")
+//        Log.d("PassengerHomeViewModel", "Loading saved places for user: ${currentUser.uid}")
         viewModelScope.launch {
             userRepository.getUserSavedPlaces(currentUser.uid)
                 .onSuccess { savedPlacesMap ->
                     // Log the raw saved places data for debugging
-                    Log.d("PassengerHomeViewModel", "Raw saved places map: $savedPlacesMap")
+//                    Log.d("PassengerHomeViewModel", "Raw saved places map: $savedPlacesMap")
 
                     // Exclude home address from the general saved places list since it's handled separately
                     // BUT preserve the original key information by updating the placeType field
@@ -2087,23 +2106,23 @@ class PassengerHomeViewModel @Inject constructor(
 
                     // Log place types for debugging
                     savedPlacesList.forEach { place ->
-                        Log.d(
-                            "PassengerHomeViewModel",
-                            "Loaded place: ${place.address}, placeType: '${place.placeType}', placeName: '${place.placeName}', placeId: '${place.placeId}'"
-                        )
+//                        Log.d(
+//                            "PassengerHomeViewModel",
+//                            "Loaded place: ${place.address}, placeType: '${place.placeType}', placeName: '${place.placeName}', placeId: '${place.placeId}'"
+//                        )
                     }
 
-                    Log.d(
-                        "PassengerHomeViewModel",
-                        "Loaded ${savedPlacesList.size} saved places (excluding home)"
-                    )
+//                    Log.d(
+//                        "PassengerHomeViewModel",
+//                        "Loaded ${savedPlacesList.size} saved places (excluding home)"
+//                    )
                     _uiState.value = _uiState.value.copy(
                         savedPlaces = savedPlacesList,
                         homeAddress = homeAddress
                     )
                 }
                 .onFailure { exception ->
-                    Log.e("PassengerHomeViewModel", "Failed to load saved places", exception)
+//                    Log.e("PassengerHomeViewModel", "Failed to load saved places", exception)
                     _uiState.value = _uiState.value.copy(savedPlaces = emptyList())
                 }
         }
@@ -2115,20 +2134,20 @@ class PassengerHomeViewModel @Inject constructor(
     fun removePlace(placeType: String) {
         val currentUser = firebaseAuth.currentUser ?: return
 
-        Log.d("PassengerHomeViewModel", "Attempting to remove place with type: '$placeType'")
+//        Log.d("PassengerHomeViewModel", "Attempting to remove place with type: '$placeType'")
 
         viewModelScope.launch {
             userRepository.removeUserPlace(currentUser.uid, placeType)
                 .onSuccess {
-                    Log.d("PassengerHomeViewModel", "Successfully removed place type: '$placeType'")
+//                    Log.d("PassengerHomeViewModel", "Successfully removed place type: '$placeType'")
                     loadSavedPlaces() // Refresh saved places
                 }
                 .onFailure { exception ->
-                    Log.e(
-                        "PassengerHomeViewModel",
-                        "Failed to remove place type: '$placeType'",
-                        exception
-                    )
+//                    Log.e(
+//                        "PassengerHomeViewModel",
+//                        "Failed to remove place type: '$placeType'",
+//                        exception
+//                    )
                     _uiState.value = _uiState.value.copy(
                         errorMessage = "Failed to remove $placeType: ${exception.message}"
                     )
@@ -2142,26 +2161,26 @@ class PassengerHomeViewModel @Inject constructor(
     fun removePlaceByAddress(address: String) {
         val currentUser = firebaseAuth.currentUser ?: return
 
-        Log.d("PassengerHomeViewModel", "Attempting to remove place by address: '$address'")
+//        Log.d("PassengerHomeViewModel", "Attempting to remove place by address: '$address'")
 
         viewModelScope.launch {
             // First get all saved places to find the correct key
             userRepository.getUserSavedPlaces(currentUser.uid)
                 .onSuccess { savedPlacesMap ->
-                    Log.d(
-                        "PassengerHomeViewModel",
-                        "Available places for removal: ${savedPlacesMap.keys}"
-                    )
+//                    Log.d(
+//                        "PassengerHomeViewModel",
+//                        "Available places for removal: ${savedPlacesMap.keys}"
+//                    )
 
                     // Find ALL keys that match the address (in case of duplicates)
                     val matchingKeys = savedPlacesMap.entries.filter { (_, place) ->
                         place.address == address
                     }.map { it.key }
 
-                    Log.d(
-                        "PassengerHomeViewModel",
-                        "Found ${matchingKeys.size} places matching address '$address': $matchingKeys"
-                    )
+//                    Log.d(
+//                        "PassengerHomeViewModel",
+//                        "Found ${matchingKeys.size} places matching address '$address': $matchingKeys"
+//                    )
 
                     if (matchingKeys.isNotEmpty()) {
                         // If multiple matches, prefer the most recent favorite (highest timestamp)
@@ -2179,7 +2198,7 @@ class PassengerHomeViewModel @Inject constructor(
                             matchingKeys.first()
                         }
 
-                        Log.d("PassengerHomeViewModel", "Selected key '$keyToRemove' for removal")
+//                        Log.d("PassengerHomeViewModel", "Selected key '$keyToRemove' for removal")
                         userRepository.removeUserPlace(currentUser.uid, keyToRemove)
                             .onSuccess {
                                 Log.d(
@@ -2199,10 +2218,10 @@ class PassengerHomeViewModel @Inject constructor(
                                 )
                             }
                     } else {
-                        Log.w(
-                            "PassengerHomeViewModel",
-                            "Could not find place with address '$address'"
-                        )
+//                        Log.w(
+//                            "PassengerHomeViewModel",
+//                            "Could not find place with address '$address'"
+//                        )
                         _uiState.value = _uiState.value.copy(
                             errorMessage = "Could not find place to remove"
                         )
@@ -2295,7 +2314,7 @@ class PassengerHomeViewModel @Inject constructor(
                     isSelectingHomeLocation = false,
                     homeAddress = homeLocation
                 )
-                Log.d("PassengerViewModel", "Home location set: $address (Zone: $zoneBoundaryName)")
+//                Log.d("PassengerViewModel", "Home location set: $address (Zone: $zoneBoundaryName)")
             } catch (e: Exception) {
                 Log.e("PassengerViewModel", "Error setting home location", e)
             }
@@ -2381,7 +2400,7 @@ class PassengerHomeViewModel @Inject constructor(
                     isSelectingFavoriteLocation = false
                 )
                 loadSavedPlaces() // Reload to show the new favorite
-                Log.d("PassengerViewModel", "Favorite location set: $address (Zone: $zoneBoundaryName)")
+//                Log.d("PassengerViewModel", "Favorite location set: $address (Zone: $zoneBoundaryName)")
             } catch (e: Exception) {
                 Log.e("PassengerViewModel", "Error setting favorite location", e)
             }
@@ -2407,7 +2426,7 @@ class PassengerHomeViewModel @Inject constructor(
                     val locationResult = mapboxRepository.reverseGeocode(geoPoint).getOrNull()
                     locationResult?.fullAddress ?: "Selected Pickup Location"
                 } catch (e: Exception) {
-                    Log.e("PassengerHomeViewModel", "Failed to reverse geocode location", e)
+//                    Log.e("PassengerHomeViewModel", "Failed to reverse geocode location", e)
                     "Selected Pickup Location"
                 }
             }
@@ -2439,7 +2458,7 @@ class PassengerHomeViewModel @Inject constructor(
                 // This will load and cache boundaries for future use
                 val dummyPoint = com.google.firebase.firestore.GeoPoint(0.0, 0.0)
                 BoundaryFareUtils.determineBoundary(dummyPoint, zoneBoundaryRepository)
-                Log.d("PassengerHomeViewModel", "✅ Zone boundaries pre-loaded successfully")
+//                Log.d("PassengerHomeViewModel", "Zone boundaries pre-loaded successfully")
             } catch (e: Exception) {
                 Log.e("PassengerHomeViewModel", "Failed to pre-load zone boundaries", e)
             }
@@ -2454,14 +2473,14 @@ class PassengerHomeViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                Log.d("PassengerHomeViewModel", "Loading recent trips for user: $userId")
+//                Log.d("PassengerHomeViewModel", "Loading recent trips for user: $userId")
 
                 // Load active bookings first
                 val activeTrips = mutableListOf<Booking>()
                 try {
                     activeBookingRepository.getPassengerActiveBookings(userId)
                         .first().let { activeBookings ->
-                            Log.d("PassengerHomeViewModel", "Found ${activeBookings.size} active bookings")
+//                            Log.d("PassengerHomeViewModel", "Found ${activeBookings.size} active bookings")
 
                             // Convert ActiveBookings to Booking objects for display - only for genuinely active bookings
                             activeBookings.mapNotNullTo(activeTrips) { activeBooking ->
@@ -2488,7 +2507,7 @@ class PassengerHomeViewModel @Inject constructor(
                                     } ?: false
 
                                     if (isCompletedInHistory) {
-                                        Log.w("PassengerHomeViewModel", "Found stale active booking ${activeBooking.bookingId} in loadRecentTrips that is completed in ride history - removing it")
+//                                        Log.w("PassengerHomeViewModel", "Found stale active booking ${activeBooking.bookingId} in loadRecentTrips that is completed in ride history - removing it")
                                         viewModelScope.launch {
                                             activeBookingRepository.removeActiveBooking(activeBooking.bookingId)
                                         }
@@ -2508,7 +2527,7 @@ class PassengerHomeViewModel @Inject constructor(
                                             com.rj.islamove.data.repository.ActiveBookingStatus.DRIVER_ARRIVED -> BookingStatus.DRIVER_ARRIVED
                                             com.rj.islamove.data.repository.ActiveBookingStatus.IN_PROGRESS -> BookingStatus.IN_PROGRESS
                                             else -> {
-                                                Log.w("PassengerHomeViewModel", "Unexpected active booking status: ${activeBooking.status}, treating as PENDING")
+//                                                Log.w("PassengerHomeViewModel", "Unexpected active booking status: ${activeBooking.status}, treating as PENDING")
                                                 BookingStatus.PENDING
                                             }
                                         },
@@ -2520,7 +2539,7 @@ class PassengerHomeViewModel @Inject constructor(
                                         }
                                     )
                                 } catch (e: Exception) {
-                                    Log.w("PassengerHomeViewModel", "Failed to convert active booking to trip", e)
+//                                    Log.w("PassengerHomeViewModel", "Failed to convert active booking to trip", e)
                                     null
                                 }
                             }
@@ -2534,13 +2553,13 @@ class PassengerHomeViewModel @Inject constructor(
                 try {
                     val result = bookingRepository.getUserBookingHistory(50)
                     result.onSuccess { bookings ->
-                        Log.d("PassengerHomeViewModel", "Found ${bookings.size} total bookings from history")
+//                        Log.d("PassengerHomeViewModel", "Found ${bookings.size} total bookings from history")
 
                         val filtered = bookings.filter {
                             it.status == BookingStatus.COMPLETED || it.status == BookingStatus.CANCELLED
                         }
 
-                        Log.d("PassengerHomeViewModel", "Found ${filtered.size} completed/cancelled trips")
+//                        Log.d("PassengerHomeViewModel", "Found ${filtered.size} completed/cancelled trips")
                         filtered.forEach { trip ->
                             Log.d("PassengerHomeViewModel", "Trip ${trip.id}: ${trip.status} - ${trip.pickupLocation.address} to ${trip.destination.address}")
                         }
@@ -2555,14 +2574,14 @@ class PassengerHomeViewModel @Inject constructor(
 
                 // Combine all trips
                 val allTrips = activeTrips + completedTrips
-                Log.d("PassengerHomeViewModel", "Total trips loaded: ${allTrips.size} (${activeTrips.size} active, ${completedTrips.size} completed)")
+//                Log.d("PassengerHomeViewModel", "Total trips loaded: ${allTrips.size} (${activeTrips.size} active, ${completedTrips.size} completed)")
 
                 // Only update current booking if we don't already have one being monitored
                 val existingCurrentBooking = _uiState.value.currentBooking
                 val newCurrentBooking = if (existingCurrentBooking != null &&
                     existingCurrentBooking.status !in listOf(BookingStatus.COMPLETED, BookingStatus.CANCELLED, BookingStatus.EXPIRED)) {
                     // Keep the existing current booking that's being monitored in real-time (only if not completed)
-                    Log.d("PassengerHomeViewModel", "Keeping existing current booking ${existingCurrentBooking.id} with real-time status: ${existingCurrentBooking.status}")
+//                    Log.d("PassengerHomeViewModel", "Keeping existing current booking ${existingCurrentBooking.id} with real-time status: ${existingCurrentBooking.status}")
                     existingCurrentBooking
                 } else {
                     // No current booking or existing booking is completed, use the first truly active one from the query
@@ -2570,7 +2589,7 @@ class PassengerHomeViewModel @Inject constructor(
                         // Double-check: Only set as current booking if it's truly active (not completed)
                         booking.status !in listOf(BookingStatus.COMPLETED, BookingStatus.CANCELLED, BookingStatus.EXPIRED)
                     }
-                    Log.d("PassengerHomeViewModel", "Setting current booking from query: ${queryCurrentBooking?.id} with status: ${queryCurrentBooking?.status}")
+//                    Log.d("PassengerHomeViewModel", "Setting current booking from query: ${queryCurrentBooking?.id} with status: ${queryCurrentBooking?.status}")
                     queryCurrentBooking
                 }
 
@@ -2606,13 +2625,13 @@ class PassengerHomeViewModel @Inject constructor(
                 // Check active bookings repository first
                 activeBookingRepository.getPassengerActiveBookings(userId)
                     .first().let { activeBookings ->
-                        Log.d("PassengerHomeViewModel", "Active bookings query returned ${activeBookings.size} bookings")
+//                        Log.d("PassengerHomeViewModel", "Active bookings query returned ${activeBookings.size} bookings")
                         if (activeBookings.isNotEmpty()) {
                             val activeBooking = activeBookings.first()
-                            Log.d(
-                                "PassengerHomeViewModel",
-                                "Found active booking: ${activeBooking.bookingId} with status: ${activeBooking.status}"
-                            )
+//                            Log.d(
+//                                "PassengerHomeViewModel",
+//                                "Found active booking: ${activeBooking.bookingId} with status: ${activeBooking.status}"
+//                            )
 
                             // Convert to Booking object - only for genuinely active bookings
                             try {
@@ -2682,10 +2701,10 @@ class PassengerHomeViewModel @Inject constructor(
 
                                 // Set the current booking and start monitoring
                                 _uiState.value = _uiState.value.copy(currentBooking = booking)
-                                Log.d(
-                                    "PassengerHomeViewModel",
-                                    "Successfully restored active booking: ${booking.id} with status: ${booking.status}. UI State currentBooking is now: ${_uiState.value.currentBooking?.id}. Starting monitoring..."
-                                )
+//                                Log.d(
+//                                    "PassengerHomeViewModel",
+//                                    "Successfully restored active booking: ${booking.id} with status: ${booking.status}. UI State currentBooking is now: ${_uiState.value.currentBooking?.id}. Starting monitoring..."
+//                                )
                                 monitorBookingStatus(booking.id)
 
                                 // Start driver tracking if driver is assigned
@@ -2725,7 +2744,7 @@ class PassengerHomeViewModel @Inject constructor(
 
         viewModelScope.launch {
             activeBookingRepository.getPassengerActiveBookings(userId).collect { activeBookings ->
-                Log.d("PassengerHomeViewModel", "🔄 Active booking observer triggered - found ${activeBookings.size} active bookings")
+//                Log.d("PassengerHomeViewModel", "Active booking observer triggered - found ${activeBookings.size} active bookings")
 
                 val currentBookingId = _uiState.value.currentBooking?.id
 
@@ -2746,7 +2765,7 @@ class PassengerHomeViewModel @Inject constructor(
 
                         // Update current booking status if changed
                         if (_uiState.value.currentBooking?.status != updatedStatus) {
-                            Log.d("PassengerHomeViewModel", "📊 Booking status changed from ${_uiState.value.currentBooking?.status} to $updatedStatus")
+//                            Log.d("PassengerHomeViewModel", "Booking status changed from ${_uiState.value.currentBooking?.status} to $updatedStatus")
                             _uiState.value = _uiState.value.copy(
                                 currentBooking = _uiState.value.currentBooking?.copy(
                                     status = updatedStatus,
@@ -2763,17 +2782,17 @@ class PassengerHomeViewModel @Inject constructor(
                     }
                 } else if (currentBookingId != null) {
                     // No active bookings but we have a current booking - it was removed
-                    Log.w("PassengerHomeViewModel", "❌ Current booking $currentBookingId was removed from active bookings")
+//                    Log.w("PassengerHomeViewModel", "Current booking $currentBookingId was removed from active bookings")
 
                     // Check if UI is already showing rating screen - don't interfere
                     if (_uiState.value.showRatingScreen) {
-                        Log.d("PassengerHomeViewModel", "⭐ Rating screen already showing - ignoring active booking removal")
+//                        Log.d("PassengerHomeViewModel", "Rating screen already showing - ignoring active booking removal")
                         return@collect
                     }
 
                     // Check if booking is already marked as completed in UI state
                     if (_uiState.value.currentBooking?.status == BookingStatus.COMPLETED) {
-                        Log.d("PassengerHomeViewModel", "✅ Current booking already COMPLETED in UI - ignoring active booking removal")
+//                        Log.d("PassengerHomeViewModel", "Current booking already COMPLETED in UI - ignoring active booking removal")
                         return@collect
                     }
 
@@ -2782,7 +2801,7 @@ class PassengerHomeViewModel @Inject constructor(
                         val bookingResult = bookingRepository.getBooking(currentBookingId)
                         val actualBooking = bookingResult.getOrNull()
                         val bookingStatus = actualBooking?.status
-                        Log.d("PassengerHomeViewModel", "Booking $currentBookingId status in Firestore: $bookingStatus")
+//                        Log.d("PassengerHomeViewModel", "Booking $currentBookingId status in Firestore: $bookingStatus")
 
                         when (bookingStatus) {
                             BookingStatus.COMPLETED -> {
@@ -2797,7 +2816,7 @@ class PassengerHomeViewModel @Inject constructor(
                                 return@collect
                             }
                             BookingStatus.EXPIRED -> {
-                                Log.d("PassengerHomeViewModel", "⏱️ Booking EXPIRED - clearing UI")
+//                                Log.d("PassengerHomeViewModel", "Booking EXPIRED - clearing UI")
                                 _uiState.value = _uiState.value.copy(
                                     currentBooking = null,
                                     isLoading = false,
@@ -2806,7 +2825,7 @@ class PassengerHomeViewModel @Inject constructor(
                                 )
                             }
                             BookingStatus.CANCELLED -> {
-                                Log.d("PassengerHomeViewModel", "Booking CANCELLED - clearing UI")
+//                                Log.d("PassengerHomeViewModel", "Booking CANCELLED - clearing UI")
                                 _uiState.value = _uiState.value.copy(
                                     currentBooking = null,
                                     isLoading = false,
@@ -2814,7 +2833,7 @@ class PassengerHomeViewModel @Inject constructor(
                                 )
                             }
                             null -> {
-                                Log.d("PassengerHomeViewModel", "Booking not found in Firestore - clearing UI")
+//                                Log.d("PassengerHomeViewModel", "Booking not found in Firestore - clearing UI")
                                 _uiState.value = _uiState.value.copy(
                                     currentBooking = null,
                                     isLoading = false,
@@ -2822,7 +2841,7 @@ class PassengerHomeViewModel @Inject constructor(
                                 )
                             }
                             else -> {
-                                Log.d("PassengerHomeViewModel", "Unknown status ($bookingStatus) - clearing UI")
+//                                Log.d("PassengerHomeViewModel", "Unknown status ($bookingStatus) - clearing UI")
                                 _uiState.value = _uiState.value.copy(
                                     currentBooking = null,
                                     isLoading = false,
@@ -2831,7 +2850,7 @@ class PassengerHomeViewModel @Inject constructor(
                             }
                         }
                     } catch (e: Exception) {
-                        Log.e("PassengerHomeViewModel", "Error checking booking status", e)
+//                        Log.e("PassengerHomeViewModel", "Error checking booking status", e)
                         // On error, don't clear if rating screen is showing or booking is completed
                         if (!_uiState.value.showRatingScreen &&
                             _uiState.value.currentBooking?.status != BookingStatus.COMPLETED) {
@@ -2879,14 +2898,14 @@ class PassengerHomeViewModel @Inject constructor(
                         }
                     } ?: emptyList()
                 } else {
-                    Log.w("PassengerHomeViewModel", "Failed to load service areas: ${serviceAreaResult.exceptionOrNull()}")
+//                    Log.w("PassengerHomeViewModel", "Failed to load service areas: ${serviceAreaResult.exceptionOrNull()}")
                     emptyList()
                 }
 
                 // Combine both types of landmarks
                 val allLandmarks = customLandmarks + serviceAreaLandmarks
                 _uiState.value = _uiState.value.copy(customLandmarks = allLandmarks)
-                Log.d("PassengerHomeViewModel", "Loaded ${customLandmarks.size} custom landmarks and ${serviceAreaLandmarks.size} service area destinations")
+//                Log.d("PassengerHomeViewModel", "Loaded ${customLandmarks.size} custom landmarks and ${serviceAreaLandmarks.size} service area destinations")
             } catch (e: Exception) {
                 Log.e("PassengerHomeViewModel", "Error loading custom landmarks", e)
             }
@@ -2906,7 +2925,7 @@ class PassengerHomeViewModel @Inject constructor(
                 if (attractionsResult.isSuccess) {
                     val attractions = attractionsResult.getOrNull() ?: emptyList()
                     _uiState.value = _uiState.value.copy(touristAttractions = attractions)
-                    Log.d("PassengerHomeViewModel", "Loaded ${attractions.size} tourist attractions")
+//                    Log.d("PassengerHomeViewModel", "Loaded ${attractions.size} tourist attractions")
                 }
 
                 // Search for specific categories
@@ -2931,7 +2950,7 @@ class PassengerHomeViewModel @Inject constructor(
             if (result.isSuccess) {
                 val restaurants = result.getOrNull() ?: emptyList()
                 _uiState.value = _uiState.value.copy(restaurants = restaurants)
-                Log.d("PassengerHomeViewModel", "Loaded ${restaurants.size} restaurants")
+//                Log.d("PassengerHomeViewModel", "Loaded ${restaurants.size} restaurants")
             }
         } catch (e: Exception) {
             Log.e("PassengerHomeViewModel", "Error loading restaurants", e)
@@ -2947,7 +2966,7 @@ class PassengerHomeViewModel @Inject constructor(
             if (result.isSuccess) {
                 val hospitals = result.getOrNull() ?: emptyList()
                 _uiState.value = _uiState.value.copy(hospitals = hospitals)
-                Log.d("PassengerHomeViewModel", "Loaded ${hospitals.size} hospitals")
+//                Log.d("PassengerHomeViewModel", "Loaded ${hospitals.size} hospitals")
             }
         } catch (e: Exception) {
             Log.e("PassengerHomeViewModel", "Error loading hospitals", e)
@@ -2963,7 +2982,7 @@ class PassengerHomeViewModel @Inject constructor(
             if (result.isSuccess) {
                 val hotels = result.getOrNull() ?: emptyList()
                 _uiState.value = _uiState.value.copy(hotels = hotels)
-                Log.d("PassengerHomeViewModel", "Loaded ${hotels.size} hotels")
+//                Log.d("PassengerHomeViewModel", "Loaded ${hotels.size} hotels")
             }
         } catch (e: Exception) {
             Log.e("PassengerHomeViewModel", "Error loading hotels", e)
@@ -2979,7 +2998,7 @@ class PassengerHomeViewModel @Inject constructor(
             if (result.isSuccess) {
                 val malls = result.getOrNull() ?: emptyList()
                 _uiState.value = _uiState.value.copy(shoppingMalls = malls)
-                Log.d("PassengerHomeViewModel", "Loaded ${malls.size} shopping malls")
+//                Log.d("PassengerHomeViewModel", "Loaded ${malls.size} shopping malls")
             }
         } catch (e: Exception) {
             Log.e("PassengerHomeViewModel", "Error loading shopping malls", e)
@@ -2995,7 +3014,7 @@ class PassengerHomeViewModel @Inject constructor(
             if (result.isSuccess) {
                 val hubs = result.getOrNull() ?: emptyList()
                 _uiState.value = _uiState.value.copy(transportationHubs = hubs)
-                Log.d("PassengerHomeViewModel", "Loaded ${hubs.size} transportation hubs")
+//                Log.d("PassengerHomeViewModel", "Loaded ${hubs.size} transportation hubs")
             }
         } catch (e: Exception) {
             Log.e("PassengerHomeViewModel", "Error loading transportation hubs", e)
@@ -3033,7 +3052,7 @@ class PassengerHomeViewModel @Inject constructor(
                 }
             }
 
-            Log.d("PassengerHomeViewModel", "Loaded ${ratedBookings.size} already-rated bookings from SharedPreferences")
+//            Log.d("PassengerHomeViewModel", "Loaded ${ratedBookings.size} already-rated bookings from SharedPreferences")
         } catch (e: Exception) {
             Log.e("PassengerHomeViewModel", "Error loading rated bookings", e)
         }
@@ -3071,13 +3090,13 @@ class PassengerHomeViewModel @Inject constructor(
                 routeResult.onSuccess { route ->
                     estimatedDistance = route.totalDistance
                     estimatedDuration = route.estimatedDuration
-                    Log.d("PassengerHomeViewModel", "✅ Route SUCCESS - Admin fare with calculated distance: ${String.format("%.0f", estimatedDistance)}m, duration: ${estimatedDuration}min, routeId: ${route.routeId}")
+//                    Log.d("PassengerHomeViewModel", "Route SUCCESS - Admin fare with calculated distance: ${String.format("%.0f", estimatedDistance)}m, duration: ${estimatedDuration}min, routeId: ${route.routeId}")
                 }.onFailure { exception ->
-                    Log.w("PassengerHomeViewModel", "❌ Route FAILED - using fallback calculation", exception)
+//                    Log.w("PassengerHomeViewModel", "Route FAILED - using fallback calculation", exception)
                     // Use fallback calculation
                     estimatedDistance = calculateStraightLineDistance(pickup, destination)
                     estimatedDuration = (estimatedDistance / 40000.0 * 60).toInt() // Estimate 40km/h average speed (40000m/h)
-                    Log.d("PassengerHomeViewModel", "🔄 FALLBACK - Admin fare with straight-line distance: ${String.format("%.0f", estimatedDistance)}m, duration: ${estimatedDuration}min")
+//                    Log.d("PassengerHomeViewModel", "FALLBACK - Admin fare with straight-line distance: ${String.format("%.0f", estimatedDistance)}m, duration: ${estimatedDuration}min")
                 }
             } catch (e: Exception) {
                 Log.e("PassengerHomeViewModel", "Error calculating route for admin fare", e)
@@ -3087,7 +3106,7 @@ class PassengerHomeViewModel @Inject constructor(
         // Apply passenger discount to the final fare and round down
         val discountedFare = applyDiscountToFare(adminFare)
         val roundedDownFare = kotlin.math.floor(discountedFare)
-        Log.d("PassengerHomeViewModel", "Admin fare: ₱$adminFare, Discounted fare: ₱$discountedFare, Rounded down: ₱$roundedDownFare")
+//        Log.d("PassengerHomeViewModel", "Admin fare: ₱$adminFare, Discounted fare: ₱$discountedFare, Rounded down: ₱$roundedDownFare")
 
         return FareEstimate(
             baseFare = kotlin.math.floor(adminFare),
@@ -3131,7 +3150,7 @@ class PassengerHomeViewModel @Inject constructor(
                     return@launch
                 }
 
-                android.util.Log.d("ProfileImage", "Starting profile image upload for user: ${currentUser.uid}")
+//                android.util.Log.d("ProfileImage", "Starting profile image upload for user: ${currentUser.uid}")
 
                 _uiState.update { it.copy(
                     isLoading = true,
@@ -3144,7 +3163,7 @@ class PassengerHomeViewModel @Inject constructor(
 
                 if (result.isSuccess) {
                     val cloudinaryUrl = result.getOrThrow()
-                    android.util.Log.d("ProfileImage", "Cloudinary upload successful: $cloudinaryUrl")
+//                    android.util.Log.d("ProfileImage", "Cloudinary upload successful: $cloudinaryUrl")
 
                     // Update user profile with Cloudinary URL
                     val updateResult = profileRepository.updateUserProfile(
@@ -3153,7 +3172,7 @@ class PassengerHomeViewModel @Inject constructor(
                     )
 
                     if (updateResult.isSuccess) {
-                        android.util.Log.d("ProfileImage", "Profile updated successfully with Cloudinary URL")
+//                        android.util.Log.d("ProfileImage", "Profile updated successfully with Cloudinary URL")
                         _uiState.update { it.copy(
                             isLoading = false,
                             successMessage = "Profile picture updated successfully"
@@ -3166,14 +3185,14 @@ class PassengerHomeViewModel @Inject constructor(
                         // Refresh user data to update UI
                         refreshUserData()
                     } else {
-                        android.util.Log.e("ProfileImage", "Failed to update profile: ${updateResult.exceptionOrNull()}")
+//                        android.util.Log.e("ProfileImage", "Failed to update profile: ${updateResult.exceptionOrNull()}")
                         _uiState.update { it.copy(
                             isLoading = false,
                             errorMessage = "Failed to save profile picture"
                         )}
                     }
                 } else {
-                    android.util.Log.e("ProfileImage", "Cloudinary upload failed: ${result.exceptionOrNull()}")
+//                    android.util.Log.e("ProfileImage", "Cloudinary upload failed: ${result.exceptionOrNull()}")
                     _uiState.update { it.copy(
                         isLoading = false,
                         errorMessage = "Upload failed: ${result.exceptionOrNull()?.message}"
@@ -3181,7 +3200,7 @@ class PassengerHomeViewModel @Inject constructor(
                 }
 
             } catch (e: Exception) {
-                android.util.Log.e("ProfileImage", "Upload process failed", e)
+//                android.util.Log.e("ProfileImage", "Upload process failed", e)
                 _uiState.update { it.copy(
                     isLoading = false,
                     errorMessage = "Upload error: ${e.message}"
@@ -3199,11 +3218,11 @@ class PassengerHomeViewModel @Inject constructor(
             try {
                 val currentUser = firebaseAuth.currentUser
                 if (currentUser == null) {
-                    android.util.Log.e("StudentDocument", "User not authenticated")
+//                    android.util.Log.e("StudentDocument", "User not authenticated")
                     return@launch
                 }
 
-                android.util.Log.d("StudentDocument", "Starting student document upload for user: ${currentUser.uid}")
+//                android.util.Log.d("StudentDocument", "Starting student document upload for user: ${currentUser.uid}")
 
                 // Upload to Cloudinary
                 val result = profileRepository.uploadStudentDocument(
@@ -3216,10 +3235,10 @@ class PassengerHomeViewModel @Inject constructor(
 
                 if (result.isSuccess) {
                     val cloudinaryUrl = result.getOrThrow()
-                    android.util.Log.d("StudentDocument", "Student document upload successful: $cloudinaryUrl")
+//                    android.util.Log.d("StudentDocument", "Student document upload successful: $cloudinaryUrl")
                     refreshUserData()
                 } else {
-                    android.util.Log.e("StudentDocument", "Student document upload failed: ${result.exceptionOrNull()}")
+//                    android.util.Log.e("StudentDocument", "Student document upload failed: ${result.exceptionOrNull()}")
                 }
 
             } catch (e: Exception) {
@@ -3240,14 +3259,14 @@ class PassengerHomeViewModel @Inject constructor(
                     return@launch
                 }
 
-                android.util.Log.d("RideHistory", "Loading ride history for user: ${currentUser.uid}")
+//                android.util.Log.d("RideHistory", "Loading ride history for user: ${currentUser.uid}")
 
                 // Get ride history using ProfileRepository
                 val result = profileRepository.getRideHistory(currentUser.uid, limit)
 
                 if (result.isSuccess) {
                     val rideHistoryResult = result.getOrThrow()
-                    android.util.Log.d("RideHistory", "Loaded ${rideHistoryResult.rides.size} rides")
+//                    android.util.Log.d("RideHistory", "Loaded ${rideHistoryResult.rides.size} rides")
 
                     // Update UI state with ride history
                     _uiState.value = _uiState.value.copy(
@@ -3256,7 +3275,7 @@ class PassengerHomeViewModel @Inject constructor(
                         lastRideDocumentId = rideHistoryResult.lastDocumentId
                     )
                 } else {
-                    android.util.Log.e("RideHistory", "Failed to load ride history: ${result.exceptionOrNull()}")
+//                    android.util.Log.e("RideHistory", "Failed to load ride history: ${result.exceptionOrNull()}")
                 }
 
             } catch (e: Exception) {
@@ -3277,9 +3296,9 @@ class PassengerHomeViewModel @Inject constructor(
 
                 ratingRepository.getUserRatingStats(currentUserId).fold(
                     onSuccess = { stats ->
-                        Log.d("PassengerHomeViewModel", "Passenger rating stats loaded successfully:")
-                        Log.d("PassengerHomeViewModel", "  - Overall rating: ${stats.overallRating}")
-                        Log.d("PassengerHomeViewModel", "  - Total ratings: ${stats.totalRatings}")
+//                        Log.d("PassengerHomeViewModel", "Passenger rating stats loaded successfully:")
+//                        Log.d("PassengerHomeViewModel", "  - Overall rating: ${stats.overallRating}")
+//                        Log.d("PassengerHomeViewModel", "  - Total ratings: ${stats.totalRatings}")
 
                         _uiState.value = _uiState.value.copy(passengerRatingStats = stats)
                     },
@@ -3343,7 +3362,7 @@ class PassengerHomeViewModel @Inject constructor(
                         cancellationResetTimeMillis = resetTimeMillis
                     )
 
-                    Log.d("PassengerViewModel", "Loaded cancellation count: $cancellationCount, remaining: $remainingCancellations")
+//                    Log.d("PassengerViewModel", "Loaded cancellation count: $cancellationCount, remaining: $remainingCancellations")
                 }.onFailure { error ->
                     Log.w("PassengerViewModel", "Could not load cancellation count: ${error.message}", error)
                 }
@@ -3359,28 +3378,28 @@ class PassengerHomeViewModel @Inject constructor(
     private fun loadCurrentUserData() {
         val currentUserId = firebaseAuth.currentUser?.uid
         if (currentUserId == null) {
-            Log.w("PassengerViewModel", "No authenticated user found, cannot load user data")
+//            Log.w("PassengerViewModel", "No authenticated user found, cannot load user data")
             return
         }
 
-        Log.d("PassengerViewModel", "Setting up Firebase listener for user: $currentUserId")
+//        Log.d("PassengerViewModel", "Setting up Firebase listener for user: $currentUserId")
 
         // Cancel any existing user data observer
         userDataObserverJob?.cancel()
 
         userDataObserverJob = viewModelScope.launch {
             try {
-                Log.d("PassengerViewModel", "Starting to collect user flow for: $currentUserId")
+//                Log.d("PassengerViewModel", "Starting to collect user flow for: $currentUserId")
                 userRepository.getUserFlow(currentUserId).collect { user ->
                     val previousUser = _uiState.value.currentUser
 
                     // Detailed debug logging
-                    Log.d("PassengerViewModel", "Firebase listener received user data:")
-                    Log.d("PassengerViewModel", "  - uid: ${user?.uid}")
-                    Log.d("PassengerViewModel", "  - isActive: ${user?.isActive}")
-                    Log.d("PassengerViewModel", "  - updatedAt: ${user?.updatedAt}")
-                    Log.d("PassengerViewModel", "  - userType: ${user?.userType}")
-                    Log.d("PassengerViewModel", "  - displayName: ${user?.displayName}")
+//                    Log.d("PassengerViewModel", "Firebase listener received user data:")
+//                    Log.d("PassengerViewModel", "  - uid: ${user?.uid}")
+//                    Log.d("PassengerViewModel", "  - isActive: ${user?.isActive}")
+//                    Log.d("PassengerViewModel", "  - updatedAt: ${user?.updatedAt}")
+//                    Log.d("PassengerViewModel", "  - userType: ${user?.userType}")
+//                    Log.d("PassengerViewModel", "  - displayName: ${user?.displayName}")
 
                     _uiState.value = _uiState.value.copy(
                         currentUser = user
@@ -3401,7 +3420,7 @@ class PassengerHomeViewModel @Inject constructor(
                         }
                     }
 
-                    Log.d("PassengerViewModel", "Updated current user data: uid=${user?.uid}, active=${user?.isActive}, updatedAt=${user?.updatedAt}")
+//                    Log.d("PassengerViewModel", "Updated current user data: uid=${user?.uid}, active=${user?.isActive}, updatedAt=${user?.updatedAt}")
                 }
             } catch (e: Exception) {
                 Log.e("PassengerViewModel", "Error observing current user data", e)
@@ -3425,10 +3444,10 @@ class PassengerHomeViewModel @Inject constructor(
         val currentBooking = _uiState.value.currentBooking
         val pickupLocation = _uiState.value.pickupLocation
 
-        Log.d("PassengerHomeViewModel", "🔍 Passenger checking driver proximity...")
-        Log.d("PassengerHomeViewModel", "   📋 Current booking: ${currentBooking?.id}")
-        Log.d("PassengerHomeViewModel", "   📊 Booking status: ${currentBooking?.status}")
-        Log.d("PassengerHomeViewModel", "   📍 Pickup location: ${pickupLocation?.address}")
+//        Log.d("PassengerHomeViewModel", "Passenger checking driver proximity...")
+//        Log.d("PassengerHomeViewModel", "Current booking: ${currentBooking?.id}")
+//        Log.d("PassengerHomeViewModel", "Booking status: ${currentBooking?.status}")
+//        Log.d("PassengerHomeViewModel", "Pickup location: ${pickupLocation?.address}")
 
         // Only check proximity when driver is heading to pickup (not destination)
         if (currentBooking != null && pickupLocation != null &&
@@ -3447,12 +3466,12 @@ class PassengerHomeViewModel @Inject constructor(
                 pickupLocation.coordinates.longitude
             )
 
-            Log.i("PassengerHomeViewModel", "✅ PASSENGER PROXIMITY CHECK ACTIVE - Driver approaching pickup")
+//            Log.i("PassengerHomeViewModel", "PASSENGER PROXIMITY CHECK ACTIVE - Driver approaching pickup")
 
             // Check proximity and trigger alerts if driver is close to pickup
             proximityAlertUtils.checkProximityAndAlert(driverGeoPoint, pickupGeoPoint)
         } else {
-            Log.d("PassengerHomeViewModel", "❌ No passenger proximity check - No active booking or not pickup phase")
+//            Log.d("PassengerHomeViewModel", "No passenger proximity check - No active booking or not pickup phase")
         }
     }
 
@@ -3461,7 +3480,7 @@ class PassengerHomeViewModel @Inject constructor(
      */
     private fun resetProximityAlerts() {
         proximityAlertUtils.resetAlerts()
-        Log.d("PassengerHomeViewModel", "Proximity alerts reset for passenger")
+//        Log.d("PassengerHomeViewModel", "Proximity alerts reset for passenger")
     }
 
     // Report driver functionality
@@ -3501,7 +3520,7 @@ class PassengerHomeViewModel @Inject constructor(
 
                     val result = driverReportRepository.submitReport(report)
                     if (result.isSuccess) {
-                        Log.d("PassengerHomeViewModel", "Driver report submitted successfully")
+//                        Log.d("PassengerHomeViewModel", "Driver report submitted successfully")
                         _uiState.update { it.copy(
                             showReportDriverModal = false,
                             successMessage = "Report submitted successfully"
@@ -3511,21 +3530,21 @@ class PassengerHomeViewModel @Inject constructor(
                         delay(3000)
                         _uiState.update { it.copy(successMessage = null) }
                     } else {
-                        Log.e("PassengerHomeViewModel", "Failed to submit driver report", result.exceptionOrNull())
+//                        Log.e("PassengerHomeViewModel", "Failed to submit driver report", result.exceptionOrNull())
                         _uiState.value = _uiState.value.copy(
                             showReportDriverModal = false,
                             errorMessage = "Failed to submit report: ${result.exceptionOrNull()?.message}"
                         )
                     }
                 } else {
-                    Log.e("PassengerHomeViewModel", "Cannot submit report: missing user, driver, or booking information")
+//                    Log.e("PassengerHomeViewModel", "Cannot submit report: missing user, driver, or booking information")
                     _uiState.value = _uiState.value.copy(
                         showReportDriverModal = false,
                         errorMessage = "Cannot submit report: missing information"
                     )
                 }
             } catch (e: Exception) {
-                Log.e("PassengerHomeViewModel", "Error submitting driver report", e)
+//                Log.e("PassengerHomeViewModel", "Error submitting driver report", e)
                 _uiState.value = _uiState.value.copy(
                     showReportDriverModal = false,
                     errorMessage = "Error submitting report: ${e.message}"
@@ -3579,7 +3598,7 @@ class PassengerHomeViewModel @Inject constructor(
             // Get all service areas with boundaries from Firestore
             val serviceAreasResult = serviceAreaManagementRepository.getAllServiceAreas()
             if (serviceAreasResult.isFailure) {
-                android.util.Log.e("PassengerHomeViewModel", "Failed to get service areas for boundary check", serviceAreasResult.exceptionOrNull())
+//                android.util.Log.e("PassengerHomeViewModel", "Failed to get service areas for boundary check", serviceAreasResult.exceptionOrNull())
                 return true // Default to allowing if boundary check fails
             }
 

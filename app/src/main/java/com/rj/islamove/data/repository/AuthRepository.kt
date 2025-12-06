@@ -438,4 +438,102 @@ class AuthRepository @Inject constructor(
             Result.failure(e)
         }
     }
+
+    suspend fun requestAccountDeletion(password: String): Result<Unit> {
+        return try {
+            val currentUser = firebaseAuth.currentUser
+                ?: return Result.failure(Exception("No user logged in"))
+
+            // Re-authenticate user with password
+            val email = currentUser.email
+                ?: return Result.failure(Exception("Email not found"))
+
+            val credential = com.google.firebase.auth.EmailAuthProvider.getCredential(email, password)
+            currentUser.reauthenticate(credential).await()
+
+            // Calculate deletion date (30 days from now)
+            val deletionScheduledAt = System.currentTimeMillis()
+            val deletionExecutionDate = deletionScheduledAt + (30L * 24 * 60 * 60 * 1000) // 30 days
+
+            // Update Firestore with deletion schedule
+            firestore.collection("users")
+                .document(currentUser.uid)
+                .update(
+                    mapOf(
+                        "isDeletionScheduled" to true,
+                        "deletionScheduledAt" to deletionScheduledAt,
+                        "deletionExecutionDate" to deletionExecutionDate,
+                        "updatedAt" to System.currentTimeMillis()
+                    )
+                ).await()
+
+            // Sign out the user
+            firebaseAuth.signOut()
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            when (e) {
+                is com.google.firebase.auth.FirebaseAuthInvalidCredentialsException ->
+                    Result.failure(Exception("Incorrect password"))
+                is com.google.firebase.auth.FirebaseAuthInvalidUserException ->
+                    Result.failure(Exception("User account not found"))
+                else ->
+                    Result.failure(Exception("Failed to schedule deletion: ${e.message}"))
+            }
+        }
+    }
+
+    suspend fun cancelAccountDeletion(): Result<Unit> {
+        return try {
+            val currentUser = firebaseAuth.currentUser
+                ?: return Result.failure(Exception("No user logged in"))
+
+            // Remove deletion schedule from Firestore
+            firestore.collection("users")
+                .document(currentUser.uid)
+                .update(
+                    mapOf(
+                        "isDeletionScheduled" to false,
+                        "deletionScheduledAt" to com.google.firebase.firestore.FieldValue.delete(),
+                        "deletionExecutionDate" to com.google.firebase.firestore.FieldValue.delete(),
+                        "updatedAt" to System.currentTimeMillis()
+                    )
+                ).await()
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(Exception("Failed to cancel deletion: ${e.message}"))
+        }
+    }
+
+    suspend fun checkAndCancelDeletionOnLogin(userId: String): Result<Boolean> {
+        return try {
+            val userDoc = firestore.collection("users")
+                .document(userId)
+                .get()
+                .await()
+
+            val isDeletionScheduled = userDoc.getBoolean("isDeletionScheduled") ?: false
+
+            if (isDeletionScheduled) {
+                // Automatically cancel deletion
+                firestore.collection("users")
+                    .document(userId)
+                    .update(
+                        mapOf(
+                            "isDeletionScheduled" to false,
+                            "deletionScheduledAt" to com.google.firebase.firestore.FieldValue.delete(),
+                            "deletionExecutionDate" to com.google.firebase.firestore.FieldValue.delete(),
+                            "updatedAt" to System.currentTimeMillis()
+                        )
+                    ).await()
+
+                Result.success(true) // Returns true if deletion was cancelled
+            } else {
+                Result.success(false) // No deletion was scheduled
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("Failed to check deletion status: ${e.message}"))
+        }
+    }
 }

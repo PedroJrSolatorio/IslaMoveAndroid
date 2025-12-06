@@ -134,13 +134,13 @@ fun PassengerHomeScreen(
 
     // Debug logging for currentBooking state
     LaunchedEffect(uiState.currentBooking?.id, selectedTab) {
-        android.util.Log.d("PassengerHomeScreen", "UI State - selectedTab: $selectedTab, currentBooking: ${uiState.currentBooking?.id}, status: ${uiState.currentBooking?.status}")
+//        android.util.Log.d("PassengerHomeScreen", "UI State - selectedTab: $selectedTab, currentBooking: ${uiState.currentBooking?.id}, status: ${uiState.currentBooking?.status}")
     }
 
     // Reset search active state when changing tabs
     LaunchedEffect(selectedTab) {
         if (selectedTab != 0) { // Only reset when not on Maps tab (index 0)
-            android.util.Log.d("PassengerHomeScreen", "Tab changed to $selectedTab, resetting isSearchActive")
+//            android.util.Log.d("PassengerHomeScreen", "Tab changed to $selectedTab, resetting isSearchActive")
             isSearchActive = false
         }
     }
@@ -206,10 +206,10 @@ fun PassengerHomeScreen(
 
         // Tab content
         Box(modifier = Modifier.weight(1f)) {
-            android.util.Log.d("PassengerHomeScreen", "Rendering tab content for selectedTab: $selectedTab")
+//            android.util.Log.d("PassengerHomeScreen", "Rendering tab content for selectedTab: $selectedTab")
             when (selectedTab) {
                 0 -> {
-                    android.util.Log.d("PassengerHomeScreen", "Rendering MapsContent")
+//                    android.util.Log.d("PassengerHomeScreen", "Rendering MapsContent")
                     MapsContent(
                         uiState = uiState,
                         viewModel = viewModel,
@@ -222,7 +222,7 @@ fun PassengerHomeScreen(
                     )
                 }
                 1 -> {
-                    android.util.Log.d("PassengerHomeScreen", "Rendering RidesContent")
+//                    android.util.Log.d("PassengerHomeScreen", "Rendering RidesContent")
                     RidesContent(
                         uiState = uiState,
                         viewModel = viewModel,
@@ -230,7 +230,7 @@ fun PassengerHomeScreen(
                     )
                 }
                 2 -> {
-                    android.util.Log.d("PassengerHomeScreen", "Rendering ProfileContent")
+//                    android.util.Log.d("PassengerHomeScreen", "Rendering ProfileContent")
                     ProfileContent(
                         onNavigateToProfile = onNavigateToProfile,
                         onNavigateToReviews = onNavigateToReviews,
@@ -341,6 +341,65 @@ fun PassengerHomeScreen(
         )
     }
 
+    // Blocked User Dialog
+    if (uiState.showBlockedUserDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.hideBlockedUserDialog() },
+            icon = {
+                Icon(
+                    Icons.Default.Warning,
+                    contentDescription = "Blocked",
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(48.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Account Blocked",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Your account has been blocked by the administrator. You cannot book rides at this time.",
+                        fontSize = 16.sp,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                    Text(
+                        text = "Please contact support for assistance:",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    Text(
+                        text = "• Email: support@islamove.com",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "• Open Help & Support in the Profile tab",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.hideBlockedUserDialog() },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("OK", color = Color.White)
+                }
+            },
+            containerColor = Color.White
+        )
+    }
+
     // Report Driver Modal for active trips (DriverFoundCard)
     if (uiState.showReportDriverModal) {
         ReportDriverModal(
@@ -426,7 +485,7 @@ private fun DriverFoundCard(
                             color = Color.Gray
                         )
                         Text(
-                            text = "Body Number: ${vehicle.plateNumber}",
+                            text = "Plate Number: ${vehicle.plateNumber}",
                             fontSize = 14.sp,
                             color = Color.Gray
                         )
@@ -645,20 +704,20 @@ private fun MapsContent(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted && pendingPhoneNumber != null) {
-            android.util.Log.d("DriverCall", "CALL_PHONE permission granted, attempting call to $pendingPhoneNumber")
+//            android.util.Log.d("DriverCall", "CALL_PHONE permission granted, attempting call to $pendingPhoneNumber")
             try {
                 val intent = Intent(ACTION_CALL).apply {
                     data = Uri.parse("tel:$pendingPhoneNumber")
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 }
                 context.startActivity(intent)
-                android.util.Log.d("DriverCall", "Call initiated successfully")
+//                android.util.Log.d("DriverCall", "Call initiated successfully")
             } catch (e: Exception) {
                 android.util.Log.e("DriverCall", "Failed to initiate call after permission granted", e)
             }
             pendingPhoneNumber = null
         } else {
-            android.util.Log.w("DriverCall", "CALL_PHONE permission denied or no pending number")
+//            android.util.Log.w("DriverCall", "CALL_PHONE permission denied or no pending number")
             pendingPhoneNumber = null
         }
     }
@@ -667,9 +726,9 @@ private fun MapsContent(
 
     // Clear the place booking dialog when entering favorite selection mode (but not home selection)
     LaunchedEffect(uiState.isSelectingFavoriteLocation) {
-        Log.d("PassengerHomeScreen", "Favorite selection mode state changed - isSelectingFavorite: ${uiState.isSelectingFavoriteLocation}")
+//        Log.d("PassengerHomeScreen", "Favorite selection mode state changed - isSelectingFavorite: ${uiState.isSelectingFavoriteLocation}")
         if (uiState.isSelectingFavoriteLocation) {
-            Log.d("PassengerHomeScreen", "Clearing selectedPlaceForBooking due to favorite selection mode")
+//            Log.d("PassengerHomeScreen", "Clearing selectedPlaceForBooking due to favorite selection mode")
             onSelectedPlaceForBookingChange(null)
         }
     }
@@ -679,7 +738,7 @@ private fun MapsContent(
     val maxHeight = with(density) {
         val height = if (isSearchActive) 600.dp.toPx() else 250.dp.toPx()
         val heightDp = if (isSearchActive) 600 else 250
-        android.util.Log.d("MapsHeight", "isSearchActive: $isSearchActive, maxHeight: ${heightDp}dp")
+//        android.util.Log.d("MapsHeight", "isSearchActive: $isSearchActive, maxHeight: ${heightDp}dp")
         height
     }
     val minHeight = with(density) { 150.dp.toPx() } // Minimum height when collapsed
@@ -690,10 +749,10 @@ private fun MapsContent(
 
     // Update targetOffset when isSearchActive changes
     LaunchedEffect(isSearchActive) {
-        android.util.Log.d("MapsHeight", "LaunchedEffect triggered - isSearchActive: $isSearchActive, isDragging: $isDragging")
+//        android.util.Log.d("MapsHeight", "LaunchedEffect triggered - isSearchActive: $isSearchActive, isDragging: $isDragging")
         if (!isDragging) {
             val heightDp = if (isSearchActive) 600 else 250
-            android.util.Log.d("MapsHeight", "Updating offsets - new maxHeight: ${heightDp}dp")
+//            android.util.Log.d("MapsHeight", "Updating offsets - new maxHeight: ${heightDp}dp")
             targetOffset = maxHeight
             bottomSheetOffset = maxHeight
         }
@@ -732,10 +791,10 @@ private fun MapsContent(
             showUserLocation = true, // Enable built-in My Location button and blue dot
             homeLocation = uiState.homeAddress,
             favoriteLocations = uiState.savedPlaces.filter { it.placeType != "Home" }.also { favorites ->
-                Log.d("PassengerHomeScreen", "Passing ${favorites.size} favorite locations to Mapbox: ${favorites.joinToString { "${it.address} (${it.placeType})" }}")
+//                Log.d("PassengerHomeScreen", "Passing ${favorites.size} favorite locations to Mapbox: ${favorites.joinToString { "${it.address} (${it.placeType})" }}")
             },
             customLandmarks = uiState.customLandmarks.also {
-    android.util.Log.d("PassengerHomeScreen", "Passing ${it.size} custom landmarks to Mapbox: ${it.joinToString { "${it.name}" }}")
+//            android.util.Log.d("PassengerHomeScreen", "Passing ${it.size} custom landmarks to Mapbox: ${it.joinToString { "${it.name}" }}")
 },
             selectedPlaceDetails = selectedPlaceForBooking,
             onLandmarkMarkerClick = { landmark ->
@@ -781,9 +840,9 @@ private fun MapsContent(
             },
             onPOIClickForSelection = if (uiState.isSelectingHomeLocation || uiState.isSelectingFavoriteLocation || uiState.isSelectingPickupLocation) {
                 { latLng ->
-                    Log.d("PassengerHomeScreen", "Setting location from POI selection: $latLng")
+//                    Log.d("PassengerHomeScreen", "Setting location from POI selection: $latLng")
                     if (uiState.isSelectingHomeLocation) {
-                        Log.d("PassengerHomeScreen", "Setting home location from POI")
+//                        Log.d("PassengerHomeScreen", "Setting home location from POI")
                         onSelectedPlaceForBookingChange(MapboxPlaceDetails(
                             id = "home_poi_selection_${latLng.latitude()}_${latLng.longitude()}",
                             name = "Selected POI",
@@ -798,54 +857,54 @@ private fun MapsContent(
                             openingHours = null
                         ))
                     } else if (uiState.isSelectingFavoriteLocation) {
-                        Log.d("PassengerHomeScreen", "Setting favorite location")
+//                        Log.d("PassengerHomeScreen", "Setting favorite location")
                         viewModel.setFavoriteLocationFromMap(latLng)
                     } else if (uiState.isSelectingPickupLocation) {
-                        Log.d("PassengerHomeScreen", "Setting pickup location")
+//                        Log.d("PassengerHomeScreen", "Setting pickup location")
                         viewModel.setPickupLocationFromMap(latLng)
                     }
                 }
             } else null,
             onFavoriteMarkerClick = { favoriteLocation ->
                 // When favorite marker is clicked, show the POI dialog with remove option
-                Log.d("PassengerHomeScreen", "Favorite marker clicked: ${favoriteLocation.address}")
+//                Log.d("PassengerHomeScreen", "Favorite marker clicked: ${favoriteLocation.address}")
                 onSelectedPlaceForBookingChange(favoriteLocation.toMapboxPlaceDetails())
                 // Note: The actual removal will happen when user clicks "Remove Favorite" button in the dialog
             },
             onRemoveFavoriteLocation = { favoriteLocation ->
                 // Actually remove the favorite location
-                Log.d("PassengerHomeScreen", "Removing favorite location: ${favoriteLocation.address}, placeType: '${favoriteLocation.placeType}', Firebase key: '${favoriteLocation.placeId}'")
+//                Log.d("PassengerHomeScreen", "Removing favorite location: ${favoriteLocation.address}, placeType: '${favoriteLocation.placeType}', Firebase key: '${favoriteLocation.placeId}'")
                 // Use the original Firebase key stored in placeId, fallback to placeType, then address
                 when {
                     !favoriteLocation.placeId.isNullOrEmpty() -> {
                         // Use the original Firebase key for removal
-                        Log.d("PassengerHomeScreen", "Using placeId '${favoriteLocation.placeId}' for removal")
+//                        Log.d("PassengerHomeScreen", "Using placeId '${favoriteLocation.placeId}' for removal")
                         viewModel.removePlace(favoriteLocation.placeId)
                     }
                     !favoriteLocation.placeType.isNullOrEmpty() -> {
                         // Fallback to placeType
-                        Log.d("PassengerHomeScreen", "Using placeType '${favoriteLocation.placeType}' for removal")
+//                        Log.d("PassengerHomeScreen", "Using placeType '${favoriteLocation.placeType}' for removal")
                         viewModel.removePlace(favoriteLocation.placeType)
                     }
                     else -> {
                         // Final fallback: remove by address
-                        Log.d("PassengerHomeScreen", "Using address '${favoriteLocation.address}' for removal")
+//                        Log.d("PassengerHomeScreen", "Using address '${favoriteLocation.address}' for removal")
                         viewModel.removePlaceByAddress(favoriteLocation.address)
                     }
                 }
             },
             onRemoveHomeLocation = { homeLocation ->
                 // Remove the home location
-                Log.d("PassengerHomeScreen", "Removing home location: ${homeLocation.address}")
+//                Log.d("PassengerHomeScreen", "Removing home location: ${homeLocation.address}")
                 viewModel.removePlace("Home")
             },
             disableAutoPOISelection = (uiState.isSelectingHomeLocation || uiState.isSelectingFavoriteLocation || uiState.isSelectingPickupLocation).also { disable ->
-                Log.d("PassengerHomeScreen", "disableAutoPOISelection set to: $disable (isSelectingHome: ${uiState.isSelectingHomeLocation}, isSelectingFavorite: ${uiState.isSelectingFavoriteLocation}, isSelectingPickup: ${uiState.isSelectingPickupLocation})")
+//                Log.d("PassengerHomeScreen", "disableAutoPOISelection set to: $disable (isSelectingHome: ${uiState.isSelectingHomeLocation}, isSelectingFavorite: ${uiState.isSelectingFavoriteLocation}, isSelectingPickup: ${uiState.isSelectingPickupLocation})")
             },
             isInSelectionMode = uiState.isSelectingHomeLocation || uiState.isSelectingFavoriteLocation || uiState.isSelectingPickupLocation,
             isHomeSelectionMode = uiState.isSelectingHomeLocation,
             onSetHomeLocation = { homeLocation ->
-                Log.d("PassengerHomeScreen", "Setting home location: ${homeLocation.address}")
+//                Log.d("PassengerHomeScreen", "Setting home location: ${homeLocation.address}")
                 viewModel.setHomeLocationFromMap(MapboxPoint.fromLngLat(homeLocation.coordinates.longitude, homeLocation.coordinates.latitude))
             },
             routeInfo = when {
@@ -856,20 +915,20 @@ private fun MapsContent(
                 else -> null // Don't show route for other booking states (PENDING, FINDING_DRIVER, etc.)
             },
             onMapClick = { latLng ->
-                Log.d("PassengerHomeScreen", "Map click handler - isSelectingFavorite: ${uiState.isSelectingFavoriteLocation}, isSelectingHome: ${uiState.isSelectingHomeLocation}")
+//                Log.d("PassengerHomeScreen", "Map click handler - isSelectingFavorite: ${uiState.isSelectingFavoriteLocation}, isSelectingHome: ${uiState.isSelectingHomeLocation}")
 
                 // First check if click is near a custom landmark (within 200 meters)
                 val clickedLandmark = uiState.customLandmarks.firstOrNull { landmark ->
                     val landmarkPoint = com.mapbox.geojson.Point.fromLngLat(landmark.longitude, landmark.latitude)
                     val distance = calculateDistance(latLng, landmarkPoint)
-                    Log.d("PassengerHomeScreen", "Landmark '${landmark.name}' at ${landmark.latitude}, ${landmark.longitude} is ${distance}m away")
+//                    Log.d("PassengerHomeScreen", "Landmark '${landmark.name}' at ${landmark.latitude}, ${landmark.longitude} is ${distance}m away")
                     distance < 200.0 // 200 meters threshold
                 }
 
                 when {
                     // Handle landmark clicks first (highest priority)
                     clickedLandmark != null -> {
-                        Log.d("PassengerHomeScreen", "Landmark clicked: ${clickedLandmark.name}")
+//                        Log.d("PassengerHomeScreen", "Landmark clicked: ${clickedLandmark.name}")
                         val cleanName = clickedLandmark.name.split(" - ₱").firstOrNull() ?: clickedLandmark.name
                         onSelectedPlaceForBookingChange(MapboxPlaceDetails(
                             id = clickedLandmark.id,
@@ -887,7 +946,7 @@ private fun MapsContent(
                     }
                     uiState.isSelectingHomeLocation -> {
                         // Handle home location selection - show popup with "Set as Home" button
-                        Log.d("PassengerHomeScreen", "Processing home location selection")
+//                        Log.d("PassengerHomeScreen", "Processing home location selection")
                         onSelectedPlaceForBookingChange(MapboxPlaceDetails(
                             id = "home_selection_${latLng.latitude()}_${latLng.longitude()}",
                             name = "Selected Location",
@@ -904,12 +963,12 @@ private fun MapsContent(
                     }
                     uiState.isSelectingFavoriteLocation -> {
                         // Handle favorite location selection
-                        Log.d("PassengerHomeScreen", "Processing favorite location selection")
+//                        Log.d("PassengerHomeScreen", "Processing favorite location selection")
                         viewModel.setFavoriteLocationFromMap(latLng)
                     }
                     uiState.isSelectingPickupLocation -> {
                         // Handle pickup location selection
-                        Log.d("PassengerHomeScreen", "Processing pickup location selection")
+//                        Log.d("PassengerHomeScreen", "Processing pickup location selection")
                         viewModel.setPickupLocationFromMap(latLng)
                     }
                     else -> {
@@ -941,7 +1000,7 @@ private fun MapsContent(
                                     Math.sin(dLon / 2) * Math.sin(dLon / 2)
                             val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
                             val distance = R * c
-                            Log.d("PassengerHomeScreen", "Distance to ${landmark.name}: ${distance}m")
+//                            Log.d("PassengerHomeScreen", "Distance to ${landmark.name}: ${distance}m")
                             distance < 50.0 // 50 meters threshold for admin destinations (custom landmarks)
                         }
 
@@ -951,7 +1010,7 @@ private fun MapsContent(
 
                         if (nearbyDestination != null) {
                             // Use admin destination name (with fare if present)
-                            Log.d("PassengerHomeScreen", "Using nearby admin destination: ${nearbyDestination.name}")
+//                            Log.d("PassengerHomeScreen", "Using nearby admin destination: ${nearbyDestination.name}")
                             destinationAddress = nearbyDestination.name
                             // Extract clean name for display (remove fare)
                             destinationDisplayName = nearbyDestination.name.split(" - ₱").firstOrNull() ?: nearbyDestination.name
@@ -991,7 +1050,7 @@ private fun MapsContent(
                 when {
                     uiState.isSelectingPickupLocation -> {
                         // Handle pickup location selection
-                        Log.d("PassengerHomeScreen", "Setting pickup location from POI: ${placeDetails.address}")
+//                        Log.d("PassengerHomeScreen", "Setting pickup location from POI: ${placeDetails.address}")
                         viewModel.setPickupLocationFromMap(placeDetails.point)
                     }
                     uiState.isSelectingHomeLocation || uiState.isSelectingFavoriteLocation -> {
@@ -1011,6 +1070,13 @@ private fun MapsContent(
             onBookRide = { bookingLocation, passengerComment, companions ->
                 // Only handle booking if not in special selection modes
                 if (!uiState.isSelectingHomeLocation && !uiState.isSelectingFavoriteLocation && !uiState.isSelectingPickupLocation) {
+                    // CHECK IF USER IS BLOCKED
+                    if (uiState.currentUser?.isActive == false) {
+                        // Show blocked user dialog instead of proceeding with booking
+                        viewModel.showBlockedUserDialog()
+                        return@MapboxRideView
+                    }
+
                     // Set destination and directly book the ride (show "Looking for driver..." state)
                     val destination = BookingLocation(
                         address = bookingLocation.address,
@@ -1032,6 +1098,65 @@ private fun MapsContent(
             currentBooking = uiState.currentBooking,
             centerOnPassenger = false // Keep following driver/route, not passenger
         )
+
+        // Blocked User Dialog
+        if (uiState.showBlockedUserDialog) {
+            AlertDialog(
+                onDismissRequest = { viewModel.hideBlockedUserDialog() },
+                icon = {
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = "Blocked",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(48.dp)
+                    )
+                },
+                title = {
+                    Text(
+                        text = "Account Blocked",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                },
+                text = {
+                    Column {
+                        Text(
+                            text = "Your account has been blocked by the administrator. You cannot book rides at this time.",
+                            fontSize = 16.sp,
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
+                        Text(
+                            text = "Please contact support for assistance:",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        Text(
+                            text = "• Email: support@islamove.com",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "• Open Help & Support in the Profile tab",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { viewModel.hideBlockedUserDialog() },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text("OK", color = Color.White)
+                    }
+                },
+                containerColor = Color.White
+            )
+        }
 
         // Pickup selection banner
         if (uiState.isSelectingPickupLocation) {
@@ -1235,13 +1360,13 @@ private fun MapsContent(
 
                     // Main search bar with magnifying glass as per spec
                     var searchText by remember { mutableStateOf("") }
-                    android.util.Log.d("MapsHeight", "Search field rendered in bottom sheet")
+//                    android.util.Log.d("MapsHeight", "Search field rendered in bottom sheet")
                     OutlinedTextField(
                         value = searchText,
                         onValueChange = {
                             searchText = it
                             val isActive = it.isNotEmpty()
-                            android.util.Log.d("MapsHeight", "Search text changed: '$it', setting isSearchActive to: $isActive")
+//                            android.util.Log.d("MapsHeight", "Search text changed: '$it', setting isSearchActive to: $isActive")
                             onSearchActiveChange(isActive)
                             if (it.isNotBlank()) {
                                 viewModel.searchLocations(it)
@@ -1507,12 +1632,12 @@ private fun MapsContent(
         // No top banner needed - detailed driver card shows all info
 
         // Bottom cards for specific booking states
-        android.util.Log.d("PassengerHomeScreen", "MapsContent - currentBooking: ${uiState.currentBooking?.id}, status: ${uiState.currentBooking?.status}")
+//        android.util.Log.d("PassengerHomeScreen", "MapsContent - currentBooking: ${uiState.currentBooking?.id}, status: ${uiState.currentBooking?.status}")
         if (uiState.currentBooking != null && uiState.currentBooking?.status != BookingStatus.COMPLETED) {
-            android.util.Log.d("PassengerHomeScreen", "Showing booking UI for status: ${uiState.currentBooking?.status}")
+//            android.util.Log.d("PassengerHomeScreen", "Showing booking UI for status: ${uiState.currentBooking?.status}")
             when (uiState.currentBooking?.status) {
                 BookingStatus.PENDING, BookingStatus.LOOKING_FOR_DRIVER -> {
-                    android.util.Log.d("PassengerHomeScreen", "Rendering 'Looking for driver' card")
+//                    android.util.Log.d("PassengerHomeScreen", "Rendering 'Looking for driver' card")
                     Card(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
@@ -1585,9 +1710,9 @@ private fun MapsContent(
                                                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
                                             }
                                             context.startActivity(intent)
-                                            android.util.Log.d("DriverCall", "Initiating call to driver: $driverPhoneNumber")
+//                                            android.util.Log.d("DriverCall", "Initiating call to driver: $driverPhoneNumber")
                                         } catch (e: Exception) {
-                                            android.util.Log.e("DriverCall", "Failed to initiate call", e)
+//                                            android.util.Log.e("DriverCall", "Failed to initiate call", e)
                                             // Try with ACTION_DIAL as fallback
                                             try {
                                                 val dialIntent = Intent(Intent.ACTION_DIAL).apply {
@@ -1595,7 +1720,7 @@ private fun MapsContent(
                                                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                                                 }
                                                 context.startActivity(dialIntent)
-                                                android.util.Log.d("DriverCall", "Opened dialer instead")
+//                                                android.util.Log.d("DriverCall", "Opened dialer instead")
                                             } catch (dialException: Exception) {
                                                 android.util.Log.e("DriverCall", "Failed to open dialer as well", dialException)
                                             }
@@ -1603,7 +1728,7 @@ private fun MapsContent(
                                     }
                                     else -> {
                                         // Store number and request permission
-                                        android.util.Log.d("DriverCall", "Requesting CALL_PHONE permission for $driverPhoneNumber")
+//                                        android.util.Log.d("DriverCall", "Requesting CALL_PHONE permission for $driverPhoneNumber")
                                         pendingPhoneNumber = driverPhoneNumber
                                         callPermissionLauncher.launch(Manifest.permission.CALL_PHONE)
                                     }
@@ -1728,7 +1853,7 @@ private fun RidesContent(
     viewModel: PassengerHomeViewModel,
     onNavigateToTripDetails: (String) -> Unit
 ) {
-    android.util.Log.d("PassengerHomeScreen", "RidesContent - currentBooking: ${uiState.currentBooking?.id}, status: ${uiState.currentBooking?.status}")
+//    android.util.Log.d("PassengerHomeScreen", "RidesContent - currentBooking: ${uiState.currentBooking?.id}, status: ${uiState.currentBooking?.status}")
     // Load persistent ride history when this composable is first displayed
     LaunchedEffect(Unit) {
         viewModel.loadRideHistory()
@@ -1756,7 +1881,7 @@ private fun RidesContent(
         val currentTrips = buildList {
             // Always include currentBooking if it exists and is active
             uiState.currentBooking?.let { currentBooking ->
-                android.util.Log.d("PassengerHomeScreen", "RidesContent - Found currentBooking with status: ${currentBooking.status}")
+//                android.util.Log.d("PassengerHomeScreen", "RidesContent - Found currentBooking with status: ${currentBooking.status}")
                 if (currentBooking.status in listOf(
                     BookingStatus.PENDING,
                     BookingStatus.LOOKING_FOR_DRIVER,
@@ -1766,7 +1891,7 @@ private fun RidesContent(
                     BookingStatus.DRIVER_ARRIVED,
                     BookingStatus.IN_PROGRESS
                 )) {
-                    android.util.Log.d("PassengerHomeScreen", "RidesContent - Adding currentBooking to active trips list")
+//                    android.util.Log.d("PassengerHomeScreen", "RidesContent - Adding currentBooking to active trips list")
                     add(currentBooking)
                 }
             }
@@ -1801,9 +1926,9 @@ private fun RidesContent(
         }.sortedByDescending { it.completionTime ?: it.requestTime }
 
         // Debug logging for completed trips
-        android.util.Log.d("PassengerHomeScreen", "RidesContent - completedTrips: ${completedTrips.size}")
+//        android.util.Log.d("PassengerHomeScreen", "RidesContent - completedTrips: ${completedTrips.size}")
         completedTrips.forEach { trip ->
-            android.util.Log.d("PassengerHomeScreen", "Completed trip: ${trip.id} - ${trip.status}")
+//            android.util.Log.d("PassengerHomeScreen", "Completed trip: ${trip.id} - ${trip.status}")
         }
 
         LazyColumn(
@@ -2103,17 +2228,17 @@ private fun ProfileContent(
     val context = LocalContext.current
 
     // Debug logging for ProfileContent
-    android.util.Log.d(
-        "ProfileContent",
-        "ProfileContent recomposing, currentUser: ${uiState.currentUser?.uid}, isActive: ${uiState.currentUser?.isActive}"
-    )
+//    android.util.Log.d(
+//        "ProfileContent",
+//        "ProfileContent recomposing, currentUser: ${uiState.currentUser?.uid}, isActive: ${uiState.currentUser?.isActive}"
+//    )
 
     // Force refresh user data when ProfileContent is first composed
     LaunchedEffect(Unit) {
-        android.util.Log.d(
-            "ProfileContent",
-            "ProfileContent LaunchedEffect - calling refreshUserData"
-        )
+//        android.util.Log.d(
+//            "ProfileContent",
+//            "ProfileContent LaunchedEffect - calling refreshUserData"
+//        )
         viewModel.clearMessages()
         viewModel.refreshUserData()
     }
@@ -2168,7 +2293,7 @@ private fun ProfileContent(
     // Upload image to Cloudinary using ViewModel
     fun uploadImageToCloudinary(uri: Uri) {
         isUploading = true
-        android.util.Log.d("ProfileImage", "Starting Cloudinary upload, isUploading set to true")
+//        android.util.Log.d("ProfileImage", "Starting Cloudinary upload, isUploading set to true")
 
         viewModel.uploadProfileImage(uri)
 
@@ -2180,7 +2305,7 @@ private fun ProfileContent(
     fun saveImageLocally(uri: Uri) {
         val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
         if (currentUser == null) {
-            android.util.Log.e("ProfileImage", "User not authenticated")
+//            android.util.Log.e("ProfileImage", "User not authenticated")
             isUploading = false
             return
         }
@@ -2195,10 +2320,10 @@ private fun ProfileContent(
             // Check if the profile image URL has been updated
             val newImageUrl = uiState.currentUser?.profileImageUrl
             if (!newImageUrl.isNullOrEmpty() && newImageUrl != profileImageUri.toString()) {
-                android.util.Log.d(
-                    "ProfileImage",
-                    "Upload completed successfully, isUploading set to false"
-                )
+//                android.util.Log.d(
+//                    "ProfileImage",
+//                    "Upload completed successfully, isUploading set to false"
+//                )
                 isUploading = false
                 showImagePicker = false // Close the dialog automatically
             }
@@ -2210,7 +2335,7 @@ private fun ProfileContent(
         if (isUploading) {
             delay(30000) // 30 second timeout
             if (isUploading) {
-                android.util.Log.w("ProfileImage", "Upload timeout - resetting isUploading state")
+//                android.util.Log.w("ProfileImage", "Upload timeout - resetting isUploading state")
                 isUploading = false
             }
         }
@@ -2226,10 +2351,10 @@ private fun ProfileContent(
                 val savedFile = File(savedImagePath)
                 if (savedFile.exists()) {
                     profileImageUri = Uri.fromFile(savedFile)
-                    android.util.Log.d(
-                        "ProfileImage",
-                        "Loaded saved profile image: $savedImagePath"
-                    )
+//                    android.util.Log.d(
+//                        "ProfileImage",
+//                        "Loaded saved profile image: $savedImagePath"
+//                    )
                 }
             }
         }
@@ -2247,19 +2372,19 @@ private fun ProfileContent(
                         val phoneNumber = document.getString("phoneNumber")
                         if (phoneNumber != null) {
                             currentPhoneNumber = phoneNumber
-                            android.util.Log.d(
-                                "ProfileUpdate",
-                                "Phone number loaded from Firestore: $phoneNumber"
-                            )
+//                            android.util.Log.d(
+//                                "ProfileUpdate",
+//                                "Phone number loaded from Firestore: $phoneNumber"
+//                            )
                         }
                     }
                 }
                 .addOnFailureListener { e ->
-                    android.util.Log.e(
-                        "ProfileUpdate",
-                        "Failed to load phone number from Firestore",
-                        e
-                    )
+//                    android.util.Log.e(
+//                        "ProfileUpdate",
+//                        "Failed to load phone number from Firestore",
+//                        e
+//                    )
                 }
         }
     }
@@ -2268,9 +2393,9 @@ private fun ProfileContent(
     LaunchedEffect(profileRefreshTrigger) {
         val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
         currentUser?.reload()?.addOnSuccessListener {
-            android.util.Log.d("ProfileUpdate", "User data refreshed")
+//            android.util.Log.d("ProfileUpdate", "User data refreshed")
         }?.addOnFailureListener { e ->
-            android.util.Log.e("ProfileUpdate", "Failed to refresh user data", e)
+//            android.util.Log.e("ProfileUpdate", "Failed to refresh user data", e)
         }
     }
 
@@ -2296,10 +2421,10 @@ private fun ProfileContent(
                                         val pendingEmail = document.getString("pendingEmail")
 
                                         if (verifiedEmail != firestoreEmail && verifiedEmail == pendingEmail) {
-                                            android.util.Log.d(
-                                                "ProfileContent",
-                                                "Email verified! Updating Firestore: $verifiedEmail"
-                                            )
+//                                            android.util.Log.d(
+//                                                "ProfileContent",
+//                                                "Email verified! Updating Firestore: $verifiedEmail"
+//                                            )
 
                                             firestore.collection("users").document(currentUser.uid)
                                                 .update(
@@ -2312,10 +2437,10 @@ private fun ProfileContent(
                                                     )
                                                 )
                                                 .addOnSuccessListener {
-                                                    android.util.Log.d(
-                                                        "ProfileContent",
-                                                        "Firestore email updated successfully"
-                                                    )
+//                                                    android.util.Log.d(
+//                                                        "ProfileContent",
+//                                                        "Firestore email updated successfully"
+//                                                    )
                                                     viewModel.refreshUserData()
                                                 }
                                         }
@@ -2345,7 +2470,7 @@ private fun ProfileContent(
         onDispose {
             isActive = false
             handler.removeCallbacks(runnable)
-            android.util.Log.d("ProfileContent", "Email verification listener disposed")
+//            android.util.Log.d("ProfileContent", "Email verification listener disposed")
         }
     }
 
@@ -2368,7 +2493,7 @@ private fun ProfileContent(
         if (success && cameraImageUri != null && !isUploading) {
             // Photo was taken successfully, use the camera URI
             profileImageUri = cameraImageUri
-            android.util.Log.d("ProfileImage", "Camera photo taken successfully: $cameraImageUri")
+//            android.util.Log.d("ProfileImage", "Camera photo taken successfully: $cameraImageUri")
             // Save locally
             saveImageLocally(cameraImageUri!!)
         } else {
@@ -2382,7 +2507,7 @@ private fun ProfileContent(
     ) { uri ->
         if (uri != null && !isUploading) {
             profileImageUri = uri
-            android.util.Log.d("ProfileImage", "Gallery image selected: $uri")
+//            android.util.Log.d("ProfileImage", "Gallery image selected: $uri")
             // Save locally
             saveImageLocally(uri)
         } else if (isUploading) {
@@ -2397,7 +2522,7 @@ private fun ProfileContent(
         if (granted && !isUploading) {
             val uri = createImageUri()
             cameraImageUri = uri // Store the URI for later use
-            android.util.Log.d("ProfileImage", "Camera URI created: $uri")
+//            android.util.Log.d("ProfileImage", "Camera URI created: $uri")
             cameraLauncher.launch(uri)
         } else if (isUploading) {
             android.util.Log.w("ProfileImage", "Upload already in progress, camera not launched")
@@ -2412,7 +2537,7 @@ private fun ProfileContent(
     ) { uri ->
         if (uri != null) {
             studentIdUri = uri
-            android.util.Log.d("StudentId", "Student ID image selected: $uri")
+//            android.util.Log.d("StudentId", "Student ID image selected: $uri")
         }
     }
 
@@ -2423,10 +2548,10 @@ private fun ProfileContent(
     ) { success ->
         if (success && studentIdCameraUri != null) {
             studentIdUri = studentIdCameraUri
-            android.util.Log.d(
-                "StudentId",
-                "Student ID photo taken successfully: $studentIdCameraUri"
-            )
+//            android.util.Log.d(
+//                "StudentId",
+//                "Student ID photo taken successfully: $studentIdCameraUri"
+//            )
         } else {
             android.util.Log.e("StudentId", "Student ID photo failed or URI is null")
         }
@@ -2439,7 +2564,7 @@ private fun ProfileContent(
         if (granted) {
             val uri = createImageUri()
             studentIdCameraUri = uri
-            android.util.Log.d("StudentId", "Student ID camera URI created: $uri")
+//            android.util.Log.d("StudentId", "Student ID camera URI created: $uri")
             studentIdCameraLauncher.launch(uri)
         } else {
             android.util.Log.e("StudentId", "Student ID camera permission denied")
@@ -2500,30 +2625,30 @@ private fun ProfileContent(
                         // Check for Cloudinary URL first, then fall back to local URI
                         if (!uiState.currentUser?.profileImageUrl.isNullOrEmpty()) {
                             // Show Cloudinary image from Firestore
-                            android.util.Log.d(
-                                "ProfileContent",
-                                "Loading profile image from Cloudinary: ${uiState.currentUser?.profileImageUrl}"
-                            )
+//                            android.util.Log.d(
+//                                "ProfileContent",
+//                                "Loading profile image from Cloudinary: ${uiState.currentUser?.profileImageUrl}"
+//                            )
                             AsyncImage(
                                 model = coil.request.ImageRequest.Builder(context)
                                     .data(uiState.currentUser?.profileImageUrl)
                                     .crossfade(true)
                                     .listener(
                                         onError = { _, result ->
-                                            android.util.Log.e(
-                                                "ProfileContent",
-                                                "Error loading profile image: ${result.throwable.message}"
-                                            )
-                                            android.util.Log.e(
-                                                "ProfileContent",
-                                                "URL was: ${uiState.currentUser?.profileImageUrl}"
-                                            )
+//                                            android.util.Log.e(
+//                                                "ProfileContent",
+//                                                "Error loading profile image: ${result.throwable.message}"
+//                                            )
+//                                            android.util.Log.e(
+//                                                "ProfileContent",
+//                                                "URL was: ${uiState.currentUser?.profileImageUrl}"
+//                                            )
                                         },
                                         onSuccess = { _, _ ->
-                                            android.util.Log.d(
-                                                "ProfileContent",
-                                                "Profile image loaded successfully from Cloudinary"
-                                            )
+//                                            android.util.Log.d(
+//                                                "ProfileContent",
+//                                                "Profile image loaded successfully from Cloudinary"
+//                                            )
                                         }
                                     )
                                     .build(),
@@ -2546,10 +2671,10 @@ private fun ProfileContent(
                                 contentScale = ContentScale.Crop,
                                 onError = {
                                     // Log error for debugging
-                                    android.util.Log.e(
-                                        "ProfileImage",
-                                        "Error loading image: ${it.result.throwable}"
-                                    )
+//                                    android.util.Log.e(
+//                                        "ProfileImage",
+//                                        "Error loading image: ${it.result.throwable}"
+//                                    )
                                 },
                                 placeholder = painterResource(android.R.drawable.ic_menu_camera)
                             )
@@ -2666,10 +2791,10 @@ private fun ProfileContent(
                 // Account status indicator - Force recomposition with key
                 uiState.currentUser?.let { user ->
                     // Debug logging
-                    android.util.Log.d(
-                        "ProfileContent",
-                        "Rendering user status: active=${user.isActive}, uid=${user.uid}, updatedAt=${user.updatedAt}"
-                    )
+//                    android.util.Log.d(
+//                        "ProfileContent",
+//                        "Rendering user status: active=${user.isActive}, uid=${user.uid}, updatedAt=${user.updatedAt}"
+//                    )
 
                     // Using key to force recomposition when user status changes
                     key(user.isActive, user.updatedAt, user.discountPercentage) {
@@ -3208,12 +3333,12 @@ private fun ProfileContent(
                                                     updateMessage = "Verification email sent to $editingEmail."
                                                     currentPassword = ""
                                                     isUpdating = false
-                                                    android.util.Log.d("ProfileUpdate", "Verification email sent, pending: $editingEmail")
+//                                                    android.util.Log.d("ProfileUpdate", "Verification email sent, pending: $editingEmail")
                                                 }
                                                 .addOnFailureListener { e ->
                                                     updateMessage = "Verification email sent, but failed to save: ${e.message}"
                                                     isUpdating = false
-                                                    android.util.Log.e("ProfileUpdate", "Firestore update failed", e)
+//                                                    android.util.Log.e("ProfileUpdate", "Firestore update failed", e)
                                                 }
                                         }
                                         .addOnFailureListener { e ->
@@ -3239,7 +3364,7 @@ private fun ProfileContent(
                                         else -> "Authentication failed: ${e.message}"
                                     }
                                     isUpdating = false
-                                    android.util.Log.e("ProfileUpdate", "Re-authentication failed", e)
+//                                    android.util.Log.e("ProfileUpdate", "Re-authentication failed", e)
                                 }
                         } else {
                             updateMessage = "User not authenticated"
@@ -3366,12 +3491,12 @@ private fun ProfileContent(
                                         currentPhoneNumber = phoneToSave
                                         // Trigger UI refresh
                                         profileRefreshTrigger++
-                                        android.util.Log.d("ProfileUpdate", "Phone number saved to Firestore (as entered): $phoneToSave")
+//                                        android.util.Log.d("ProfileUpdate", "Phone number saved to Firestore (as entered): $phoneToSave")
                                     }
                                     .addOnFailureListener { e ->
                                         updateMessage = "Error saving phone number: ${e.message}"
                                         isUpdating = false
-                                        android.util.Log.e("ProfileUpdate", "Phone number save failed", e)
+//                                        android.util.Log.e("ProfileUpdate", "Phone number save failed", e)
                                     }
                             } else {
                                 updateMessage = "User not authenticated"
@@ -3543,18 +3668,18 @@ private fun ProfileContent(
                                                     currentPassword = ""
                                                     newPassword = ""
                                                     confirmPassword = ""
-                                                    android.util.Log.d("ProfileUpdate", "Password updated successfully")
+//                                                    android.util.Log.d("ProfileUpdate", "Password updated successfully")
                                                 }
                                                 .addOnFailureListener { e ->
                                                     updateMessage = "Error updating password: ${e.message}"
                                                     isUpdating = false
-                                                    android.util.Log.e("ProfileUpdate", "Password update failed", e)
+//                                                    android.util.Log.e("ProfileUpdate", "Password update failed", e)
                                                 }
                                         }
                                         .addOnFailureListener { e ->
                                             updateMessage = "Current password is incorrect"
                                             isUpdating = false
-                                            android.util.Log.e("ProfileUpdate", "Re-authentication failed", e)
+//                                            android.util.Log.e("ProfileUpdate", "Re-authentication failed", e)
                                         }
                                 } else {
                                     updateMessage = "User email not found"

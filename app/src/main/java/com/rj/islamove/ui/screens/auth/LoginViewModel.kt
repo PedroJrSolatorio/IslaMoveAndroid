@@ -26,7 +26,8 @@ data class LoginUiState(
     val pendingUserId: String? = null,
     val showForgotPasswordDialog: Boolean = false,
     val resetPasswordSuccess: Boolean = false,
-    val resetPasswordMessage: String? = null
+    val resetPasswordMessage: String? = null,
+    val showDeletionCancelledDialog: Boolean = false
 )
 
 @HiltViewModel
@@ -38,7 +39,7 @@ class LoginViewModel @Inject constructor(
     
     private val _uiState = MutableStateFlow(LoginUiState())
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
-    
+
     fun signInWithEmail(email: String, password: String) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
@@ -48,20 +49,50 @@ class LoginViewModel @Inject constructor(
                     // Check if user data exists in Firestore
                     authRepository.getUserData(user.uid)
                         .onSuccess { userData ->
-                            // Check for existing sessions (skip for admins)
-                            if (userData.userType != UserType.ADMIN) {
-                                authRepository.checkExistingSession(user.uid)
-                                    .onSuccess { hasOtherSession ->
-                                        if (hasOtherSession) {
-                                            // Show multi-device alert
-                                            _uiState.value = _uiState.value.copy(
-                                                isLoading = false,
-                                                showMultiDeviceAlert = true,
-                                                pendingUserId = user.uid
-                                            )
+                            // Check if account was scheduled for deletion
+                            authRepository.checkAndCancelDeletionOnLogin(user.uid)
+                                .onSuccess { wasDeletionCancelled ->
+                                    if (wasDeletionCancelled) {
+                                        // Show deletion cancelled dialog
+                                        _uiState.value = _uiState.value.copy(
+                                            isLoading = false,
+                                            showDeletionCancelledDialog = true
+                                        )
+                                        // Will proceed to login after user dismisses dialog
+                                    } else {
+                                        // No deletion scheduled, proceed with normal login flow
+                                        // Check for existing sessions (skip for admins)
+                                        if (userData.userType != UserType.ADMIN) {
+                                            authRepository.checkExistingSession(user.uid)
+                                                .onSuccess { hasOtherSession ->
+                                                    if (hasOtherSession) {
+                                                        // Show multi-device alert
+                                                        _uiState.value = _uiState.value.copy(
+                                                            isLoading = false,
+                                                            showMultiDeviceAlert = true,
+                                                            pendingUserId = user.uid
+                                                        )
+                                                    } else {
+                                                        // No other session, session already created in signInWithEmail
+                                                        kotlinx.coroutines.delay(200)
+                                                        _uiState.value = _uiState.value.copy(
+                                                            isLoading = false,
+                                                            isSuccess = true,
+                                                            userExists = true
+                                                        )
+                                                    }
+                                                }
+                                                .onFailure {
+                                                    // If session check fails, proceed anyway
+                                                    kotlinx.coroutines.delay(200)
+                                                    _uiState.value = _uiState.value.copy(
+                                                        isLoading = false,
+                                                        isSuccess = true,
+                                                        userExists = true
+                                                    )
+                                                }
                                         } else {
-                                            // No other session, session already created in signInWithEmail
-                                            // Add small delay before marking success to ensure monitoring picks up session
+                                            // Admin user - allow multiple devices
                                             kotlinx.coroutines.delay(200)
                                             _uiState.value = _uiState.value.copy(
                                                 isLoading = false,
@@ -70,8 +101,37 @@ class LoginViewModel @Inject constructor(
                                             )
                                         }
                                     }
-                                    .onFailure {
-                                        // If session check fails, proceed anyway
+                                }
+                                .onFailure {
+                                    // If deletion check fails, proceed anyway
+                                    // Check for existing sessions (skip for admins)
+                                    if (userData.userType != UserType.ADMIN) {
+                                        authRepository.checkExistingSession(user.uid)
+                                            .onSuccess { hasOtherSession ->
+                                                if (hasOtherSession) {
+                                                    _uiState.value = _uiState.value.copy(
+                                                        isLoading = false,
+                                                        showMultiDeviceAlert = true,
+                                                        pendingUserId = user.uid
+                                                    )
+                                                } else {
+                                                    kotlinx.coroutines.delay(200)
+                                                    _uiState.value = _uiState.value.copy(
+                                                        isLoading = false,
+                                                        isSuccess = true,
+                                                        userExists = true
+                                                    )
+                                                }
+                                            }
+                                            .onFailure {
+                                                kotlinx.coroutines.delay(200)
+                                                _uiState.value = _uiState.value.copy(
+                                                    isLoading = false,
+                                                    isSuccess = true,
+                                                    userExists = true
+                                                )
+                                            }
+                                    } else {
                                         kotlinx.coroutines.delay(200)
                                         _uiState.value = _uiState.value.copy(
                                             isLoading = false,
@@ -79,15 +139,7 @@ class LoginViewModel @Inject constructor(
                                             userExists = true
                                         )
                                     }
-                            } else {
-                                // Admin user - allow multiple devices
-                                kotlinx.coroutines.delay(200)
-                                _uiState.value = _uiState.value.copy(
-                                    isLoading = false,
-                                    isSuccess = true,
-                                    userExists = true
-                                )
-                            }
+                                }
                         }
                         .onFailure {
                             // User exists in Auth but not in Firestore, needs user type selection
@@ -104,6 +156,13 @@ class LoginViewModel @Inject constructor(
                     )
                 }
         }
+    }
+
+    fun dismissDeletionCancelledDialog() {
+        _uiState.value = _uiState.value.copy(
+            showDeletionCancelledDialog = false,
+            isSuccess = true
+        )
     }
 
     fun createAccountWithRole(

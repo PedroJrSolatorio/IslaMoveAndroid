@@ -53,6 +53,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.ui.text.font.FontStyle
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -1944,6 +1945,8 @@ fun MapboxPlaceDetailsCard(
     var isBlocked by remember { mutableStateOf(false) }
     var timeRemainingText by remember { mutableStateOf("") }
     var showBlockedDialog by remember { mutableStateOf(false) }
+    var isAdminBlocked by remember { mutableStateOf(false) }
+    var showAdminBlockedDialog by remember { mutableStateOf(false) }
 
     // Check cancellation status on launch
     LaunchedEffect(Unit) {
@@ -1952,6 +1955,16 @@ fun MapboxPlaceDetailsCard(
             try {
                 val db = FirebaseFirestore.getInstance()
                 val userDoc = db.collection("users").document(userId).get().await()
+
+                val isActive = userDoc.getBoolean("isActive") ?: true
+                if (!isActive) {
+                    isAdminBlocked = true
+//                    Log.d("MapboxPlaceDetailsCard", "User is blocked by admin (isActive=false)")
+                } else {
+                    isAdminBlocked = false
+//                    Log.d("MapboxPlaceDetailsCard", "User is active (isActive=true)")
+                }
+
                 val preferences = userDoc.get("preferences") as? Map<*, *>
                 val cancellationCount = (preferences?.get("cancellationCount") as? Long)?.toInt() ?: 0
                 val lastCancellationTimestamp = preferences?.get("lastCancellationTimestamp") as? Long // Changed to Long
@@ -1968,7 +1981,7 @@ fun MapboxPlaceDetailsCard(
                         val minutesRemaining = (timeRemaining / (1000 * 60)) % 60
                         timeRemainingText = "$hoursRemaining hour${if (hoursRemaining > 1L) "s" else ""} and $minutesRemaining minute${if (minutesRemaining > 1L) "s" else ""}"
 
-                        Log.d("MapboxPlaceDetailsCard", "🚫 User blocked - Cancellations: $cancellationCount, Time remaining: $timeRemainingText")
+//                        Log.d("MapboxPlaceDetailsCard", "User blocked - Cancellations: $cancellationCount, Time remaining: $timeRemainingText")
                     } else {
                         // Reset the count after 12 hours
                         db.collection("users").document(userId).update(
@@ -1978,15 +1991,16 @@ fun MapboxPlaceDetailsCard(
                             )
                         ).await()
                         isBlocked = false
-                        Log.d("MapboxPlaceDetailsCard", "✅ 12 hours passed - Cancellation count reset")
+//                        Log.d("MapboxPlaceDetailsCard", "12 hours passed - Cancellation count reset")
                     }
                 } else {
                     isBlocked = false
-                    Log.d("MapboxPlaceDetailsCard", "✅ User not blocked - Cancellations: $cancellationCount")
+//                    Log.d("MapboxPlaceDetailsCard", "User not blocked - Cancellations: $cancellationCount")
                 }
             } catch (e: Exception) {
-                Log.e("MapboxPlaceDetailsCard", "Error checking cancellation status", e)
+//                Log.e("MapboxPlaceDetailsCard", "Error checking cancellation status", e)
                 isBlocked = false // Don't block on error
+                isAdminBlocked = false
             }
         }
     }
@@ -2548,6 +2562,130 @@ fun MapboxPlaceDetailsCard(
                 item { Spacer(modifier = Modifier.height(32.dp)) }
             }
 
+            // Admin Blocked Dialog (place before Action Buttons section)
+            item {
+                if (showAdminBlockedDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showAdminBlockedDialog = false },
+                        icon = {
+                            Icon(
+                                Icons.Default.Warning,
+                                contentDescription = "Blocked",
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(48.dp)
+                            )
+                        },
+                        title = {
+                            Text(
+                                text = "Account Blocked",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        },
+                        text = {
+                            Column(
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                // Block Reason Card
+                                Text(
+                                    text = "You cannot book rides while your account is blocked.",
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF424242),
+                                    modifier = Modifier.padding(bottom = 16.dp)
+                                )
+
+                                // Support Information Card
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = Color(0xFFE3F2FD) // Light blue
+                                    ),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(12.dp)
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(bottom = 8.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Info,
+                                                contentDescription = null,
+                                                tint = Color(0xFF1976D2),
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = "Need Help?",
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF1976D2)
+                                            )
+                                        }
+
+                                        Text(
+                                            text = "Contact support to resolve this issue:",
+                                            fontSize = 13.sp,
+                                            color = Color(0xFF424242),
+                                            modifier = Modifier.padding(bottom = 6.dp)
+                                        )
+
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(bottom = 4.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Email,
+                                                contentDescription = null,
+                                                tint = Color(0xFF1976D2),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "support@islamove.com",
+                                                fontSize = 13.sp,
+                                                color = Color(0xFF1976D2),
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        }
+
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Phone,
+                                                contentDescription = null,
+                                                tint = Color(0xFF1976D2),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "Help & Support in Profile tab",
+                                                fontSize = 13.sp,
+                                                color = Color(0xFF424242)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = { showAdminBlockedDialog = false },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error
+                                )
+                            ) {
+                                Text("OK", color = Color.White)
+                            }
+                        },
+                        containerColor = Color.White
+                    )
+                }
+            }
+
             // Action Buttons - changes based on mode
             item {
                 // Show blocked dialog if user tries to book while blocked
@@ -2575,7 +2713,10 @@ fun MapboxPlaceDetailsCard(
                             // Book Ride button
                             Button(
                                 onClick = {
-                                    if (isBlocked) {
+                                    // CHECK ADMIN BLOCK FIRST
+                                    if (isAdminBlocked) {
+                                        showAdminBlockedDialog = true
+                                    } else if (isBlocked) {
                                         showBlockedDialog = true
                                     } else {
                                         val bookingLocation = BookingLocation(
@@ -2589,7 +2730,7 @@ fun MapboxPlaceDetailsCard(
                                         onBookRide(bookingLocation, passengerComment, companions)
                                     }
                                 },
-                                enabled = companions.size <= 4, // Disable if more than 4 companions
+                                enabled = companions.size <= 4 && !isAdminBlocked, // Disable if more than 4 companions
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(50.dp),
@@ -2645,7 +2786,10 @@ fun MapboxPlaceDetailsCard(
                             // Book Ride button
                             Button(
                                 onClick = {
-                                    if (isBlocked) {
+                                    // CHECK ADMIN BLOCK FIRST
+                                    if (isAdminBlocked) {
+                                        showAdminBlockedDialog = true
+                                    } else if (isBlocked) {
                                         showBlockedDialog = true
                                     } else {
                                         val bookingLocation = BookingLocation(
@@ -2659,7 +2803,7 @@ fun MapboxPlaceDetailsCard(
                                         onBookRide(bookingLocation, passengerComment, companions)
                                     }
                                 },
-                                enabled = companions.size <= 4, // Disable if more than 4 companions
+                                enabled = companions.size <= 4 && !isAdminBlocked, // Disable if more than 4 companions
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(50.dp),
@@ -2746,7 +2890,10 @@ fun MapboxPlaceDetailsCard(
                     else -> {
                         Button(
                             onClick = {
-                                if (isBlocked) {
+                                // CHECK ADMIN BLOCK FIRST
+                                if (isAdminBlocked) {
+                                    showAdminBlockedDialog = true
+                                } else if (isBlocked) {
                                     showBlockedDialog = true
                                 } else {
                                     val bookingLocation = BookingLocation(
@@ -2760,7 +2907,7 @@ fun MapboxPlaceDetailsCard(
                                     onBookRide(bookingLocation, passengerComment, companions)
                                 }
                             },
-                            enabled = companions.size <= 4, // Disable if more than 4 companions
+                            enabled = companions.size <= 4 && !isAdminBlocked, // Disable if more than 4 companions
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(50.dp),

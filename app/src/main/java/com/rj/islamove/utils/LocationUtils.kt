@@ -121,9 +121,9 @@ class LocationUtils @Inject constructor(
             override fun onLocationResult(result: LocationResult) {
                 result.lastLocation?.let { location ->
                     onLocationUpdate(Point.fromLngLat(location.longitude, location.latitude))
-                    android.util.Log.d("LocationUtils", "Location update: ${location.latitude}, ${location.longitude}")
+//                    android.util.Log.d("LocationUtils", "Location update: ${location.latitude}, ${location.longitude}")
                 } ?: run {
-                    android.util.Log.w("LocationUtils", "Location result received but location is null")
+//                    android.util.Log.w("LocationUtils", "Location result received but location is null")
                     // Try to get last known location as fallback
                     tryFallbackLocation(onLocationUpdate, onError)
                 }
@@ -131,11 +131,11 @@ class LocationUtils @Inject constructor(
             
             override fun onLocationAvailability(availability: LocationAvailability) {
                 if (!availability.isLocationAvailable) {
-                    android.util.Log.w("LocationUtils", "Location not available - trying fallback methods")
+//                    android.util.Log.w("LocationUtils", "Location not available - trying fallback methods")
                     // Don't immediately error - try fallback location first
                     tryFallbackLocation(onLocationUpdate, onError)
                 } else {
-                    android.util.Log.d("LocationUtils", "Location is available again")
+//                    android.util.Log.d("LocationUtils", "Location is available again")
                 }
             }
         }
@@ -166,20 +166,20 @@ class LocationUtils @Inject constructor(
             fusedLocationClient.lastLocation
                 .addOnSuccessListener { location: Location? ->
                     if (location != null) {
-                        android.util.Log.d("LocationUtils", "Fallback: Using last known location")
+//                        android.util.Log.d("LocationUtils", "Fallback: Using last known location")
                         onLocationUpdate(Point.fromLngLat(location.longitude, location.latitude))
                     } else {
                         // Last known location not available - try alternative providers
-                        android.util.Log.w("LocationUtils", "Fallback: No last known location available")
+//                        android.util.Log.w("LocationUtils", "Fallback: No last known location available")
                         tryAlternativeLocationMethods(onLocationUpdate, onError)
                     }
                 }
                 .addOnFailureListener { exception ->
-                    android.util.Log.e("LocationUtils", "Fallback: Last known location failed", exception)
+//                    android.util.Log.e("LocationUtils", "Fallback: Last known location failed", exception)
                     tryAlternativeLocationMethods(onLocationUpdate, onError)
                 }
         } catch (e: SecurityException) {
-            android.util.Log.e("LocationUtils", "Fallback: Security exception", e)
+//            android.util.Log.e("LocationUtils", "Fallback: Security exception", e)
             onError(Exception("Location permission denied"))
         }
     }
@@ -202,12 +202,12 @@ class LocationUtils @Inject constructor(
             val singleLocationCallback = object : LocationCallback() {
                 override fun onLocationResult(result: LocationResult) {
                     result.lastLocation?.let { location ->
-                        android.util.Log.d("LocationUtils", "Alternative method: Got location ${location.latitude}, ${location.longitude}")
+//                        android.util.Log.d("LocationUtils", "Alternative method: Got location ${location.latitude}, ${location.longitude}")
                         onLocationUpdate(Point.fromLngLat(location.longitude, location.latitude))
                         // Remove this single-use callback
                         fusedLocationClient.removeLocationUpdates(this)
                     } ?: run {
-                        android.util.Log.w("LocationUtils", "Alternative method: Location result is null")
+//                        android.util.Log.w("LocationUtils", "Alternative method: Location result is null")
                         // If all else fails, report error after timeout
                         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                             onError(Exception("Unable to obtain location after trying all methods"))
@@ -217,7 +217,7 @@ class LocationUtils @Inject constructor(
                 
                 override fun onLocationAvailability(availability: LocationAvailability) {
                     if (!availability.isLocationAvailable) {
-                        android.util.Log.w("LocationUtils", "Alternative method: Location still not available")
+//                        android.util.Log.w("LocationUtils", "Alternative method: Location still not available")
                         // Final fallback - report meaningful error
                         onError(Exception("GPS signal unavailable. Please ensure location services are enabled and try moving to an area with better signal"))
                     }

@@ -17,6 +17,9 @@ data class User(
     val isActive: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
+    val deletionScheduledAt: Long? = null,
+    val deletionExecutionDate: Long? = null,
+    val isDeletionScheduled: Boolean = false,
 
     // Driver specific fields
     val driverData: DriverData? = null,

@@ -188,7 +188,7 @@ class DriverMatchingRepository @Inject constructor(
      */
     suspend fun cleanupStuckBookings(driverId: String): Result<Int> {
         return try {
-            android.util.Log.d("DriverMatching", "🧹 Starting stuck booking cleanup for driver $driverId...")
+//            android.util.Log.d("DriverMatching", "Starting stuck booking cleanup for driver $driverId...")
 
             val stuckStatuses = listOf(
                 BookingStatus.DRIVER_ARRIVING.name,
@@ -212,11 +212,11 @@ class DriverMatchingRepository @Inject constructor(
                 val timeSinceUpdate = currentTime - updatedAt
                 val minutesSinceUpdate = timeSinceUpdate / (60 * 1000)
 
-                android.util.Log.d("DriverMatching", "   - Checking booking $bookingId: status=$status, stuckFor=${minutesSinceUpdate}min")
+//                android.util.Log.d("DriverMatching", "   - Checking booking $bookingId: status=$status, stuckFor=${minutesSinceUpdate}min")
 
                 // Cancel if stuck for more than 15 minutes
                 if (timeSinceUpdate > timeoutThreshold) {
-                    android.util.Log.w("DriverMatching", "   ⚠️  Cancelling stuck booking $bookingId (stuck for ${minutesSinceUpdate}min)")
+//                    android.util.Log.w("DriverMatching", "Cancelling stuck booking $bookingId (stuck for ${minutesSinceUpdate}min)")
 
                     firestore.collection("bookings")
                         .document(bookingId)
@@ -231,15 +231,15 @@ class DriverMatchingRepository @Inject constructor(
                         .await()
 
                     cleanedCount++
-                    android.util.Log.d("DriverMatching", "Successfully cancelled stuck booking $bookingId")
+//                    android.util.Log.d("DriverMatching", "Successfully cancelled stuck booking $bookingId")
                 }
             }
 
-            android.util.Log.d("DriverMatching", "Cleanup completed: Cancelled $cleanedCount stuck bookings for driver $driverId")
+//            android.util.Log.d("DriverMatching", "Cleanup completed: Cancelled $cleanedCount stuck bookings for driver $driverId")
             Result.success(cleanedCount)
 
         } catch (e: Exception) {
-            android.util.Log.e("DriverMatching", "Failed to cleanup stuck bookings for driver $driverId", e)
+//            android.util.Log.e("DriverMatching", "Failed to cleanup stuck bookings for driver $driverId", e)
             Result.failure(e)
         }
     }
@@ -266,18 +266,18 @@ class DriverMatchingRepository @Inject constructor(
                 .await()
 
             val count = bookingsSnapshot.size()
-            android.util.Log.d("DriverMatching", "📊 Driver $driverId has $count active accepted bookings:")
+//            android.util.Log.d("DriverMatching", "Driver $driverId has $count active accepted bookings:")
 
             // Log each active booking for debugging
             bookingsSnapshot.documents.forEach { doc ->
                 val status = doc.getString("status")
                 val bookingId = doc.id
-                android.util.Log.d("DriverMatching", "   - Booking $bookingId with status $status")
+//                android.util.Log.d("DriverMatching", "   - Booking $bookingId with status $status")
             }
 
             count
         } catch (e: Exception) {
-            android.util.Log.e("DriverMatching", "Failed to get active bookings count for driver $driverId", e)
+//            android.util.Log.e("DriverMatching", "Failed to get active bookings count for driver $driverId", e)
             0 // Return 0 on error to avoid blocking driver from receiving requests
         }
     }
@@ -333,7 +333,7 @@ class DriverMatchingRepository @Inject constructor(
                     extractedId
                 }
                 
-                android.util.Log.d("DriverMatching", "Assigning driver to booking: '$actualBookingId'")
+//                android.util.Log.d("DriverMatching", "Assigning driver to booking: '$actualBookingId'")
                 
                 // Update booking with driver assignment - ONLY when driver accepts
                 bookingRepository.assignDriverToBooking(
@@ -638,7 +638,7 @@ class DriverMatchingRepository @Inject constructor(
                             // Update booking status to EXPIRED
                             bookingRepository.updateBookingStatus(bookingId, BookingStatus.EXPIRED)
 
-                            android.util.Log.i("DriverMatching", "✅ Booking $bookingId marked as EXPIRED after 1-minute timeout")
+//                            android.util.Log.i("DriverMatching", "✅ Booking $bookingId marked as EXPIRED after 1-minute timeout")
                         } else {
                             android.util.Log.d("DriverMatching", "Booking $bookingId already processed (status: ${booking?.status})")
                         }
@@ -649,7 +649,7 @@ class DriverMatchingRepository @Inject constructor(
                 )
             } else {
                 val elapsedTime = (System.currentTimeMillis() - startTime) / 1000
-                android.util.Log.d("DriverMatching", "✅ Booking $bookingId was accepted within ${elapsedTime}s (before 1-minute timeout)")
+//                android.util.Log.d("DriverMatching", "✅ Booking $bookingId was accepted within ${elapsedTime}s (before 1-minute timeout)")
             }
         }
     }
@@ -677,7 +677,7 @@ class DriverMatchingRepository @Inject constructor(
                 }
             }
 
-            android.util.Log.d("DriverMatching", "✅ Cancelled $cancelledCount driver requests for booking $bookingId")
+//            android.util.Log.d("DriverMatching", "✅ Cancelled $cancelledCount driver requests for booking $bookingId")
         } catch (e: Exception) {
             android.util.Log.e("DriverMatching", "Failed to cancel driver requests for booking $bookingId", e)
         }
@@ -688,15 +688,15 @@ class DriverMatchingRepository @Inject constructor(
      */
     private suspend fun sendDriverNotification(driverId: String, booking: Booking) {
         try {
-            android.util.Log.d("DriverMatching", "Sending FCM notification to driver: $driverId")
+//            android.util.Log.d("DriverMatching", "Sending FCM notification to driver: $driverId")
             
             // Use the proper NotificationService to send FCM notifications
             val notificationResult = notificationService.sendRideRequestToDrivers(booking, listOf(driverId))
             
             if (notificationResult.isSuccess) {
-                android.util.Log.d("DriverMatching", "Successfully queued FCM notification for driver: $driverId")
+//                android.util.Log.d("DriverMatching", "Successfully queued FCM notification for driver: $driverId")
             } else {
-                android.util.Log.w("DriverMatching", "Failed to queue FCM notification for driver $driverId: ${notificationResult.exceptionOrNull()?.message}")
+//                android.util.Log.w("DriverMatching", "Failed to queue FCM notification for driver $driverId: ${notificationResult.exceptionOrNull()?.message}")
                 
                 // Fallback: Store in Firebase Realtime Database for driver apps to poll
                 database.reference
@@ -715,7 +715,7 @@ class DriverMatchingRepository @Inject constructor(
                     ))
                     .await()
                 
-                android.util.Log.d("DriverMatching", "Stored notification fallback in database for driver: $driverId")
+//                android.util.Log.d("DriverMatching", "Stored notification fallback in database for driver: $driverId")
             }
             
             // ALSO show local notification if current user is the target driver (for testing)
@@ -819,7 +819,7 @@ class DriverMatchingRepository @Inject constructor(
         kotlinx.coroutines.GlobalScope.launch {
             val driverId = driverIds.firstOrNull()
 
-            android.util.Log.d("DriverMatching", "⏰ Monitoring request for driver $driverId (attempt $attemptNumber)")
+//            android.util.Log.d("DriverMatching", "⏰ Monitoring request for driver $driverId (attempt $attemptNumber)")
 
             // Flag to track if we should continue waiting
             var shouldContinueWaiting = true
@@ -828,7 +828,7 @@ class DriverMatchingRepository @Inject constructor(
             val declineListener = object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
                     if (snapshot.exists()) {
-                        android.util.Log.i("DriverMatching", "🚫 Driver $driverId DECLINED immediately - moving to next driver NOW")
+//                        android.util.Log.i("DriverMatching", "🚫 Driver $driverId DECLINED immediately - moving to next driver NOW")
 
                         // Stop waiting for the 30-second timeout
                         shouldContinueWaiting = false
@@ -841,7 +841,7 @@ class DriverMatchingRepository @Inject constructor(
                             // Check if we're still within 1-minute window
                             val elapsedTime = System.currentTimeMillis() - bookingStartTime
                             if (elapsedTime >= GLOBAL_BOOKING_TIMEOUT_MS) {
-                                android.util.Log.w("DriverMatching", "⏰ Global timeout reached - not reassigning")
+//                                android.util.Log.w("DriverMatching", "⏰ Global timeout reached - not reassigning")
                                 bookingRepository.updateBookingStatus(bookingId, BookingStatus.EXPIRED)
                                 cancelAllDriverRequestsForBooking(bookingId)
                                 return@launch
@@ -876,7 +876,7 @@ class DriverMatchingRepository @Inject constructor(
             }
 
             // Wait for 30 seconds OR until driver declines (whichever comes first)
-            android.util.Log.d("DriverMatching", "⏰ Waiting up to 30 seconds for driver $driverId to respond...")
+//            android.util.Log.d("DriverMatching", "Waiting up to 30 seconds for driver $driverId to respond...")
 
             // Check every 500ms if driver declined (shouldContinueWaiting flag)
             val startTime = System.currentTimeMillis()
@@ -891,7 +891,7 @@ class DriverMatchingRepository @Inject constructor(
                     .await()
 
                 if (responseSnapshot.exists()) {
-                    android.util.Log.d("DriverMatching", "✅ Driver $driverId ACCEPTED during monitoring")
+//                    android.util.Log.d("DriverMatching", "✅ Driver $driverId ACCEPTED during monitoring")
                     // Clean up decline listener
                     if (driverId != null) {
                         database.reference
@@ -906,11 +906,11 @@ class DriverMatchingRepository @Inject constructor(
 
             // If we exit the loop because driver declined, the decline listener already handled it
             if (!shouldContinueWaiting) {
-                android.util.Log.d("DriverMatching", "⏭️ Skipped 30s wait due to immediate decline")
+//                android.util.Log.d("DriverMatching", "Skipped 30s wait due to immediate decline")
                 return@launch
             }
 
-            android.util.Log.d("DriverMatching", "⏰ 30 seconds elapsed for driver $driverId (no response)")
+//            android.util.Log.d("DriverMatching", "30 seconds elapsed for driver $driverId (no response)")
 
             // Remove decline listener
             if (driverId != null) {
@@ -929,14 +929,14 @@ class DriverMatchingRepository @Inject constructor(
                 .await()
 
             if (!responseSnapshot.exists()) {
-                android.util.Log.i("DriverMatching", "⏱️ Driver $driverId TIMED OUT (no response in 30s)")
+//                android.util.Log.i("DriverMatching", "Driver $driverId TIMED OUT (no response in 30s)")
 
                 // Check if we're still within 1-minute window
                 val elapsedTime = System.currentTimeMillis() - bookingStartTime
-                android.util.Log.d("DriverMatching", "⏰ Elapsed time: ${elapsedTime}ms / ${GLOBAL_BOOKING_TIMEOUT_MS}ms")
+//                android.util.Log.d("DriverMatching", "Elapsed time: ${elapsedTime}ms / ${GLOBAL_BOOKING_TIMEOUT_MS}ms")
 
                 if (elapsedTime >= GLOBAL_BOOKING_TIMEOUT_MS) {
-                    android.util.Log.w("DriverMatching", "⏰ Global 1-minute timeout reached - booking expired")
+//                    android.util.Log.w("DriverMatching", "Global 1-minute timeout reached - booking expired")
                     bookingRepository.updateBookingStatus(bookingId, BookingStatus.EXPIRED)
                     cancelAllDriverRequestsForBooking(bookingId)
                     return@launch
@@ -956,7 +956,7 @@ class DriverMatchingRepository @Inject constructor(
                 }
             } else {
                 val elapsedTime = System.currentTimeMillis() - bookingStartTime
-                android.util.Log.d("DriverMatching", "✅ Driver $driverId accepted booking $bookingId (after ${elapsedTime}ms)")
+                android.util.Log.d("DriverMatching", "Driver $driverId accepted booking $bookingId (after ${elapsedTime}ms)")
             }
         }
     }
@@ -976,14 +976,14 @@ class DriverMatchingRepository @Inject constructor(
         // Check global timeout first
         val elapsedTime = System.currentTimeMillis() - bookingStartTime
         if (elapsedTime >= GLOBAL_BOOKING_TIMEOUT_MS) {
-            android.util.Log.w("DriverMatching", "⏰ Global timeout reached - booking expired")
+//            android.util.Log.w("DriverMatching", "Global timeout reached - booking expired")
             bookingRepository.updateBookingStatus(bookingId, BookingStatus.EXPIRED)
             cancelAllDriverRequestsForBooking(bookingId)
             return
         }
 
         val remainingTime = GLOBAL_BOOKING_TIMEOUT_MS - elapsedTime
-        android.util.Log.d("DriverMatching", "⏰ Time remaining: ${remainingTime}ms")
+//        android.util.Log.d("DriverMatching", "Time remaining: ${remainingTime}ms")
 
         // FIXED: Only remove request from THIS specific driver (not all drivers)
         if (driverId != null) {
@@ -998,7 +998,7 @@ class DriverMatchingRepository @Inject constructor(
                     val request = snapshot.getValue(DriverRequest::class.java)
                     if (request?.bookingId == bookingId) {
                         snapshot.ref.removeValue().await()
-                        android.util.Log.d("DriverMatching", "🧹 Removed request ${request.requestId} from driver $driverId")
+//                        android.util.Log.d("DriverMatching", "Removed request ${request.requestId} from driver $driverId")
                     }
                 }
             } catch (e: Exception) {
@@ -1009,13 +1009,13 @@ class DriverMatchingRepository @Inject constructor(
         // Try next driver from the remaining list
         if (remainingDrivers.isNotEmpty()) {
             val nextDriver = remainingDrivers.first()
-            android.util.Log.i("DriverMatching", "⏭️ Moving to next driver: ${nextDriver.driverId} (${remainingDrivers.size} remaining)")
+//            android.util.Log.i("DriverMatching", "Moving to next driver: ${nextDriver.driverId} (${remainingDrivers.size} remaining)")
 
             try {
                 val activeBookingsCount = getDriverActiveBookingsCount(nextDriver.driverId)
 
                 if (activeBookingsCount >= MAX_ACCEPTED_RIDES_PER_DRIVER) {
-                    android.util.Log.w("DriverMatching", "⏭️ Driver ${nextDriver.driverId} at capacity - skipping")
+//                    android.util.Log.w("DriverMatching", "Driver ${nextDriver.driverId} at capacity - skipping")
                     handleDriverDeclineOrTimeout(
                         bookingId, null, booking, attemptNumber,
                         remainingDrivers.drop(1), wasDeclined, bookingStartTime
@@ -1040,7 +1040,7 @@ class DriverMatchingRepository @Inject constructor(
                     )
 
                     if (!isDestinationCompatible) {
-                        android.util.Log.w("DriverMatching", "⏭️ Driver ${nextDriver.driverId} - opposite direction - skipping")
+//                        android.util.Log.w("DriverMatching", "Driver ${nextDriver.driverId} - opposite direction - skipping")
                         handleDriverDeclineOrTimeout(
                             bookingId, null, booking, attemptNumber,
                             remainingDrivers.drop(1), wasDeclined, bookingStartTime
@@ -1066,7 +1066,7 @@ class DriverMatchingRepository @Inject constructor(
                 }
 
                 if (hasRequest) {
-                    android.util.Log.w("DriverMatching", "⚠️ Driver ${nextDriver.driverId} already has this request - skipping")
+//                    android.util.Log.w("DriverMatching", "Driver ${nextDriver.driverId} already has this request - skipping")
                     handleDriverDeclineOrTimeout(
                         bookingId, null, booking, attemptNumber,
                         remainingDrivers.drop(1), wasDeclined, bookingStartTime
@@ -1074,11 +1074,11 @@ class DriverMatchingRepository @Inject constructor(
                     return
                 }
 
-                android.util.Log.i("DriverMatching", "✅ Sending request to driver ${nextDriver.driverId}")
+//                android.util.Log.i("DriverMatching", "Sending request to driver ${nextDriver.driverId}")
                 sendRequestToDriver(nextDriver, booking, bookingStartTime, attemptNumber, remainingDrivers.drop(1))
 
             } catch (e: Exception) {
-                android.util.Log.e("DriverMatching", "Failed to send to next driver", e)
+//                android.util.Log.e("DriverMatching", "Failed to send to next driver", e)
                 handleDriverDeclineOrTimeout(
                     bookingId, null, booking, attemptNumber,
                     remainingDrivers.drop(1), wasDeclined, bookingStartTime
@@ -1086,12 +1086,12 @@ class DriverMatchingRepository @Inject constructor(
             }
         } else {
             // NO MORE DRIVERS IN INITIAL LIST - keep searching
-            android.util.Log.w("DriverMatching", "📋 Initial driver list exhausted, searching for new drivers...")
+//            android.util.Log.w("DriverMatching", "Initial driver list exhausted, searching for new drivers...")
 
             if (remainingTime > 5000) {
                 searchForNewDrivers(booking, attemptNumber, bookingStartTime)
             } else {
-                android.util.Log.w("DriverMatching", "⏰ Insufficient time - booking expired")
+//                android.util.Log.w("DriverMatching", "Insufficient time - booking expired")
                 bookingRepository.updateBookingStatus(bookingId, BookingStatus.EXPIRED)
                 cancelAllDriverRequestsForBooking(bookingId)
             }
@@ -1107,7 +1107,7 @@ class DriverMatchingRepository @Inject constructor(
             val elapsedTime = System.currentTimeMillis() - bookingStartTime
             val remainingTime = GLOBAL_BOOKING_TIMEOUT_MS - elapsedTime
 
-            android.util.Log.d("DriverMatching", "🔍 Searching for new drivers (attempt ${attemptNumber + 1})")
+//            android.util.Log.d("DriverMatching", "Searching for new drivers (attempt ${attemptNumber + 1})")
 
             val notifiedDrivers = getNotifiedDriversForBooking(booking.id)
 
@@ -1119,7 +1119,7 @@ class DriverMatchingRepository @Inject constructor(
             )
 
             if (nearbyDriversResult.isFailure) {
-                android.util.Log.e("DriverMatching", "Failed to search for new drivers")
+//                android.util.Log.e("DriverMatching", "Failed to search for new drivers")
                 if (remainingTime > 10000) {
                     delay(5000)
                     searchForNewDrivers(booking, attemptNumber + 1, bookingStartTime)
@@ -1155,7 +1155,7 @@ class DriverMatchingRepository @Inject constructor(
                     .await()
 
                 if (existingRequest.exists()) {
-                    android.util.Log.d("DriverMatching", "⏭️ Skip ${driver.driverId} - already has request")
+//                    android.util.Log.d("DriverMatching", "Skip ${driver.driverId} - already has request")
                     continue
                 }
 
@@ -1186,27 +1186,27 @@ class DriverMatchingRepository @Inject constructor(
             }
 
             if (availableNewDrivers.isNotEmpty()) {
-                android.util.Log.i("DriverMatching", "✅ Found ${availableNewDrivers.size} new driver(s)!")
+//                android.util.Log.i("DriverMatching", "Found ${availableNewDrivers.size} new driver(s)!")
                 val topDriver = availableNewDrivers.first()
                 sendRequestToDriver(topDriver, booking, bookingStartTime, attemptNumber, availableNewDrivers.drop(1))
             } else {
-                android.util.Log.w("DriverMatching", "❌ No new drivers found")
+//                android.util.Log.w("DriverMatching", "No new drivers found")
 
                 val newRemainingTime = GLOBAL_BOOKING_TIMEOUT_MS - (System.currentTimeMillis() - bookingStartTime)
 
                 if (newRemainingTime > 10000) {
-                    android.util.Log.d("DriverMatching", "⏰ Will search again in 5s...")
+//                    android.util.Log.d("DriverMatching", "Will search again in 5s...")
                     delay(5000)
                     searchForNewDrivers(booking, attemptNumber + 1, bookingStartTime)
                 } else {
-                    android.util.Log.w("DriverMatching", "⏰ Time expired")
+//                    android.util.Log.w("DriverMatching", "Time expired")
                     bookingRepository.updateBookingStatus(booking.id, BookingStatus.EXPIRED)
                     cancelAllDriverRequestsForBooking(booking.id)
                 }
             }
 
         } catch (e: Exception) {
-            android.util.Log.e("DriverMatching", "Error searching for new drivers", e)
+//            android.util.Log.e("DriverMatching", "Error searching for new drivers", e)
             bookingRepository.updateBookingStatus(booking.id, BookingStatus.EXPIRED)
             cancelAllDriverRequestsForBooking(booking.id)
         }
@@ -1214,7 +1214,7 @@ class DriverMatchingRepository @Inject constructor(
 
     suspend fun declineRideRequest(requestId: String, driverId: String): Result<Unit> {
         return try {
-            android.util.Log.d("DriverMatching", "🚫 Driver $driverId declining request $requestId")
+//            android.util.Log.d("DriverMatching", "Driver $driverId declining request $requestId")
 
             // Get the request to find the bookingId
             val requestSnapshot = database.reference
@@ -1235,7 +1235,7 @@ class DriverMatchingRepository @Inject constructor(
                     .setValue(true)
                     .await()
 
-                android.util.Log.d("DriverMatching", "✅ Decline signal written")
+//                android.util.Log.d("DriverMatching", "Decline signal written")
 
                 // Update request status to DECLINED
                 database.reference
@@ -1246,14 +1246,14 @@ class DriverMatchingRepository @Inject constructor(
                     .setValue(DriverRequestStatus.DECLINED.name)
                     .await()
 
-                android.util.Log.d("DriverMatching", "✅ Status updated to DECLINED")
+//                android.util.Log.d("DriverMatching", "Status updated to DECLINED")
 
                 Result.success(Unit)
             } else {
                 Result.failure(Exception("Request not found"))
             }
         } catch (e: Exception) {
-            android.util.Log.e("DriverMatching", "❌ Error declining request", e)
+//            android.util.Log.e("DriverMatching", "Error declining request", e)
             Result.failure(e)
         }
     }
@@ -1279,10 +1279,10 @@ class DriverMatchingRepository @Inject constructor(
                 }
             }
 
-            android.util.Log.d("DriverMatching", "📋 Found ${notifiedDrivers.size} previously notified drivers for booking $bookingId")
+//            android.util.Log.d("DriverMatching", "Found ${notifiedDrivers.size} previously notified drivers for booking $bookingId")
             notifiedDrivers
         } catch (e: Exception) {
-            android.util.Log.e("DriverMatching", "Failed to get notified drivers", e)
+//            android.util.Log.e("DriverMatching", "Failed to get notified drivers", e)
             emptySet()
         }
     }
@@ -1330,7 +1330,7 @@ class DriverMatchingRepository @Inject constructor(
             bookingStartTime = bookingStartTime
         )
 
-        android.util.Log.i("DriverMatching", "✅ Sent request to driver ${driver.driverId}")
+//        android.util.Log.i("DriverMatching", "Sent request to driver ${driver.driverId}")
     }
     
     /**
@@ -1352,7 +1352,7 @@ class DriverMatchingRepository @Inject constructor(
             )
 
             if (nearbyDriversResult.isFailure) {
-                android.util.Log.e("DriverMatching", "Failed to get nearby drivers for reassignment")
+//                android.util.Log.e("DriverMatching", "Failed to get nearby drivers for reassignment")
                 bookingRepository.updateBookingStatus(booking.id, BookingStatus.EXPIRED)
                 return
             }
@@ -1417,7 +1417,7 @@ class DriverMatchingRepository @Inject constructor(
             }
 
             if (availableDrivers.isEmpty()) {
-                android.util.Log.w("DriverMatching", "No new drivers available for reassignment of booking ${booking.id}")
+//                android.util.Log.w("DriverMatching", "No new drivers available for reassignment of booking ${booking.id}")
                 // Cancel all pending driver requests to clean up
                 cancelOtherRequests(booking.id, "")
                 bookingRepository.updateBookingStatus(booking.id, BookingStatus.EXPIRED)
@@ -1425,11 +1425,11 @@ class DriverMatchingRepository @Inject constructor(
                 return
             }
 
-            android.util.Log.i("DriverMatching", "Found ${availableDrivers.size} new drivers for reassignment attempt $attemptNumber (sorted by rating)")
+//            android.util.Log.i("DriverMatching", "Found ${availableDrivers.size} new drivers for reassignment attempt $attemptNumber (sorted by rating)")
 
             // Send to highest-rated driver first
             val topDriver = availableDrivers.first()
-            android.util.Log.i("DriverMatching", "Reassigning to highest-rated available driver: ${topDriver.driverId} (rating: ${topDriver.rating})")
+//            android.util.Log.i("DriverMatching", "Reassigning to highest-rated available driver: ${topDriver.driverId} (rating: ${topDriver.rating})")
 
             val uniqueTimestamp = System.currentTimeMillis() + kotlin.random.Random.nextInt(0, 1000)
             val driverRequest = DriverRequest(
@@ -1466,9 +1466,9 @@ class DriverMatchingRepository @Inject constructor(
                 // Start monitoring again with remaining drivers
                 startRequestMonitoring(booking.id, listOf(topDriver.driverId), booking, attemptNumber, availableDrivers.drop(1))
 
-                android.util.Log.i("DriverMatching", "Reassignment attempt $attemptNumber completed for booking ${booking.id}, notified driver ${topDriver.driverId} (rating: ${topDriver.rating})")
+//                android.util.Log.i("DriverMatching", "Reassignment attempt $attemptNumber completed for booking ${booking.id}, notified driver ${topDriver.driverId} (rating: ${topDriver.rating})")
             } catch (e: Exception) {
-                android.util.Log.w("DriverMatching", "Failed to notify driver ${topDriver.driverId} in reassignment", e)
+//                android.util.Log.w("DriverMatching", "Failed to notify driver ${topDriver.driverId} in reassignment", e)
 
                 // Try next driver if available
                 if (availableDrivers.size > 1) {
@@ -1480,7 +1480,7 @@ class DriverMatchingRepository @Inject constructor(
             }
 
         } catch (e: Exception) {
-            android.util.Log.e("DriverMatching", "Error in reassignment for booking ${booking.id}", e)
+//            android.util.Log.e("DriverMatching", "Error in reassignment for booking ${booking.id}", e)
             bookingRepository.updateBookingStatus(booking.id, BookingStatus.EXPIRED)
         }
     }
@@ -1551,7 +1551,7 @@ class DriverMatchingRepository @Inject constructor(
                             if (request?.status == DriverRequestStatus.PENDING) {
                                 requestSnapshot.ref.child("status")
                                     .setValue(DriverRequestStatus.EXPIRED.name)
-                                android.util.Log.d("DriverMatching", "Fully expired request ${request.requestId} for driver $driverId")
+//                                android.util.Log.d("DriverMatching", "Fully expired request ${request.requestId} for driver $driverId")
                             }
                         }
                     }
@@ -1567,33 +1567,33 @@ class DriverMatchingRepository @Inject constructor(
      */
     suspend fun processQueuedBookingsForNewDriver(driverId: String): Result<Int> {
         return try {
-            android.util.Log.d("DriverMatching", "🔄 Starting processQueuedBookingsForNewDriver for driver: $driverId")
+//            android.util.Log.d("DriverMatching", "Starting processQueuedBookingsForNewDriver for driver: $driverId")
 
             // Get driver location to check vehicle category and position
             val nearbyDriversResult = driverRepository.getNearbyDrivers(0.0, 0.0, 50.0) // Get all drivers
             if (nearbyDriversResult.isFailure) {
-                android.util.Log.e("DriverMatching", "Failed to get nearby drivers: ${nearbyDriversResult.exceptionOrNull()?.message}")
+//                android.util.Log.e("DriverMatching", "Failed to get nearby drivers: ${nearbyDriversResult.exceptionOrNull()?.message}")
                 return Result.failure(Exception("Could not get driver details"))
             }
 
             val allDrivers = nearbyDriversResult.getOrNull() ?: emptyList()
-            android.util.Log.d("DriverMatching", "Found ${allDrivers.size} total drivers in system")
+//            android.util.Log.d("DriverMatching", "Found ${allDrivers.size} total drivers in system")
 
             val driverLocation = allDrivers.find { it.driverId == driverId }
             if (driverLocation == null) {
-                android.util.Log.e("DriverMatching", "Driver $driverId not found in nearby drivers list")
+//                android.util.Log.e("DriverMatching", "Driver $driverId not found in nearby drivers list")
                 allDrivers.forEach { driver ->
-                    android.util.Log.d("DriverMatching", "Available driver: ${driver.driverId}")
+//                    android.util.Log.d("DriverMatching", "Available driver: ${driver.driverId}")
                 }
                 return Result.failure(Exception("Driver location not found"))
             }
 
-            android.util.Log.d("DriverMatching", "Found driver $driverId - Vehicle: ${driverLocation.vehicleCategory}, Lat: ${driverLocation.latitude}, Lng: ${driverLocation.longitude}")
+//            android.util.Log.d("DriverMatching", "Found driver $driverId - Vehicle: ${driverLocation.vehicleCategory}, Lat: ${driverLocation.latitude}, Lng: ${driverLocation.longitude}")
 
             // Check if driver already has max accepted bookings
             val activeBookingsCount = getDriverActiveBookingsCount(driverId)
             if (activeBookingsCount >= MAX_ACCEPTED_RIDES_PER_DRIVER) {
-                android.util.Log.d("DriverMatching", "Driver $driverId already has $activeBookingsCount accepted bookings (max: $MAX_ACCEPTED_RIDES_PER_DRIVER) - not processing queued bookings")
+//                android.util.Log.d("DriverMatching", "Driver $driverId already has $activeBookingsCount accepted bookings (max: $MAX_ACCEPTED_RIDES_PER_DRIVER) - not processing queued bookings")
                 return Result.success(0)
             }
 
@@ -1612,7 +1612,7 @@ class DriverMatchingRepository @Inject constructor(
             for (bookingSnapshot in queuedBookingsSnapshot.children) {
                 // Stop if driver would exceed capacity
                 if (processedCount >= remainingCapacity) {
-                    android.util.Log.d("DriverMatching", "⏭️ Driver $driverId would reach capacity - not sending more queued bookings (sent: $processedCount, capacity remaining: $remainingCapacity)")
+//                    android.util.Log.d("DriverMatching", "Driver $driverId would reach capacity - not sending more queued bookings (sent: $processedCount, capacity remaining: $remainingCapacity)")
                     break
                 }
 
@@ -1657,12 +1657,12 @@ class DriverMatchingRepository @Inject constructor(
 
                             // STRICT: Only accept if direction is compatible (NOT opposite)
                             if (!isDestinationCompatible) {
-                                android.util.Log.d("DriverMatching", "Skipping queued booking $bookingId for driver $driverId - OPPOSITE DIRECTION (strict filtering)")
+//                                android.util.Log.d("DriverMatching", "Skipping queued booking $bookingId for driver $driverId - OPPOSITE DIRECTION (strict filtering)")
                                 continue
                             }
 
                             val reason = "destination/direction compatible"
-                            android.util.Log.d("DriverMatching", "Queued booking $bookingId eligible for driver $driverId - $reason")
+//                            android.util.Log.d("DriverMatching", "Queued booking $bookingId eligible for driver $driverId - $reason")
                         }
 
                         // Create and send driver request
@@ -1707,7 +1707,7 @@ class DriverMatchingRepository @Inject constructor(
                         bookingSnapshot.ref.removeValue().await()
 
                         processedCount++
-                        android.util.Log.i("DriverMatching", "Sent queued booking $bookingId to newly online driver $driverId")
+//                        android.util.Log.i("DriverMatching", "Sent queued booking $bookingId to newly online driver $driverId")
 
                         // Monitor this booking for acceptance to auto-remove from other drivers
                         monitorBookingAcceptance(bookingId)
@@ -1719,12 +1719,12 @@ class DriverMatchingRepository @Inject constructor(
             val activePendingCount = processActivePendingRequestsForNewDriver(driverId, driverLocation)
 
             val totalProcessed = processedCount + activePendingCount
-            android.util.Log.i("DriverMatching", "Driver $driverId received $processedCount queued + $activePendingCount active requests = $totalProcessed total")
+//            android.util.Log.i("DriverMatching", "Driver $driverId received $processedCount queued + $activePendingCount active requests = $totalProcessed total")
 
             Result.success(totalProcessed)
 
         } catch (e: Exception) {
-            android.util.Log.e("DriverMatching", "Failed to process queued bookings for driver $driverId", e)
+//            android.util.Log.e("DriverMatching", "Failed to process queued bookings for driver $driverId", e)
             Result.failure(e)
         }
     }
@@ -1735,8 +1735,8 @@ class DriverMatchingRepository @Inject constructor(
      */
     private suspend fun processActivePendingRequestsForNewDriver(driverId: String, driverLocation: DriverLocation): Int {
         return try {
-            android.util.Log.d("DriverMatching", "Checking active pending requests for newly online driver: $driverId")
-            android.util.Log.d("DriverMatching", "Driver location - Lat: ${driverLocation.latitude}, Lng: ${driverLocation.longitude}, Vehicle: ${driverLocation.vehicleCategory}, Online: ${driverLocation.online}")
+//            android.util.Log.d("DriverMatching", "Checking active pending requests for newly online driver: $driverId")
+//            android.util.Log.d("DriverMatching", "Driver location - Lat: ${driverLocation.latitude}, Lng: ${driverLocation.longitude}, Vehicle: ${driverLocation.vehicleCategory}, Online: ${driverLocation.online}")
 
             // Get all current bookings that are in PENDING status (ride requests sent to drivers but not yet accepted)
             val pendingBookingsSnapshot = firestore.collection("bookings")
@@ -1748,15 +1748,15 @@ class DriverMatchingRepository @Inject constructor(
                 doc.toObject(Booking::class.java)?.copy(id = doc.id)
             }
 
-            android.util.Log.d("DriverMatching", "Found ${pendingBookings.size} pending bookings to check for driver $driverId")
+//            android.util.Log.d("DriverMatching", "Found ${pendingBookings.size} pending bookings to check for driver $driverId")
             pendingBookings.forEach { booking ->
-                android.util.Log.d("DriverMatching", "Pending booking: ${booking.id}, vehicle: ${booking.vehicleCategory}, passenger: ${booking.passengerId}")
+//                android.util.Log.d("DriverMatching", "Pending booking: ${booking.id}, vehicle: ${booking.vehicleCategory}, passenger: ${booking.passengerId}")
             }
 
             // Check if driver already has max accepted bookings
             val activeBookingsCount = getDriverActiveBookingsCount(driverId)
             if (activeBookingsCount >= MAX_ACCEPTED_RIDES_PER_DRIVER) {
-                android.util.Log.d("DriverMatching", "Driver $driverId already has $activeBookingsCount accepted bookings (max: $MAX_ACCEPTED_RIDES_PER_DRIVER) - not sending pending requests")
+//                android.util.Log.d("DriverMatching", "Driver $driverId already has $activeBookingsCount accepted bookings (max: $MAX_ACCEPTED_RIDES_PER_DRIVER) - not sending pending requests")
                 return 0
             }
 
@@ -1767,13 +1767,13 @@ class DriverMatchingRepository @Inject constructor(
                 try {
                     // Stop if driver would exceed capacity with this booking
                     if (sentRequestsCount >= remainingCapacity) {
-                        android.util.Log.d("DriverMatching", "Driver $driverId would reach capacity - not sending more requests (sent: $sentRequestsCount, capacity remaining: $remainingCapacity)")
+//                        android.util.Log.d("DriverMatching", "Driver $driverId would reach capacity - not sending more requests (sent: $sentRequestsCount, capacity remaining: $remainingCapacity)")
                         break
                     }
 
                     // Check if this driver matches the booking requirements
                     if (booking.vehicleCategory != driverLocation.vehicleCategory) {
-                        android.util.Log.d("DriverMatching", "Skipping booking ${booking.id}: vehicle category mismatch (need ${booking.vehicleCategory}, driver has ${driverLocation.vehicleCategory})")
+//                        android.util.Log.d("DriverMatching", "Skipping booking ${booking.id}: vehicle category mismatch (need ${booking.vehicleCategory}, driver has ${driverLocation.vehicleCategory})")
                         continue
                     }
 
@@ -1784,7 +1784,7 @@ class DriverMatchingRepository @Inject constructor(
                     )
 
                     if (distanceMeters > MAX_DRIVER_TO_PICKUP_RADIUS_METERS) {
-                        android.util.Log.d("DriverMatching", "Skipping booking ${booking.id}: too far (${String.format("%.0f", distanceMeters)}m > ${MAX_DRIVER_TO_PICKUP_RADIUS_METERS.toInt()}m)")
+//                        android.util.Log.d("DriverMatching", "Skipping booking ${booking.id}: too far (${String.format("%.0f", distanceMeters)}m > ${MAX_DRIVER_TO_PICKUP_RADIUS_METERS.toInt()}m)")
                         continue
                     }
 
@@ -1798,7 +1798,7 @@ class DriverMatchingRepository @Inject constructor(
                         .await()
 
                     if (existingRequest.exists()) {
-                        android.util.Log.d("DriverMatching", "Skipping booking ${booking.id}: driver already has this request")
+//                        android.util.Log.d("DriverMatching", "Skipping booking ${booking.id}: driver already has this request")
                         continue
                     }
 
@@ -1806,7 +1806,7 @@ class DriverMatchingRepository @Inject constructor(
                     // This prevents sending the same booking to multiple drivers simultaneously
                     val hasActiveRequestElsewhere = checkIfBookingHasActiveRequest(booking.id, driverId)
                     if (hasActiveRequestElsewhere) {
-                        android.util.Log.d("DriverMatching", "Skipping booking ${booking.id}: another driver currently has an active request (within 30s window)")
+//                        android.util.Log.d("DriverMatching", "Skipping booking ${booking.id}: another driver currently has an active request (within 30s window)")
                         continue
                     }
 
@@ -1824,12 +1824,12 @@ class DriverMatchingRepository @Inject constructor(
 
                         // STRICT: Only accept if direction is compatible (NOT opposite)
                         if (!isDestinationCompatible) {
-                            android.util.Log.d("DriverMatching", "Skipping pending booking ${booking.id} for driver $driverId - OPPOSITE DIRECTION (strict filtering)")
+//                            android.util.Log.d("DriverMatching", "Skipping pending booking ${booking.id} for driver $driverId - OPPOSITE DIRECTION (strict filtering)")
                             continue
                         }
 
                         val reason = "destination/direction compatible"
-                        android.util.Log.d("DriverMatching", "Pending booking ${booking.id} eligible for driver $driverId - $reason")
+//                        android.util.Log.d("DriverMatching", "Pending booking ${booking.id} eligible for driver $driverId - $reason")
                     }
 
                     // Create and send driver request
@@ -1859,7 +1859,7 @@ class DriverMatchingRepository @Inject constructor(
                         .await()
 
                     sentRequestsCount++
-                    android.util.Log.i("DriverMatching", "Sent active pending booking ${booking.id} to newly online driver $driverId (distance: ${String.format("%.0f", distanceMeters)}m)")
+//                    android.util.Log.i("DriverMatching", "Sent active pending booking ${booking.id} to newly online driver $driverId (distance: ${String.format("%.0f", distanceMeters)}m)")
 
                     // Optional: Send notification to driver
                     try {
@@ -1873,7 +1873,7 @@ class DriverMatchingRepository @Inject constructor(
                 }
             }
 
-            android.util.Log.d("DriverMatching", "🏁 Sent $sentRequestsCount active pending requests to driver $driverId")
+//            android.util.Log.d("DriverMatching", "Sent $sentRequestsCount active pending requests to driver $driverId")
             sentRequestsCount
 
         } catch (e: Exception) {
@@ -1950,7 +1950,7 @@ class DriverMatchingRepository @Inject constructor(
                         // Check if request is still active (PENDING and not expired)
                         if (request.status == DriverRequestStatus.PENDING &&
                             !request.isExpired(currentTime)) {
-                            android.util.Log.d("DriverMatching", "Found active request for booking $bookingId with driver $driverId (expires in ${request.getTimeRemaining(currentTime)}s)")
+//                            android.util.Log.d("DriverMatching", "Found active request for booking $bookingId with driver $driverId (expires in ${request.getTimeRemaining(currentTime)}s)")
                             return true
                         }
                     }
@@ -1958,11 +1958,11 @@ class DriverMatchingRepository @Inject constructor(
             }
 
             // No active requests found
-            android.util.Log.d("DriverMatching", "No active requests found for booking $bookingId (excluding driver $excludeDriverId)")
+//            android.util.Log.d("DriverMatching", "No active requests found for booking $bookingId (excluding driver $excludeDriverId)")
             false
 
         } catch (e: Exception) {
-            android.util.Log.e("DriverMatching", "Error checking for active requests for booking $bookingId", e)
+//            android.util.Log.e("DriverMatching", "Error checking for active requests for booking $bookingId", e)
             // On error, assume there IS an active request (conservative approach to avoid conflicts)
             true
         }
@@ -1986,7 +1986,7 @@ class DriverMatchingRepository @Inject constructor(
         newPickupCoords: Pair<Double, Double>
     ): Boolean {
         return try {
-            android.util.Log.d("CompatibilityCheck", "Checking ride compatibility for driver $driverId")
+//            android.util.Log.d("CompatibilityCheck", "Checking ride compatibility for driver $driverId")
 
             // Get driver's active bookings
             val activeBookingsSnapshot = firestore.collection("bookings")
@@ -2004,7 +2004,7 @@ class DriverMatchingRepository @Inject constructor(
                 doc.toObject(Booking::class.java)?.copy(id = doc.id)
             }
 
-            android.util.Log.d("CompatibilityCheck", "Driver has ${activeBookings.size} active bookings")
+//            android.util.Log.d("CompatibilityCheck", "Driver has ${activeBookings.size} active bookings")
 
             if (activeBookings.isEmpty()) {
                 android.util.Log.d("CompatibilityCheck", "No active bookings - automatically compatible")
@@ -2022,7 +2022,7 @@ class DriverMatchingRepository @Inject constructor(
                 return true
             }
 
-            android.util.Log.d("CompatibilityCheck", "New destination boundary: $newDestBoundary")
+//            android.util.Log.d("CompatibilityCheck", "New destination boundary: $newDestBoundary")
 
             // Check each active booking
             for (booking in activeBookings) {
@@ -2036,7 +2036,7 @@ class DriverMatchingRepository @Inject constructor(
                     continue
                 }
 
-                android.util.Log.d("CompatibilityCheck", "Existing booking (${booking.id}) destination boundary: $existingDestBoundary")
+//                android.util.Log.d("CompatibilityCheck", "Existing booking (${booking.id}) destination boundary: $existingDestBoundary")
 
                 // ALWAYS check if routes overlap using Turf.js concepts
                 // Even if same boundary, destinations might be in opposite directions!
@@ -2062,32 +2062,32 @@ class DriverMatchingRepository @Inject constructor(
                 val bearingDifference = kotlin.math.abs(driverDirectionFromNewPickup - passengerDirection).let {
                     if (it > 180) 360 - it else it
                 }
-                val isSimilarDirection = bearingDifference <= 45.0 // Only accept if within 45° - same general direction
+                val isSimilarDirection = bearingDifference <= 30.0 // Only accept if within 30° - same general direction
 
-                android.util.Log.d("CompatibilityCheck", "  📊 Route compatibility details (BEARING-BASED ONLY):")
-                android.util.Log.d("CompatibilityCheck", "    - Driver bearing from new pickup: ${String.format("%.1f", driverDirectionFromNewPickup)}°")
-                android.util.Log.d("CompatibilityCheck", "    - Passenger bearing from pickup: ${String.format("%.1f", passengerDirection)}°")
-                android.util.Log.d("CompatibilityCheck", "    - Bearing difference: ${String.format("%.1f", bearingDifference)}°")
-                android.util.Log.d("CompatibilityCheck", "    - Similar direction (≤45°): $isSimilarDirection")
+//                android.util.Log.d("CompatibilityCheck", "  Route compatibility details (BEARING-BASED ONLY):")
+//                android.util.Log.d("CompatibilityCheck", "    - Driver bearing from new pickup: ${String.format("%.1f", driverDirectionFromNewPickup)}°")
+//                android.util.Log.d("CompatibilityCheck", "    - Passenger bearing from pickup: ${String.format("%.1f", passengerDirection)}°")
+//                android.util.Log.d("CompatibilityCheck", "    - Bearing difference: ${String.format("%.1f", bearingDifference)}°")
+//                android.util.Log.d("CompatibilityCheck", "    - Similar direction (≤30°): $isSimilarDirection")
 
                 // Routes overlap if bearings are similar (same direction)
                 val routesOverlap = isSimilarDirection
 
                 if (routesOverlap) {
-                    android.util.Log.d("CompatibilityCheck", "SAME DIRECTION - bearing match!")
+//                    android.util.Log.d("CompatibilityCheck", "SAME DIRECTION - bearing match!")
                     return true
                 } else {
-                    android.util.Log.d("CompatibilityCheck", "DIFFERENT DIRECTION - bearing mismatch")
+//                    android.util.Log.d("CompatibilityCheck", "DIFFERENT DIRECTION - bearing mismatch")
                     return false
                 }
             }
 
             // If we reach here, all bookings passed (should not happen with the logic above)
-            android.util.Log.d("CompatibilityCheck", "All bookings checked - compatible")
+//            android.util.Log.d("CompatibilityCheck", "All bookings checked - compatible")
             return true
 
         } catch (e: Exception) {
-            android.util.Log.e("CompatibilityCheck", "Error checking compatibility", e)
+//            android.util.Log.e("CompatibilityCheck", "Error checking compatibility", e)
             // On error, default to compatible to avoid blocking rides unexpectedly
             return true
         }
@@ -2144,7 +2144,7 @@ class DriverMatchingRepository @Inject constructor(
                         requestSnapshot.ref.child("status")
                             .setValue(DriverRequestStatus.ACCEPTED_BY_OTHER.name)
                         
-                        android.util.Log.d("DriverMatching", "Removed booking $bookingId request from driver $driverId (accepted by another)")
+//                        android.util.Log.d("DriverMatching", "Removed booking $bookingId request from driver $driverId (accepted by another)")
                     }
                 }
             }

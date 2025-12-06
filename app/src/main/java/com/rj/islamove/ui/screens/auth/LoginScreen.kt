@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -241,6 +242,38 @@ fun LoginScreen(
                     onClick = { viewModel.cancelMultiDeviceLogin() }
                 ) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Add this new dialog
+    if (uiState.showDeletionCancelledDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissDeletionCancelledDialog() },
+            title = {
+                Text(
+                    text = "Welcome Back!",
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF4CAF50)
+                )
+            },
+            text = {
+                Text(
+                    text = "Your account deletion request has been cancelled. We're glad to have you back!",
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.dismissDeletionCancelledDialog()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF4CAF50)
+                    )
+                ) {
+                    Text("Continue")
                 }
             }
         )

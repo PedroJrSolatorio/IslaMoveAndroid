@@ -252,11 +252,11 @@ class DriverRepository @Inject constructor(
                 .await()
 
             val isOnline = statusSnapshot.child("online").getValue(Boolean::class.java) ?: false
-            android.util.Log.d("DriverRepository", "Retrieved online status for $driverId: $isOnline")
+//            android.util.Log.d("DriverRepository", "Retrieved online status for $driverId: $isOnline")
 
             Result.success(isOnline)
         } catch (e: Exception) {
-            android.util.Log.e("DriverRepository", "Failed to get online status for $driverId", e)
+//            android.util.Log.e("DriverRepository", "Failed to get online status for $driverId", e)
             Result.failure(e)
         }
     }
@@ -267,7 +267,7 @@ class DriverRepository @Inject constructor(
      */
     suspend fun cleanupStaleOnlineDrivers(): Result<Unit> {
         return try {
-            android.util.Log.d("DriverRepository", "🧹 Starting cleanup of stale online drivers...")
+//            android.util.Log.d("DriverRepository", "Starting cleanup of stale online drivers...")
 
             val currentTime = System.currentTimeMillis()
             val timeoutThreshold = currentTime - 60000L // 1 minute ago (reduced from 3 minutes)
@@ -290,16 +290,16 @@ class DriverRepository @Inject constructor(
                 val lastUpdate = driverSnapshot.child("lastUpdate").getValue(Long::class.java) ?: 0L
                 val timeSinceUpdate = currentTime - lastUpdate
 
-                android.util.Log.d("DriverRepository", "🔍 Checking driver $driverId: lastUpdate=$lastUpdate, timeSince=${timeSinceUpdate}ms")
+//                android.util.Log.d("DriverRepository", "Checking driver $driverId: lastUpdate=$lastUpdate, timeSince=${timeSinceUpdate}ms")
 
                 // Skip current user
                 if (driverId == auth.currentUser?.uid) {
-                    android.util.Log.d("DriverRepository", "⏭️ Skipping current user: $driverId")
+//                    android.util.Log.d("DriverRepository", "Skipping current user: $driverId")
                     continue
                 }
 
                 if (lastUpdate < timeoutThreshold) {
-                    android.util.Log.w("DriverRepository", "⏰ Setting stale driver offline: $driverId (inactive for ${timeSinceUpdate}ms / ${timeSinceUpdate/1000}s)")
+//                    android.util.Log.w("DriverRepository", "Setting stale driver offline: $driverId (inactive for ${timeSinceUpdate}ms / ${timeSinceUpdate/1000}s)")
 
                     // Set driver offline
                     val statusUpdate = mapOf(
@@ -334,14 +334,14 @@ class DriverRepository @Inject constructor(
                             ))
                             .await()
 
-                        android.util.Log.d("DriverRepository", "✅ Successfully set driver $driverId offline in all databases")
+//                        android.util.Log.d("DriverRepository", "Successfully set driver $driverId offline in all databases")
                     } catch (e: Exception) {
-                        android.util.Log.w("DriverRepository", "⚠️ Failed to update Firestore for stale driver: $driverId", e)
+                        android.util.Log.w("DriverRepository", "Failed to update Firestore for stale driver: $driverId", e)
                     }
 
                     cleanupCount++
                 } else {
-                    android.util.Log.d("DriverRepository", "✅ Driver $driverId is still active (${timeSinceUpdate/1000}s ago)")
+//                    android.util.Log.d("DriverRepository", "Driver $driverId is still active (${timeSinceUpdate/1000}s ago)")
                 }
             }
 
@@ -349,7 +349,7 @@ class DriverRepository @Inject constructor(
             Result.success(Unit)
 
         } catch (e: Exception) {
-            android.util.Log.e("DriverRepository", "❌ Failed to cleanup stale online drivers", e)
+//            android.util.Log.e("DriverRepository", "Failed to cleanup stale online drivers", e)
             Result.failure(e)
         }
     }
@@ -390,9 +390,9 @@ class DriverRepository @Inject constructor(
                 if (isOnline && driverId != null) {
                     if (statusAge <= maxStatusAge) {
                         onlineDriverIds.add(driverId)
-                        android.util.Log.d("DriverRepository", "Driver $driverId is online with fresh status (${statusAge}ms ago)")
+//                        android.util.Log.d("DriverRepository", "Driver $driverId is online with fresh status (${statusAge}ms ago)")
                     } else {
-                        android.util.Log.d("DriverRepository", "Driver $driverId has stale online status (${statusAge}ms ago), ignoring")
+//                        android.util.Log.d("DriverRepository", "Driver $driverId has stale online status (${statusAge}ms ago), ignoring")
                     }
                 }
             }
@@ -422,7 +422,7 @@ class DriverRepository @Inject constructor(
                     val totalTrips = driverDoc.getLong("driverData.totalTrips")?.toInt() ?: 0
                     driverRatings[driverId] = Pair(rating, totalTrips)
                 } catch (e: Exception) {
-                    android.util.Log.w("DriverRepository", "Could not fetch rating for driver $driverId, using default", e)
+//                    android.util.Log.w("DriverRepository", "Could not fetch rating for driver $driverId, using default", e)
                     driverRatings[driverId] = Pair(5.0, 0)
                 }
             }
@@ -437,7 +437,7 @@ class DriverRepository @Inject constructor(
                         // Check if driver is within operational boundaries
                         val isDriverInBoundaries = isPointWithinBoundaries(driverLocation.latitude, driverLocation.longitude)
                         if (!isDriverInBoundaries) {
-                            android.util.Log.d("DriverRepository", "Driver $driverId is outside operational boundaries")
+//                            android.util.Log.d("DriverRepository", "Driver $driverId is outside operational boundaries")
                             return@forEach
                         }
 
@@ -476,14 +476,14 @@ class DriverRepository @Inject constructor(
                     .thenBy { it.totalTrips }
             )
 
-            android.util.Log.d("DriverRepository", "Found ${nearbyDrivers.size} drivers within boundaries and ${radiusKm}km radius, sorted by rating→distance→trips")
+//            android.util.Log.d("DriverRepository", "Found ${nearbyDrivers.size} drivers within boundaries and ${radiusKm}km radius, sorted by rating→distance→trips")
             nearbyDrivers.forEach { driver ->
                 val distance = calculateDistance(centerLat, centerLng, driver.latitude, driver.longitude)
-                android.util.Log.d("DriverRepository", "Driver ${driver.driverId}: rating=${driver.rating}, distance=${String.format("%.2f", distance)}km, trips=${driver.totalTrips}")
+//                android.util.Log.d("DriverRepository", "Driver ${driver.driverId}: rating=${driver.rating}, distance=${String.format("%.2f", distance)}km, trips=${driver.totalTrips}")
             }
             Result.success(nearbyDrivers)
         } catch (e: Exception) {
-            android.util.Log.e("DriverRepository", "getNearbyDrivers failed", e)
+//            android.util.Log.e("DriverRepository", "getNearbyDrivers failed", e)
             Result.failure(e)
         }
     }
@@ -572,21 +572,21 @@ class DriverRepository @Inject constructor(
                 val locationAge = if (driverLocation != null) currentTime - driverLocation.lastUpdate else Long.MAX_VALUE
 
                 // Log location age for debugging
-                android.util.Log.d("DriverRepository", "📍 Received driver location for $driverId: lat=${driverLocation?.latitude}, lng=${driverLocation?.longitude}, age=${locationAge}ms")
+//                android.util.Log.d("DriverRepository", "Received driver location for $driverId: lat=${driverLocation?.latitude}, lng=${driverLocation?.longitude}, age=${locationAge}ms")
 
                 // Only send if location is recent (within 30 seconds) to avoid stale data
                 if (driverLocation != null && locationAge < 30000) {
                     trySend(driverLocation.copy(driverId = driverId))
                 } else if (driverLocation != null) {
-                    android.util.Log.w("DriverRepository", "⚠️ Ignoring stale driver location for $driverId (age: ${locationAge}ms)")
+//                    android.util.Log.w("DriverRepository", "Ignoring stale driver location for $driverId (age: ${locationAge}ms)")
                 } else {
-                    android.util.Log.w("DriverRepository", "⚠️ Received null driver location for $driverId")
+//                    android.util.Log.w("DriverRepository", "Received null driver location for $driverId")
                     trySend(null)
                 }
             }
 
             override fun onCancelled(error: DatabaseError) {
-                android.util.Log.e("DriverRepository", "❌ Driver location listener cancelled for $driverId: ${error.message}")
+//                android.util.Log.e("DriverRepository", "Driver location listener cancelled for $driverId: ${error.message}")
                 trySend(null)
             }
         }
@@ -624,19 +624,19 @@ class DriverRepository @Inject constructor(
      */
     private suspend fun isPointWithinBoundaries(latitude: Double, longitude: Double): Boolean {
         return try {
-            android.util.Log.d("DriverRepository", "Checking if point ($latitude, $longitude) is within boundaries")
+//            android.util.Log.d("DriverRepository", "Checking if point ($latitude, $longitude) is within boundaries")
             // Get all service areas with boundaries from Firestore
             val serviceAreasSnapshot = firestore.collection("service_areas")
                 .whereEqualTo("isActive", true)
                 .get()
                 .await()
 
-            android.util.Log.d("DriverRepository", "Found ${serviceAreasSnapshot.documents.size} active service areas")
+//            android.util.Log.d("DriverRepository", "Found ${serviceAreasSnapshot.documents.size} active service areas")
 
             var foundServiceBoundary = false
             for (areaDoc in serviceAreasSnapshot.documents) {
                 val area = areaDoc.toObject(ServiceArea::class.java)
-                android.util.Log.d("DriverRepository", "Checking area: ${area?.name}, has boundary: ${area?.boundary != null}, points: ${area?.boundary?.points?.size ?: 0}")
+//                android.util.Log.d("DriverRepository", "Checking area: ${area?.name}, has boundary: ${area?.boundary != null}, points: ${area?.boundary?.points?.size ?: 0}")
 
                 // Check for service area boundaries (not zone boundaries)
                 // Use same logic as other repositories - check if name contains "ZONE" in uppercase
@@ -659,13 +659,13 @@ class DriverRepository @Inject constructor(
 
             // If no service area boundaries are defined, allow all locations
             if (!foundServiceBoundary) {
-                android.util.Log.d("DriverRepository", "No service boundaries found, allowing all locations")
+//                android.util.Log.d("DriverRepository", "No service boundaries found, allowing all locations")
             } else {
-                android.util.Log.d("DriverRepository", "Point is outside all service boundaries")
+//                android.util.Log.d("DriverRepository", "Point is outside all service boundaries")
             }
             !foundServiceBoundary // Only allow if no boundaries defined
         } catch (e: Exception) {
-            android.util.Log.e("DriverRepository", "Error checking boundaries", e)
+//            android.util.Log.e("DriverRepository", "Error checking boundaries", e)
             true // Default to allowing if boundary check fails
         }
     }
@@ -746,20 +746,20 @@ class DriverRepository @Inject constructor(
                     if (isOnline == true && driverId != null) {
                         if (statusAge <= maxStatusAge) {
                             onlineDriverIds.add(driverId)
-                            println("DEBUG: Driver $driverId is online (last status update: ${statusAge}ms ago)")
+//                            println("DEBUG: Driver $driverId is online (last status update: ${statusAge}ms ago)")
                         } else {
-                            println("DEBUG: Driver $driverId has stale online status (${statusAge}ms ago), ignoring")
+//                            println("DEBUG: Driver $driverId has stale online status (${statusAge}ms ago), ignoring")
                         }
                     } else if (driverId != null) {
-                        println("DEBUG: Driver $driverId is offline (online: $isOnline)")
+//                        println("DEBUG: Driver $driverId is offline (online: $isOnline)")
                     }
                 }
 
-                println("DEBUG: Found ${onlineDriverIds.size} online drivers")
+//                println("DEBUG: Found ${onlineDriverIds.size} online drivers")
 
                 // ALWAYS send result, even if empty, to ensure UI updates
                 if (onlineDriverIds.isEmpty()) {
-                    println("DEBUG: No online drivers, sending empty list")
+//                    println("DEBUG: No online drivers, sending empty list")
                     trySend(emptyList())
                     return
                 }
