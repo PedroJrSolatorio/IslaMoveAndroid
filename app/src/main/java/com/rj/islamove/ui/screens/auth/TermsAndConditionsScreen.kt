@@ -74,7 +74,7 @@ fun TermsAndConditionsScreen(
                         "• Students and senior citizens must upload valid Student ID or Senior Citizen ID for discount eligibility\n" +
                         "• Drivers must upload and maintain current copies of:\n" +
                         "  - Valid Driver's License\n" +
-                        "  - SJMODA Certification\n" +
+                        "  - Franchise Certificate\n" +
                         "  - OR/CR (Official Receipt/Certificate of Registration) of bao-bao vehicle\n" +
                         "• You are responsible for maintaining the confidentiality of your account credentials"
             )
