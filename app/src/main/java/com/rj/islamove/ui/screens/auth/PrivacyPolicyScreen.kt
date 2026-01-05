@@ -113,11 +113,8 @@ fun PrivacyPolicyScreen(
 
             SubsectionTitle("Device Information")
             SectionContent(
-                "• Device type and model\n" +
-                        "• Operating system\n" +
-                        "• IP address\n" +
-                        "• Mobile network information\n" +
-                        "• App usage data"
+                "We may collect certain technical information automatically when you use the app, including device type, operating system, IP address, mobile network information, and app usage data. " +
+                        "This information is used to improve app performance, ensure security, and analyze usage trends."
             )
 
             SubsectionTitle("Communications")
@@ -209,7 +206,7 @@ fun PrivacyPolicyScreen(
                         "• Data Portability: Request transfer of your data to another service\n" +
                         "• Withdraw Consent: Withdraw consent for data processing (may affect service availability)\n" +
                         "• Lodge Complaints: File complaints with the National Privacy Commission\n\n" +
-                        "To exercise these rights, contact us at rjsolatorio@gmail.com"
+                        "To exercise these rights, contact us at islamoveapp@gmail.com"
             )
 
             // Section 8
@@ -245,7 +242,6 @@ fun PrivacyPolicyScreen(
             SectionTitle("11. Third-Party Services")
             SectionContent(
                 "Our app may integrate with third-party services:\n\n" +
-                        "• Payment processors for transaction handling\n" +
                         "• Mapping services for navigation\n" +
                         "• Cloud storage providers\n" +
                         "• Analytics platforms\n\n" +
@@ -299,7 +295,7 @@ fun PrivacyPolicyScreen(
                         "IslaMove Administrator\n" +
                         "Email: islamoveapp@gmail.com\n" +
 //                        "Phone: 09089848952\n" +
-                        "Address: Sta. Cruz\n\n" +
+                        "Address: Sta. Cruz, San Jose, Dinagat Islands\n\n" +
                         "National Privacy Commission:\n" +
                         "Website: www.privacy.gov.ph\n" +
                         "Email: info@privacy.gov.ph\n" +

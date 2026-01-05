@@ -159,12 +159,12 @@ fun TermsAndConditionsScreen(
             )
 
             // Section 9
-            SectionTitle("9. Cancellations and Refunds")
+            SectionTitle("9. Cancellations and Disputes")
             SectionContent(
                 "• Cancellation policies are subject to municipal regulations\n" +
                         "• Multiple cancellations may result in account restrictions\n" +
-                        "• Refunds, if applicable, will be processed according to our refund policy\n" +
-                        "• Disputes must be reported within 24 hours of the incident"
+                        "• The app does not process payments and is not responsible for cash transactions between users\n" +
+                        "• Disputes are strictly between users and must be reported within 24 hours. Reports may be reviewed solely for account moderation (such as warnings, suspensions, or bans) and internal record-keeping purposes"
             )
 
             // Section 10
@@ -185,9 +185,10 @@ fun TermsAndConditionsScreen(
                 "• All fares are based on the municipality-approved fare matrix\n" +
                         "• Fares are fixed and non-negotiable\n" +
                         "• Discounts for students and seniors apply only after ID verification\n" +
-                        "• Payment methods accepted are displayed in the app\n" +
-                        "• IslaMove may charge service fees as disclosed in the app\n" +
-                        "• Drivers must not demand payment outside the app"
+                        "• All payments are made in cash directly between passengers and drivers\n" +
+                        "• IslaMove is not a party to any cash transaction and bears no liability for payment disputes\n" +
+                        "• IslaMove does not process payments, collect fares, or issue refunds\n" +
+                        "• Drivers must not demand fares beyond the municipality-approved rates"
             )
 
             // Section 12
@@ -217,7 +218,7 @@ fun TermsAndConditionsScreen(
             SectionContent(
                 "For questions about these Terms and Conditions, please contact us at:\n" +
                         "Email: islamoveapp@gmail.com\n" +
-//                        "Phone: 09089848952\n" +
+//                        "Phone: 09636941689\n" +
                         "Address: Sta. Cruz, San Jose, PDI"
             )
 
