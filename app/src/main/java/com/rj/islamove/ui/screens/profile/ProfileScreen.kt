@@ -62,6 +62,7 @@ import com.rj.islamove.R
 import com.google.firebase.auth.EmailAuthProvider
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.ui.text.font.FontStyle
 import com.google.firebase.firestore.FirebaseFirestore
 
@@ -79,14 +80,14 @@ fun ProfileScreen(
 ) {
     // Add diagnostic logging on every recomposition
     LaunchedEffect(Unit) {
-        android.util.Log.d("ProfileScreen", "🔄 LaunchedEffect(Unit) - Initial composition")
+        android.util.Log.d("ProfileScreen", "LaunchedEffect(Unit) - Initial composition")
         viewModel.logCurrentState()
     }
 
     DisposableEffect(viewModel) {
-        android.util.Log.d("ProfileScreen", "🔵 ViewModel attached: ${viewModel.hashCode()}")
+        android.util.Log.d("ProfileScreen", "ViewModel attached: ${viewModel.hashCode()}")
         onDispose {
-            android.util.Log.d("ProfileScreen", "🔴 ViewModel detached: ${viewModel.hashCode()}")
+            android.util.Log.d("ProfileScreen", "ViewModel detached: ${viewModel.hashCode()}")
         }
     }
 
@@ -94,12 +95,12 @@ fun ProfileScreen(
 
     // Log state changes
     LaunchedEffect(uiState.user?.passengerRating, uiState.user?.passengerTotalTrips) {
-        android.util.Log.d("ProfileScreen", "🔄 ========================================")
-        android.util.Log.d("ProfileScreen", "🔄 UI State CHANGED")
-        android.util.Log.d("ProfileScreen", "🔄 Current rating: ${uiState.user?.passengerRating}")
-        android.util.Log.d("ProfileScreen", "🔄 Current trips: ${uiState.user?.passengerTotalTrips}")
-        android.util.Log.d("ProfileScreen", "🔄 User: ${uiState.user?.displayName}")
-        android.util.Log.d("ProfileScreen", "🔄 ========================================")
+        android.util.Log.d("ProfileScreen", "========================================")
+        android.util.Log.d("ProfileScreen", "UI State CHANGED")
+        android.util.Log.d("ProfileScreen", "Current rating: ${uiState.user?.passengerRating}")
+        android.util.Log.d("ProfileScreen", "Current trips: ${uiState.user?.passengerTotalTrips}")
+        android.util.Log.d("ProfileScreen", "User: ${uiState.user?.displayName}")
+        android.util.Log.d("ProfileScreen", "========================================")
     }
 
     android.util.Log.d("ProfileScreen", "Current UI State - user: ${uiState.user?.displayName}, rating: ${uiState.user?.passengerRating}")
@@ -154,7 +155,7 @@ fun ProfileScreen(
         uploadImageToCloudinary(uri)
     }
 
-    // ADD: Observe upload completion from ViewModel state
+    // Observe upload completion from ViewModel state
     LaunchedEffect(uiState.user?.profileImageUrl, uiState.user?.updatedAt) {
         if (isUploading) {
             val newImageUrl = uiState.user?.profileImageUrl
@@ -166,7 +167,7 @@ fun ProfileScreen(
         }
     }
 
-    // ADD: Timeout mechanism
+    // Timeout mechanism
     LaunchedEffect(isUploading) {
         if (isUploading) {
             delay(30000) // 30 second timeout
@@ -174,6 +175,26 @@ fun ProfileScreen(
                 android.util.Log.w("ProfileImage", "Upload timeout - resetting isUploading state")
                 isUploading = false
             }
+        }
+    }
+
+    // Observe upload errors and show dialog
+    LaunchedEffect(uiState.errorMessage) {
+        if (!uiState.errorMessage.isNullOrEmpty() && isUploading) {
+            // Upload failed, reset uploading state
+            android.util.Log.e("ProfileImage", "Upload failed: ${uiState.errorMessage}")
+            isUploading = false
+            showImagePicker = false
+        }
+    }
+
+    // Observe upload success
+    LaunchedEffect(uiState.updateMessage, uiState.updateSuccess) {
+        if (!uiState.updateMessage.isNullOrEmpty() && uiState.updateSuccess && isUploading) {
+            // Upload succeeded, reset uploading state
+            android.util.Log.d("ProfileImage", "Upload succeeded: ${uiState.updateMessage}")
+            isUploading = false
+            showImagePicker = false
         }
     }
 
@@ -490,17 +511,17 @@ fun ProfileScreen(
                                     Icons.Default.CheckCircle
                                 )
                                 VerificationStatus.PENDING -> Triple(
-                                    "⏳ Verification Pending",
+                                    "Verification Pending",
                                     Color(0xFFFFA726),
                                     null
                                 )
                                 VerificationStatus.UNDER_REVIEW -> Triple(
-                                    "👀 Under Review",
+                                    "Under Review",
                                     Color(0xFF42A5F5),
                                     null
                                 )
                                 VerificationStatus.REJECTED -> Triple(
-                                    "❌ Verification Rejected",
+                                    "Verification Rejected",
                                     Color(0xFFEF5350),
                                     null
                                 )
@@ -1443,6 +1464,102 @@ fun ProfileScreen(
                 }
             }
         )
+    }
+
+    // Error Dialog for Upload Failures
+    if (!uiState.errorMessage.isNullOrEmpty() && !uiState.isLoading) {
+        AlertDialog(
+            onDismissRequest = {
+                viewModel.clearMessages()
+            },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Upload Failed",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            },
+            text = {
+                Column {
+                    Text(
+                        text = uiState.errorMessage ?: "An unknown error occurred",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Please check your internet connection and try again.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontStyle = FontStyle.Italic
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.clearMessages()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("OK", color = Color.White)
+                }
+            },
+            containerColor = Color.White,
+            iconContentColor = MaterialTheme.colorScheme.error
+        )
+    }
+
+// Success Snackbar
+    if (!uiState.updateMessage.isNullOrEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 80.dp), // Extra bottom padding to avoid navigation bar
+                shape = RoundedCornerShape(8.dp),
+                color = Color(0xFF4CAF50),
+                shadowElevation = 4.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = uiState.updateMessage ?: "",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
     }
 }
 

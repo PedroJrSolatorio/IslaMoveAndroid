@@ -290,7 +290,7 @@ fun PassengerHomeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        Icons.Default.CheckCircle, // You'll need to import this
+                        Icons.Default.CheckCircle,
                         contentDescription = "Success",
                         tint = Color(0xFF4CAF50),
                         modifier = Modifier.size(24.dp)
@@ -2314,7 +2314,7 @@ private fun ProfileContent(
         uploadImageToCloudinary(uri)
     }
 
-    // ADD: Observe upload completion from ViewModel state
+    // Observe upload completion from ViewModel state
     LaunchedEffect(uiState.currentUser?.profileImageUrl, uiState.currentUser?.updatedAt) {
         if (isUploading) {
             // Check if the profile image URL has been updated
@@ -2330,7 +2330,7 @@ private fun ProfileContent(
         }
     }
 
-    // ADD: Timeout mechanism to prevent stuck uploading state
+    // Timeout mechanism to prevent stuck uploading state
     LaunchedEffect(isUploading) {
         if (isUploading) {
             delay(30000) // 30 second timeout
@@ -2338,6 +2338,24 @@ private fun ProfileContent(
 //                android.util.Log.w("ProfileImage", "Upload timeout - resetting isUploading state")
                 isUploading = false
             }
+        }
+    }
+
+    // Observe upload errors and show dialog
+    LaunchedEffect(uiState.errorMessage) {
+        if (!uiState.errorMessage.isNullOrEmpty() && isUploading) {
+            // Upload failed, reset uploading state
+            isUploading = false
+            showImagePicker = false
+        }
+    }
+
+    // Observe upload success
+    LaunchedEffect(uiState.successMessage) {
+        if (!uiState.successMessage.isNullOrEmpty() && isUploading) {
+            // Upload succeeded, reset uploading state
+            isUploading = false
+            showImagePicker = false
         }
     }
 
@@ -2862,7 +2880,7 @@ private fun ProfileContent(
                 modifier = Modifier.padding(horizontal = 16.dp)
             ) {
                 Text(
-                    text = "Personal Information",
+                    text = "Personal Informationss",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -3898,6 +3916,107 @@ private fun ProfileContent(
             dismissButton = null
         )
     }
+
+    // Error Dialog for Upload Failures
+    if (!uiState.errorMessage.isNullOrEmpty()) {
+        AlertDialog(
+            onDismissRequest = {
+                viewModel.clearMessages()
+            },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Upload Failed",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            },
+            text = {
+                Column {
+                    Text(
+                        text = uiState.errorMessage ?: "An unknown error occurred",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Please check your internet connection and try again.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontStyle = FontStyle.Italic
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.clearMessages()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("OK", color = Color.White)
+                }
+            },
+            containerColor = Color.White,
+            iconContentColor = MaterialTheme.colorScheme.error
+        )
+    }
+
+//    // Success Snackbar (Optional - shows brief success message), commented because there is already existing functional success message popup
+//    if (!uiState.successMessage.isNullOrEmpty()) {
+//        LaunchedEffect(uiState.successMessage) {
+//            // Auto-dismiss after showing (already handled in ViewModel)
+//        }
+//
+//        // You can add a Snackbar here if you want, or just rely on the ViewModel's auto-clear
+//        Box(
+//            modifier = Modifier
+//                .fillMaxSize()
+//                .padding(16.dp),
+//            contentAlignment = Alignment.BottomCenter
+//        ) {
+//            Surface(
+//                modifier = Modifier
+//                    .fillMaxWidth()
+//                    .padding(horizontal = 16.dp),
+//                shape = RoundedCornerShape(8.dp),
+//                color = Color(0xFF4CAF50),
+//                shadowElevation = 4.dp
+//            ) {
+//                Row(
+//                    modifier = Modifier.padding(16.dp),
+//                    verticalAlignment = Alignment.CenterVertically
+//                ) {
+//                    Icon(
+//                        Icons.Default.CheckCircle,
+//                        contentDescription = null,
+//                        tint = Color.White,
+//                        modifier = Modifier.size(20.dp)
+//                    )
+//                    Spacer(modifier = Modifier.width(12.dp))
+//                    Text(
+//                        text = uiState.successMessage ?: "",
+//                        color = Color.White,
+//                        fontSize = 14.sp,
+//                        fontWeight = FontWeight.Medium
+//                    )
+//                }
+//            }
+//        }
+//    }
 }
 
 @Composable
