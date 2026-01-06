@@ -1,16 +1,19 @@
 package com.rj.islamove.ui.components
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.BitmapFactory
+import android.net.Uri
 import android.util.Log
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -2562,7 +2565,7 @@ fun MapboxPlaceDetailsCard(
                 item { Spacer(modifier = Modifier.height(32.dp)) }
             }
 
-            // Admin Blocked Dialog (place before Action Buttons section)
+            // Admin Blocked Dialog (top of Action Buttons section)
             item {
                 if (showAdminBlockedDialog) {
                     AlertDialog(
@@ -2594,6 +2597,8 @@ fun MapboxPlaceDetailsCard(
                                     color = Color(0xFF424242),
                                     modifier = Modifier.padding(bottom = 16.dp)
                                 )
+
+                                val context = LocalContext.current
 
                                 // Support Information Card
                                 Card(
@@ -2644,10 +2649,17 @@ fun MapboxPlaceDetailsCard(
                                             )
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text(
-                                                text = "support@islamove.com",
+                                                text = "islamoveapp@gmail.com",
                                                 fontSize = 13.sp,
                                                 color = Color(0xFF1976D2),
-                                                fontWeight = FontWeight.Medium
+                                                fontWeight = FontWeight.Medium,
+                                                modifier = Modifier.clickable{
+                                                    val intent = Intent(Intent.ACTION_SENDTO).apply{
+                                                        data = Uri.parse("mailto:islamoveapp@gmail.com")
+                                                        putExtra(Intent.EXTRA_SUBJECT, "Islamove Support Request")
+                                                    }
+                                                    context.startActivity(intent)
+                                                }
                                             )
                                         }
 
@@ -2730,7 +2742,7 @@ fun MapboxPlaceDetailsCard(
                                         onBookRide(bookingLocation, passengerComment, companions)
                                     }
                                 },
-                                enabled = companions.size <= 4 && !isAdminBlocked, // Disable if more than 4 companions
+                                enabled = companions.size <= 4, // Disable if more than 4 companions
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(50.dp),
@@ -2803,7 +2815,7 @@ fun MapboxPlaceDetailsCard(
                                         onBookRide(bookingLocation, passengerComment, companions)
                                     }
                                 },
-                                enabled = companions.size <= 4 && !isAdminBlocked, // Disable if more than 4 companions
+                                enabled = companions.size <= 4, // Disable if more than 4 companions
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(50.dp),
@@ -2888,41 +2900,131 @@ fun MapboxPlaceDetailsCard(
                     }
                     // Normal Mode - Show "Book Ride" button
                     else -> {
-                        Button(
-                            onClick = {
-                                // CHECK ADMIN BLOCK FIRST
-                                if (isAdminBlocked) {
-                                    showAdminBlockedDialog = true
-                                } else if (isBlocked) {
-                                    showBlockedDialog = true
-                                } else {
-                                    val bookingLocation = BookingLocation(
-                                        address = placeDetails.address ?: placeDetails.name,
-                                        coordinates = com.google.firebase.firestore.GeoPoint(
-                                            placeDetails.point.latitude(),
-                                            placeDetails.point.longitude()
-                                        ),
-                                        placeId = placeDetails.id
-                                    )
-                                    onBookRide(bookingLocation, passengerComment, companions)
-                                }
-                            },
-                            enabled = companions.size <= 4 && !isAdminBlocked, // Disable if more than 4 companions
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(50.dp),
-                            shape = RoundedCornerShape(25.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isBlocked) Color.Gray else Color(0xFF1976D2)
-                            )
+                        Column(
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                text = if (isBlocked) "Booking Blocked" else "Book Ride",
-                                color = Color.White,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 16.sp
-                            )
+                            // Show warning message for blocked users
+                            if (isAdminBlocked) {
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 12.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = Color(0xFFFFEBEE) // Light red background
+                                    ),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Warning,
+                                            contentDescription = null,
+                                            tint = Color(0xFFD32F2F),
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column {
+                                            Text(
+                                                text = "Account Blocked",
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFFD32F2F)
+                                            )
+                                            Text(
+                                                text = "Tap button below for details.",
+                                                fontSize = 12.sp,
+                                                color = Color(0xFF424242)
+                                            )
+                                        }
+                                    }
+                                }
+                            } else if (isBlocked) {
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 12.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = Color(0xFFFFF3E0) // Light orange background
+                                    ),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Warning,
+                                            contentDescription = null,
+                                            tint = Color(0xFFFF6F00),
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column {
+                                            Text(
+                                                text = "Temporarily Blocked",
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFFFF6F00)
+                                            )
+                                            Text(
+                                                text = "Too many cancellations. $timeRemainingText left.\n Tap button below for details.",
+                                                fontSize = 12.sp,
+                                                color = Color(0xFF424242)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            Button(
+                                onClick = {
+                                    // CHECK ADMIN BLOCK FIRST
+                                    if (isAdminBlocked) {
+                                        showAdminBlockedDialog = true
+                                    } else if (isBlocked) {
+                                        showBlockedDialog = true
+                                    } else {
+                                        val bookingLocation = BookingLocation(
+                                            address = placeDetails.address ?: placeDetails.name,
+                                            coordinates = com.google.firebase.firestore.GeoPoint(
+                                                placeDetails.point.latitude(),
+                                                placeDetails.point.longitude()
+                                            ),
+                                            placeId = placeDetails.id
+                                        )
+                                        onBookRide(bookingLocation, passengerComment, companions)
+                                    }
+                                },
+                                enabled = companions.size <= 4, // Disable if more than 4 companions
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(50.dp),
+                                shape = RoundedCornerShape(25.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = when {
+                                        isAdminBlocked -> Color(0xFFD32F2F) // Red for admin block
+                                        isBlocked -> Color(0xFFFF6F00) // Orange for temp block
+                                        else -> Color(0xFF1976D2) // Normal blue
+                                    }
+                                )
+                            ) {
+                                Text(
+                                    text = when {
+                                        isAdminBlocked -> "Account Blocked"
+                                        isBlocked -> "Booking Blocked"
+                                        else -> "Book Ride"
+                                    },
+                                    color = Color.White,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 16.sp
+                                )
 
+                            }
                         }
                     }
                 }

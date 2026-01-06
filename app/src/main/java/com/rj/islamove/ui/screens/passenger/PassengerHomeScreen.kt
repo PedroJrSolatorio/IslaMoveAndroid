@@ -1074,6 +1074,7 @@ private fun MapsContent(
                     if (uiState.currentUser?.isActive == false) {
                         // Show blocked user dialog instead of proceeding with booking
                         viewModel.showBlockedUserDialog()
+                        onSelectedPlaceForBookingChange(null)
                         return@MapboxRideView
                     }
 
@@ -1086,6 +1087,9 @@ private fun MapsContent(
 
                     // Directly book the ride with comment and companions - this will show "Looking for driver..." state
                     viewModel.bookRideToLocationWithComment(destination, passengerComment, companions)
+
+                    // Dismiss the place details dialog after booking
+                    onSelectedPlaceForBookingChange(null)
                 }
             },
             onCalculateFare = { destinationLocation ->
