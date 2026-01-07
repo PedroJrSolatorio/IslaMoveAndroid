@@ -485,7 +485,7 @@ private fun DriverFoundCard(
                             color = Color.Gray
                         )
                         Text(
-                            text = "Plate Number: ${vehicle.plateNumber}",
+                            text = "Body Number: ${vehicle.plateNumber}",
                             fontSize = 14.sp,
                             color = Color.Gray
                         )
